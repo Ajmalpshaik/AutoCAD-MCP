@@ -202,7 +202,10 @@ def build_chunks(
 
 def _built_up(index: int, pairs: list[str], capture_handle: bool, limit: int) -> list[str]:
     """One entity too long for a single expression, assembled in *heron-p*."""
-    opener, adder = "(setq *heron-p* (list {}))", "(setq *heron-p* (append *heron-p* (list {})))"
+    # (princ) at the end: the command line prints whatever comes back, and a
+    # bare setq would print the whole growing list.
+    opener = "(progn (setq *heron-p* (list {})) (princ))"
+    adder = "(progn (setq *heron-p* (append *heron-p* (list {}))) (princ))"
     chunks: list[str] = []
     group: list[str] = []
     for pair in pairs:

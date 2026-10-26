@@ -171,3 +171,11 @@ def test_batch_falls_back_to_send_command_when_the_plugin_says_no(monkeypatch):
     doc, result = _run_batch(monkeypatch, lambda lines: False)
     assert len(doc.sent) >= 3
     assert result["completed"] is True
+
+
+def test_every_chunk_returns_nothing_to_print():
+    # The command line prints whatever an expression returns. A bare
+    # (setq *heron-p* ...) printed the whole polyline (live, 2026-10-26).
+    pairs = [dotted(0, lisp_string("LWPOLYLINE"))] + [dotted(10, f"(list {i}.0 {i}.0)") for i in range(300)]
+    for chunk in build_chunks([pairs, point(1)], True, OUT):
+        assert chunk.endswith("(princ))") or chunk.startswith("(heron-run "), chunk[:60]
