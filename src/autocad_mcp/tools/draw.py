@@ -845,6 +845,15 @@ async def autocad_add_dimension(
 
             if text_override:
                 entity.TextOverride = text_override
+            # A dimension made over COM ignores the DIMSCALE override, so its
+            # text and arrows come out at plain style size (tiny in a 1:10 mm
+            # detail, seen live 2026-10-26). Give it the drawing's DIMSCALE.
+            try:
+                scale = float(doc.GetVariable("DIMSCALE") or 0.0)
+                if scale > 0:
+                    entity.ScaleFactor = scale
+            except Exception:  # noqa: BLE001 - keep the dimension at its style size
+                pass
             notes = apply_properties(doc, entity, layer, None, None)
 
         info = describe(entity)

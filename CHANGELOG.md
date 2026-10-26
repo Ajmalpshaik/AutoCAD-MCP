@@ -4,6 +4,9 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- New `autocad_add_label`: MTEXT + LEADER in Ajmal's TLD style (L or angled), or a MULTILEADER;
+  arrows and dimensions now take DIMSCALE (D-24).
+
 - Removed the `generators/` folder (AHU, CCTV, pole-enclosure scripts); the drawings stay on the PC,
   the scripts in git history at `a443df4` ([D-23](docs/DECISIONS.md)).
 

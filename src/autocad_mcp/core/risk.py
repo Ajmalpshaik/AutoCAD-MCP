@@ -55,6 +55,7 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "add_mtext",
         "add_dimension",
         "add_hatch",
+        "add_label",
         "insert_block",
         "batch_draw",
         "move_entities",

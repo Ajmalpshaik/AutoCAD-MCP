@@ -129,6 +129,16 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-24 - Labels are leaders in Ajmal's TLD style, or multileaders; parts are blocks
+
+**Decided:** 2026-10-26, on Ajmal's instructions after the roof pipe-support detail: labels must be
+real leaders ("L shaped, and angled if needed ... multileader also, both options"), following his
+`TextLeader_V4.lsp`; and *"elbows and everything should be blocks ... otherwise the manual drawing
+person cannot do anything"*. **Status:** in force.
+`autocad_add_label` makes MTEXT + LEADER (TLD geometry, `shape` L or angled) or one MLEADER. Leaders and
+dimensions made over COM get the drawing's DIMSCALE, which COM does not apply. A "make block from
+objects" tool comes next, so details are built from named blocks instead of loose lines.
+
 ## D-23 - The generator scripts are removed
 
 **Decided:** 2026-10-26, on Ajmal's instruction: *"Remove all generators, including the folder."*

@@ -37,6 +37,19 @@ The group headings below give the level.
 `autocad_draw_arc`, `autocad_draw_ellipse`, `autocad_draw_point`, `autocad_add_text`,
 `autocad_add_mtext`, `autocad_add_dimension`, `autocad_insert_block`, `autocad_add_hatch`
 
+## Labels (Change)
+
+`autocad_add_label` puts a label on something: MTEXT plus a leader with an arrow. Use it for every label.
+
+| Option | Meaning |
+|---|---|
+| `kind="leader"` (default) | Ajmal's TLD style (TextLeader_V4.lsp): MTEXT and a LEADER on the text's layer, ending under the text between line 1 and line 2, full width + `extension` x text height each side |
+| `shape="L"` / `"angled"` | Square leg from the arrow, or straight to the near end of the text. Use `angled` for a column of labels |
+| `kind="mleader"` | One MULTILEADER with the text as its content |
+
+The arrow is sized from DIMSCALE (a leader made over COM ignores the override). Dimensions made by
+`autocad_add_dimension` get DIMSCALE the same way.
+
 ## Bulk drawing (Change)
 
 `autocad_batch_draw` sends one AutoLISP script that creates many entities inside AutoCAD. Use it for

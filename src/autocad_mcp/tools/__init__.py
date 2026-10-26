@@ -15,6 +15,7 @@ def register_all() -> None:
         batch,
         document,
         draw,
+        labels,
         layers,
         modify,
         query,
