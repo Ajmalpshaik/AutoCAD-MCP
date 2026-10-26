@@ -4,6 +4,9 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- Removed the `generators/` folder (AHU, CCTV, pole-enclosure scripts); the drawings stay on the PC,
+  the scripts in git history at `a443df4` ([D-23](docs/DECISIONS.md)).
+
 - **Live checks on AutoCAD 2027:** 18 rows PASS. From them: units must be checked before any change
   (D-19); a double-click on a padlock counts once (D-20); "press Heron" is said before the units rule;
   `HERON_CONVERSATION_ID` for scripts. Batch drawing no longer loads a file, so AutoCAD's security box is gone (D-21), and its input goes

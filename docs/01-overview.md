@@ -8,13 +8,8 @@ A BIM / MEP modeller should be able to say what drawing they want and have it ap
 they already use, without learning AutoLISP, VBA, the COM object model or MCP. Heron AI for AutoCAD is the
 piece that turns Claude's tool calls into AutoCAD work.
 
-Two ways it gets used:
-
-1. **Conversation.** Claude calls the `autocad_*` tools one request at a time: *"move these 1200 to
-   the right"*.
-2. **Generators.** A Python script describes a whole drawing package (data, sheets, title blocks)
-   and sends it through the same tools in batches. This is how the AHU-01 and CCTV packages were
-   made ([04](04-drawing-generators.md)).
+It is used in conversation: Claude calls the `autocad_*` tools one request at a time, *"move these
+1200 to the right"*, and draws straight into the open drawing. No script or file is made.
 
 ## Principles
 
@@ -27,10 +22,9 @@ Two ways it gets used:
 | 5 | **Never hang AutoCAD** | Commands that open a modal dialog are refused, with the command-line form named |
 | 6 | **Say how to fix it** | Errors name the action that clears them: *"press Esc in AutoCAD"* |
 | 7 | **Look before claiming** | A drawing is checked from a PNG or PDF plot, not assumed right |
-| 8 | **Data in one place** | A generator keeps every number in one data module; sheets read from it |
-| 9 | **Invisible until connected** | No chat can reach an AutoCAD nobody pressed Heron in |
-| 10 | **Padlocks decide, not the request** | A tool's level is set in code; the modeller's padlocks decide what runs |
-| 11 | **Show when touching** | A banner while Heron reads or changes the drawing; a line on the command line after |
+| 8 | **Invisible until connected** | No chat can reach an AutoCAD nobody pressed Heron in |
+| 9 | **Padlocks decide, not the request** | A tool's level is set in code; the modeller's padlocks decide what runs |
+| 10 | **Show when touching** | A banner while Heron reads or changes the drawing; a line on the command line after |
 
 ## What it will never do
 

@@ -32,13 +32,6 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 - [ ] Split long `autocad_run_lisp` expressions instead of failing silently.
 - [ ] `send_command` / `run_lisp` that manage their own undo do not mark "write started", so a busy retry can still re-run them ([D-15](DECISIONS.md)).
 
-## Generators
-
-- [ ] `if __name__ == "__main__":` guards on `pdf_plot.py`, `pdf_plot2.py`, `png_plot.py`.
-- [ ] Tidy the ruff findings and bring `generators/` back under ruff ([D-06](DECISIONS.md)).
-- [ ] Merge `pdf_plot.py` and `pdf_plot2.py`; remove `only_s7.py`.
-- [ ] Offline tests for `cctv_data.py` calculations.
-
 ## Repository
 
 - [ ] Tag `v1.1.0` after NEEDS-CHECKING group A passes.

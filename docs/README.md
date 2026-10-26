@@ -15,7 +15,6 @@
 |---|---|---|
 | **The owner** | [HANDOVER](HANDOVER.md) | [NEEDS-CHECKING](NEEDS-CHECKING.md), [ROADMAP](ROADMAP.md) |
 | **A modeller** | [06 - The Heron plug-in](06-heron-plugin.md) | [SETUP](SETUP.md) |
-| **Making drawings with generators** | [04 - Drawing generators](04-drawing-generators.md) | [05 - Known limits](05-known-limits.md) |
 | **Changing the code** | [PROJECT-MAP](PROJECT-MAP.md) | [02 - Architecture](02-architecture.md), [CONTRIBUTING](../CONTRIBUTING.md) |
 | **An AI agent** | [AGENTS.md](../AGENTS.md) | [PROJECT-MAP](PROJECT-MAP.md) |
 
@@ -26,7 +25,6 @@
 | 01 | [Overview and principles](01-overview.md) | What it is for, what it will never do |
 | 02 | [Architecture](02-architecture.md) | How a request reaches AutoCAD; the gate; Python vs AutoLISP; COM rules |
 | 03 | [Tools reference](03-tools-reference.md) | Every `autocad_*` tool and its level; resources; prompts; start options |
-| 04 | [Drawing generators](04-drawing-generators.md) | How the AHU and CCTV packages are built and re-run |
 | 05 | [Known limits and traps](05-known-limits.md) | What broke before, and the fix |
 | 06 | [The Heron plug-in](06-heron-plugin.md) | Ribbon, padlocks, banner, Keep or Discard, the bridge protocol |
 

@@ -30,8 +30,7 @@ flowchart TD
 |---|---|---|
 | [`src/autocad_mcp/`](../src/autocad_mcp/README.md) | The MCP server | `tools/<subject>.py` for a tool; `core/gate.py` for the gate |
 | [`autocad/`](../autocad/README.md) | The plug-in (C#) | `Heron.AutoCAD.Bridge` for rules, `Heron.AutoCAD.Addin` for what is seen |
-| [`generators/`](../generators/README.md) | Drawing-package scripts | The package's `*_run.py` |
-| `drawings/` ([04](04-drawing-generators.md#where-the-output-goes)) | Generated DWG / PDF / PNG, **local only, not in git** | Re-run the generator |
+| `drawings/` | Earlier drawing packages, **local only, not in git** | |
 | [`tools/`](../tools/README.md) | Build, install, smoke test, structure check | |
 | [`tests/`](../tests/README.md) | Python tests | `test_gate.py`, `test_bridge.py` |
 | [`docs/`](README.md) | All documentation | This file |
@@ -62,7 +61,6 @@ flowchart TD
 | [`examples/claude_desktop_config.json`](../examples/claude_desktop_config.json) | Claude Desktop |
 | [`pyproject.toml`](../pyproject.toml) | Package, dependencies, pytest and ruff |
 | [`autocad/Directory.Build.props`](../autocad/Directory.Build.props) | Version and shared C# settings |
-| [`generators/paths.py`](../generators/paths.py) | Every folder a generator writes to |
 | `%APPDATA%\Heron\autocad\heron-autocad.config` | The padlocks (written by the plug-in) |
 
 The three MCP configs hold the absolute path of `.venv\Scripts\autocad-mcp.exe`; if the repository

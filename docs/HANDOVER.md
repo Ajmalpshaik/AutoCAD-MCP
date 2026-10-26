@@ -18,8 +18,7 @@
 | Plug-in live in AutoCAD | **2027: 18 rows PASS on 2026-10-26**, A21 fixed and PASS (D-21), 6 rows still NOT RUN. 2021-2026: no machine | [NEEDS-CHECKING](NEEDS-CHECKING.md) group A |
 | Bundle and installer | `tools/build_plugin.py` -> `dist/HeronAutoCAD.bundle`; `tools/install_plugin.py` (refuses while AutoCAD runs) | `tests/test_plugin_bundle.py` |
 | CI | Two jobs on Windows: Python (ruff, tests, structure) and plug-in (3 builds + bridge tests) | `.github/workflows/ci.yml` |
-| Drawing packages | AHU-01, CCTV 42 sheets, pole enclosure: on this PC only, not in git ([D-11](DECISIONS.md)) | `drawings/` |
-| Enclosure detail | Fibre type and title-block fields still TBC | `generators/encl_detail.py` |
+| Drawing packages | AHU-01, CCTV 42 sheets, pole enclosure: on this PC only. Their generator scripts were removed ([D-23](DECISIONS.md)) | `drawings/` |
 
 ## Next, in order
 

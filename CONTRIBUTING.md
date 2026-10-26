@@ -13,7 +13,7 @@ are the house rules for any change, by a person or an AI agent.
 
 - `main` is always working. Do larger work on a branch: `feature/<name>`, `fix/<name>`, `docs/<name>`.
 - One subject per commit. Write the message as what the change does: *"Fit PDF export to A1 paper"*.
-- Never commit `.venv/`, generated drawings (`drawings/`), AutoCAD `.bak` / `.dwl` files, or anything
+- Never commit `.venv/`, drawings, AutoCAD `.bak` / `.dwl` files, or anything
   with a password, key or real client detail in it.
   [.gitignore](.gitignore) covers the usual ones.
 
@@ -60,10 +60,6 @@ GitHub has no AutoCAD, so **live tests run only on your PC**, with AutoCAD open:
 4. Add it to [docs/03-tools-reference.md](docs/03-tools-reference.md) and the count in the README.
 5. Add a line to [CHANGELOG.md](CHANGELOG.md).
 
-## Adding a drawing package
-
-Follow [docs/04-drawing-generators.md](docs/04-drawing-generators.md): one data module as the single
-source of truth, one sheet module per group, one runner. Outputs go in `drawings/<PACKAGE>/`.
 
 ## Changing the plug-in
 
