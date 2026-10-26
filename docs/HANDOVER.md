@@ -18,7 +18,7 @@
 | CCTV pole enclosure detail | Drawn; **fibre type and title-block fields TBC** | `drawings/CCTV/ENCLOSURE/PDF/` |
 | Git and GitHub | Private repo `Ajmalpshaik/AutoCAD-MCP`, branch `main` | |
 | Documentation | Full set written 2026-10-26 | [docs/README.md](README.md) |
-| CI | ruff + offline tests on `windows-latest` | `.github/workflows/ci.yml` |
+| CI | ruff + offline tests on `windows-latest`. **Not running yet:** GitHub refused to start the job on 2026-10-26 because of the account's Actions billing / spending limit. The same gates pass locally | `.github/workflows/ci.yml` |
 
 ## What changed last session (2026-10-26)
 
