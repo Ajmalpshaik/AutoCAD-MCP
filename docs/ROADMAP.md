@@ -19,7 +19,8 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   measured for COM SendCommand).
 - [ ] `autocad_preview`: the picture comes out portrait with the drawing at the left edge; fit and
   centre it, landscape when the drawing is wide.
-- [ ] Remaining live rows: A15 (two AutoCADs), A9 ribbon label, A8e confirmation.
+- [ ] **Choose which AutoCAD** when several are open (like Heron's `revit_use_session`): today the server always takes the one COM hands it, usually the first started (A15).
+- [ ] Remaining live rows: A9 ribbon label, A8e confirmation.
 
 ## Server
 
