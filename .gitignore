@@ -37,3 +37,6 @@ bin/
 obj/
 *.user
 .vs/
+
+# Built plug-in bundle
+dist/
