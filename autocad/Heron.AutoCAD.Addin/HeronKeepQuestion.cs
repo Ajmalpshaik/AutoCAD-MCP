@@ -73,13 +73,28 @@ namespace Heron.AutoCAD.Addin
             var small = HeronUi.Text(note, 12, null, HeronUi.Muted);
             small.Margin = new Thickness(0);
             words.Children.Add(small);
-            return new Button
+            var button = new Button
             {
                 Content = words,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Margin = new Thickness(0, 6, 0, 0),
                 Padding = new Thickness(8, 4, 8, 4),
+                BorderThickness = new Thickness(1),
             };
+            // Show plainly which choice the keyboard is on (live, 2026-10-26: the
+            // arrow keys "did nothing" because nothing on screen moved).
+            var normal = button.BorderBrush;
+            button.GotKeyboardFocus += (s, e) =>
+            {
+                button.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2F, 0x9B, 0xE3));
+                button.BorderThickness = new Thickness(3);
+            };
+            button.LostKeyboardFocus += (s, e) =>
+            {
+                button.BorderBrush = normal;
+                button.BorderThickness = new Thickness(1);
+            };
+            return button;
         }
     }
 }
