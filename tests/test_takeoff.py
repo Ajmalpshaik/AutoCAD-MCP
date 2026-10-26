@@ -152,3 +152,18 @@ def test_levels():
     assert risk_of("autocad_total_length") is Risk.READ
     assert risk_of("autocad_get_dynamic_properties") is Risk.READ
     assert risk_of("autocad_set_dynamic_properties") is Risk.CHANGE
+
+
+class Shape:
+    def __init__(self, kind, area, closed=None):
+        self.ObjectName, self.Area = kind, area
+        if closed is not None:
+            self.Closed = closed
+
+
+def test_only_closed_shapes_have_an_area():
+    # Live check 2026-10-26: an open pipe polyline reported 750000 as its area.
+    assert takeoff._area(Shape("AcDbPolyline", 750000.0, closed=False)) is None
+    assert takeoff._area(Shape("AcDbPolyline", 2000000.0, closed=True)) == 2000000.0
+    assert takeoff._area(Shape("AcDbArc", 120.0)) is None
+    assert takeoff._area(Shape("AcDbCircle", 31415.9)) == 31415.9

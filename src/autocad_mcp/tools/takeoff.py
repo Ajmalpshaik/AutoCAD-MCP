@@ -96,8 +96,14 @@ def _length(entity: Any) -> float | None:
     return None
 
 
+_ALWAYS_CLOSED = {"AcDbCircle", "AcDbRegion"}
+
+
 def _area(entity: Any) -> float | None:
+    """Area of a closed shape only: COM also gives open polylines and arcs an area."""
     try:
+        if str(entity.ObjectName) not in _ALWAYS_CLOSED and not bool(getattr(entity, "Closed", False)):
+            return None
         return float(entity.Area)
     except BaseException:  # noqa: BLE001
         return None

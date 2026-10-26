@@ -21,6 +21,11 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   centre it, landscape when the drawing is wide.
 - [ ] **Choose which AutoCAD** when several are open (like Heron's `revit_use_session`): today the server always takes the one COM hands it, usually the first started (A15).
 - [ ] Remaining live rows: A9 ribbon label, A8e confirmation.
+- [ ] `autocad_list_blocks` shows blank names and leaves out dynamic block definitions (seen with
+  AutoCAD's sample "Mechanical - Metric.dwg"; LISP `tblnext` lists them all).
+- [ ] `autocad_insert_block` with that sample .dwg path fails with "Key not found"; `-INSERT` works.
+- [ ] `tests/test_live.py::test_overwrites_an_earlier_export` can fail in the full suite with "object
+  invoked has disconnected" while it passes alone: the fixture's new drawing needs a settle/retry.
 
 ## Server
 
