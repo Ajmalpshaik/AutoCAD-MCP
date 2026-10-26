@@ -43,6 +43,7 @@ folder.
 | A25 | `autocad_make_block` on a detail's parts, then insert and mirror copies | Parts become named blocks in place; copies insert; mirror makes the opposite hand | **PASS** 2026-10-26: roof pipe-support detail redrawn with 18 named blocks (anchor plan block x4, gussets mirrored), right-aligned label column, plan under elevation |
 | A26 | `autocad_count_blocks` and `autocad_total_length` on valves, nuts, pipe lines, a room and a circle | Counts by name, layer and property values; lengths per layer; area only for closed shapes | **PASS** 2026-10-26 after one fix: an open polyline had reported an area (COM gives one), now closed shapes only |
 | A27 | `autocad_get_dynamic_properties` / `autocad_set_dynamic_properties` on the sample "Hex Nut - Metric" | Sizes M3-M14 listed; "m6" sets M6 and the nut redraws; read-only and unknown names reported, not fatal | **PASS** 2026-10-26: count by properties then split M10 / M6 |
+| A28 | `autocad_insert_block` with a C:/ forward-slash .dwg path; `autocad_list_blocks` after a dynamic nut is changed to M6 | File inserts; nut still counted 2, marked dynamic, no blank names | **PASS** 2026-10-26 |
 | A19 | Run a CCTV generator sheet (`python generators/cctv_run.py png 102`) with Changes on | Draws and plots as before the folder move | **PASS** 2026-10-26: CCTV_Package.dwg (23,303 objects) opened, sheet 102 plotted to PNG correctly. Found: generators started their server without the user's environment; now passed through |
 
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)

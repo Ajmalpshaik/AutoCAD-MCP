@@ -872,6 +872,18 @@ async def autocad_add_dimension(
 # ---------------------------------------------------------------------------
 
 
+def dwg_path(raw: str) -> str:
+    """A .dwg path as AutoCAD's InsertBlock accepts it.
+
+    InsertBlock answers "Key not found" to forward slashes (measured on
+    AutoCAD 2027), so the path is normalised to backslashes.
+    """
+    resolved = os.path.normpath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
+    if not os.path.isfile(resolved):
+        raise AutocadError(f"No .dwg file exists at '{resolved}'.")
+    return resolved
+
+
 @mcp.tool(
     name="autocad_insert_block",
     **tool_meta("Insert Block"),
@@ -941,10 +953,7 @@ async def autocad_insert_block(
 
         name = block_name.strip().strip('"')
         if name.lower().endswith(".dwg"):
-            resolved = os.path.expandvars(os.path.expanduser(name))
-            if not os.path.isfile(resolved):
-                raise AutocadError(f"No .dwg file exists at '{resolved}'.")
-            name = resolved
+            name = dwg_path(name)
         else:
             try:
                 doc.Blocks.Item(name)
