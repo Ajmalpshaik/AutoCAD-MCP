@@ -2,6 +2,45 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.4.0 - 2026-10-26 - The live checks run themselves, and four job prompts
+
+No new tools; still 101. This is the step from "built" and "tested offline"
+to **proved in AutoCAD**, plus four prompts that spend the tools in the right
+order. Detail: [tools/README.md](tools/README.md),
+[docs/03](docs/03-tools-reference.md).
+
+- **`tools/live_check.py`.** One command measures 46 of the 67 live rows in
+  [NEEDS-CHECKING](docs/NEEDS-CHECKING.md) and writes the results back with
+  their evidence. It works in a scratch drawing it makes and closes itself, so
+  the drawing you have open is never touched. `--list`, `--group D|E|all`,
+  `--row E4`, `--write`.
+- **It measures, it does not merely run.** A cone development's arcs against
+  the girths they roll onto (pi x D); a slot's perimeter against 2L + pi x W,
+  and that it is one polyline; a 1:100 viewport's `CustomScale` read back off
+  the viewport; a solid's base against z=0; the volume a subtract removed
+  against pi x r^2 x t; that a sequence with a bad step leaves the entity
+  count unchanged; that a bulge becomes a 90-degree arc and centred text is
+  centred.
+- **The 21 rows it cannot measure say why.** A title block .dwg, the twist
+  direction, "the sheet looks right", which sheet sizes a plotter offers,
+  which variables a release makes read-only - each is written **NOT RUN** with
+  the reason instead of left looking unexamined. A row the padlocks refuse is
+  **NOT RUN** too, never PASS.
+- **`tools/live_results.py`** replaces only the last cell of a row, keeping
+  leading whitespace, the trailing newline and every other cell
+  byte-identical, and strips `|` and newlines from the evidence so it cannot
+  break the table. Its test runs it against the real register.
+- **Four job prompts** in `tools/resources.py`: `make_sheet` (layout, page
+  setup, title block, viewport at a scale, saved view), `import_to_shop_drawing`
+  (the IFC flow, dry run first, dimensions checked against their geometry),
+  `model_part` (profile, extrude or revolve, cut, weigh - and it will not guess
+  a density), `shape_from_words` (catalogue, dry run, draw, measure back).
+- **Tests that keep both honest.** Every D/E row in the register is either
+  measured or given a reason, or the suite fails - so adding a row forces the
+  runner to account for it. And every tool a prompt names is checked against
+  the registry, so a prompt cannot send the AI after a tool that was renamed.
+  52 new tests; 1107 offline.
+
 ## 1.3.0 - 2026-10-26 - Complex geometry, annotation and 3D
 
 Server only; the plug-in is unchanged at 1.1.0. 12 new tools, 101 in all.

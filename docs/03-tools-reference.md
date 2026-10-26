@@ -248,7 +248,23 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 | `autocad://drawing/styles` | `autocad_list_styles` |
 
 They call the gated tools, so they are refused the same way while AutoCAD is not connected.
-Prompts: `check_standards` (report only), `draw_from_spec` (draw, then preview).
+
+A prompt is a whole job written out in the right order, so the AI does not have to work out which
+of the tools to reach for or what to check afterwards. Pick one in your client and fill in its
+arguments.
+
+| Prompt | Arguments | What it walks through |
+|---|---|---|
+| `check_standards` | `rules_path` | Checks the drawing against a layer standard and reports. Changes nothing |
+| `draw_from_spec` | `spec` | Draws from a written spec on named layers, then previews it |
+| `draw_detail` | `subject`, `scale` | The full drafting checklist: sheet plan, layers, parts as blocks, hatching, labels, dimensions, titles, notes, then look at it |
+| `make_sheet` | `sheet_name`, `paper_size`, `scale` | Layout, page setup, title block, viewport at a scale, and a saved view so the same location comes back |
+| `import_to_shop_drawing` | `discipline`, `scale` | An IFC or CAD import into a shop drawing: layer audit, remap and tidy (dry run first), styles, details, dimensions, annotation, sheet, PDF |
+| `model_part` | `part`, `material` | Profile, extrude or revolve, cut the holes, take the volume and weight off the solid, and the flat pattern if it is rolled |
+| `shape_from_words` | `description`, `scale` | Picks the shape from the catalogue, dry-runs it, draws it, then measures it back |
+
+Every tool a prompt names is checked against the registry by `tests/test_drafting_rules.py`, so a
+prompt cannot send the AI after a tool that was renamed or never built.
 
 ## Start options
 

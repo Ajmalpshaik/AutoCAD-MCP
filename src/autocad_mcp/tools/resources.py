@@ -83,3 +83,122 @@ def draw_detail(subject: str, scale: str = "1:10") -> str:
         "lines, crowded spots, unbalanced layout. Fix them, then preview again before reporting.\n"
         "Never draw parts as loose lines. Never fake a leader with a line and a text."
     )
+
+
+@mcp.prompt(name="make_sheet", description="Set up a drawing sheet end to end: layout, title block, viewport at a scale, and a saved view of what it shows.")
+def make_sheet(sheet_name: str, paper_size: str = "A1", scale: str = "1:100") -> str:
+    return (
+        f"Set up sheet {sheet_name} on {paper_size} at {scale}.\n\n"
+        "In this order, and check each step before the next:\n"
+        "1. autocad_status: the drawing, its units, and whether the UCS is rotated. If it is, "
+        "either work in world coordinates or say you are passing coords='ucs'.\n"
+        "2. autocad_drawing_setup with the scale: it sets DIMSCALE, LTSCALE, CANNOSCALE and the "
+        "text height off one number, so the sheet and the drawing agree.\n"
+        f"3. autocad_create_layout name='{sheet_name}' paper_size='{paper_size}'. Read the 'sheet' "
+        "it returns: 'frame' is the border, 'drawing_space' is what is left after the ISO margins "
+        "and the title block strip. Lay out inside drawing_space, not up to the paper edge.\n"
+        "4. autocad_page_setup for the plotter, the plot style table and the plot area.\n"
+        "5. autocad_place_title_block with your own title block block or .dwg, and the attributes "
+        "filled (drawing number, title, scale, date, revision). Check 'attributes_not_found' - "
+        "anything listed there did not go in, so the tag name is wrong.\n"
+        f"6. autocad_add_viewport at scale='{scale}', aimed with centre, corner1/corner2 or a "
+        "saved view. Pass paper_centre, paper_width and paper_height to put it exactly where you "
+        "want on the paper. Read 'scale_set': that is the CustomScale AutoCAD kept, so it is the "
+        "proof the scale took. Lock it last.\n"
+        "7. autocad_save_view for the area the viewport shows, named after the sheet. That is how "
+        "the same location comes back later: autocad_list_views gives its corners, and "
+        "autocad_add_viewport, autocad_export and the drawing tools all take them.\n"
+        "8. autocad_preview and look at it as a draftsman: is the drawing centred in the space, "
+        "clear of the title block, and is the text readable at this scale? Fix it, preview again.\n"
+        "Only then report. If a step is refused, say which padlock is needed."
+    )
+
+
+@mcp.prompt(name="import_to_shop_drawing", description="Turn an imported IFC or CAD file into a shop drawing: proper layers, colours, details, dimensions and a sheet.")
+def import_to_shop_drawing(discipline: str = "", scale: str = "1:50") -> str:
+    what = f" The work is {discipline}." if discipline else ""
+    return (
+        "Turn what is in this drawing into a shop drawing." + what + "\n\n"
+        "An imported file arrives wrong: layer names like IfcWallStandardCase or none at all, "
+        "every object a hard colour instead of ByLayer, geometry at odd Z, no dimensions. Work "
+        "through it in this order, and never skip the dry run:\n"
+        "1. autocad_status, then autocad_list_layers with include_entity_counts=true. Say plainly "
+        "what you found: how many layers, how many objects, which look like an IFC export, and "
+        "how much is sitting on layer 0.\n"
+        "2. autocad_remap_layers with dry_run=true first. preset='ifc' knows the usual IFC names; "
+        "add your own rules for what it misses. Read 'counts' and 'unmatched_sample', show me the "
+        "plan, and only then run it again with dry_run=false and set_bylayer=true.\n"
+        "3. autocad_tidy_entities, again dry_run first: color_bylayer, linetype_bylayer, "
+        "flatten_z for geometry off the plane, zero_thickness, off_layer_0 for the orphans, "
+        "delete_empty at the end. Anything in 'failed' is usually a locked layer - unlock and "
+        "repeat rather than leaving it.\n"
+        f"4. autocad_drawing_setup at {scale} and autocad_create_styles for the text and dimension "
+        "styles the shop drawing needs. A dimension style holds its own settings, so the drawing's "
+        "DIM variables are left as they were.\n"
+        "5. Now add what a shop drawing has and a model does not: section and detail marks, centre "
+        "lines on every hole (autocad_add_centre_marks), hatching on cut material, welds, "
+        "fixings, part marks.\n"
+        "6. Dimensions with autocad_dimension_run: a chain along each face with include_overall, "
+        "then baseline or ordinate where a chain would crowd. Check 'measured' against 'expected' "
+        "on every row - if they differ the geometry is not where you think it is.\n"
+        "7. Annotation: autocad_add_multileader for part callouts (one leader, several arrows when "
+        "parts repeat), autocad_add_table for the part list or schedule, autocad_add_revision_cloud "
+        "around anything changed.\n"
+        "8. Then the make_sheet prompt's steps for the sheet itself, and autocad_export to PDF.\n"
+        "9. autocad_check_standards at the end and report what is still off.\n"
+        "Use autocad_sequence to run a settled run of steps together, like AutoLISP's progn: it "
+        "checks every step's arguments before it runs the first, so a typo costs you nothing."
+    )
+
+
+@mcp.prompt(name="model_part", description="Model a part in 3D from a description, then take its weight and sizes off the model.")
+def model_part(part: str, material: str = "steel") -> str:
+    return (
+        f"Model this part in 3D: {part}. Material {material}.\n\n"
+        "Work the way a fabricator reads it - section first, then solid:\n"
+        "1. autocad_status for the units, and autocad_get_ucs. A part is modelled on the plane you "
+        "are working on, so set the UCS to that plane first with autocad_set_ucs, and remember COM "
+        "only takes world coordinates: pass coords='ucs' or convert with autocad_convert_points.\n"
+        "2. Draw the profile as ONE closed polyline. autocad_make_shape has the usual ones ready "
+        "(steel_section, slot, rounded_rectangle, flange, gusset, bracket); autocad_batch_draw with "
+        "'bulges' keeps arcs and straights in one object, which is what a region needs.\n"
+        "3. autocad_extrude_profile to pull it up, with taper_angle for a draft, or revolve_angle "
+        "with axis_point and axis_direction for anything turned. It closes the curves into a region "
+        "itself and cleans the region up after, leaving your profile where it was.\n"
+        "4. Holes, slots and cut-outs: autocad_add_solid cylinders through the part, then "
+        "autocad_solid_boolean operation='subtract'. It refuses the whole call if any handle is not "
+        "a solid, so a wrong handle never costs you the part. Check volume_after is less than "
+        "volume_before - that is the proof the material came out.\n"
+        "5. autocad_solid_properties for the real numbers: volume, centroid, bounding box, moments. "
+        f"Multiply the volume by the density of {material} for the weight, and say which density you "
+        "used.\n"
+        "6. autocad_set_3d_view direction='sw_iso' visual_style='shaded' and autocad_preview to look "
+        "at it. Then direction='top' with '2dwireframe' to get back to plan.\n"
+        "7. For anything rolled or folded from sheet, draw the flat pattern too: "
+        "autocad_make_shape shape='cone_development' or 'duct_transition'. Check it with "
+        "autocad_polyline_info - each arc must be exactly as long as the girth it rolls onto "
+        "(pi x diameter), or the part will not meet.\n"
+        "Report the sizes, the volume and the weight. Do not guess a density - if you are not sure "
+        "of the material, ask."
+    )
+
+
+@mcp.prompt(name="shape_from_words", description="Make a drawn shape from a plain description, picked from the shape catalogue and checked after.")
+def shape_from_words(description: str, scale: str = "1:10") -> str:
+    return (
+        f"Draw this: {description}.\n\n"
+        "1. Read autocad_make_shape's catalogue and pick the shape that fits. Work out every "
+        "setting from the description. If a number is not given, use the trade-standard one and say "
+        "which you used - do not invent a dimension and leave it unsaid.\n"
+        "2. Run it with dry_run=true first. It gives back the operations and the entity count "
+        "without drawing anything, so you can see what you are about to get.\n"
+        f"3. Draw it on its own named layer, at {scale}. If the shape has to sit square to "
+        "something already drawn, set the UCS to that first and pass coords='ucs'.\n"
+        "4. Check it with autocad_polyline_info: segment count, which segments are arcs, the "
+        "radii, and the total length. A slot is one polyline with two arcs, not four objects. A "
+        "flat pattern's arcs must match pi x diameter. If the numbers are wrong, say so and fix "
+        "the settings - do not report it as done.\n"
+        "5. Nothing in the catalogue fits? Then build it with autocad_batch_draw, using 'bulges' "
+        "for the arcs so it stays one object, and say that is what you did.\n"
+        "6. autocad_preview and look at it before reporting."
+    )
