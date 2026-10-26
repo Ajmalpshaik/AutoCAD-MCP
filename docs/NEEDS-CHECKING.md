@@ -9,6 +9,18 @@
 `tools/install_plugin.py`), start AutoCAD, open a scratch drawing, and connect Claude Code in this
 folder.
 
+**Groups D and E run themselves.** With AutoCAD open and the Changes padlock on:
+
+```bash
+.venv\Scripts\python.exe tools/live_check.py --group all --write
+```
+
+It works in a scratch drawing it makes itself, *measures* each row (a cone development's arcs
+against the girths they roll onto, a 1:100 viewport's CustomScale, a solid's base against z=0)
+and writes the answer and its evidence into the last column here. 46 of the 67 rows are
+measurable that way. The other 21 need an eye and are written **NOT RUN** with the reason;
+`--list` names them. A row the padlocks refuse is **NOT RUN** too, never PASS.
+
 ## Group A - AutoCAD 2027 (this PC)
 
 | Row | Do | Pass looks like | Result |
