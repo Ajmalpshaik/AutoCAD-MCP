@@ -88,10 +88,14 @@ AutoCAD."* The hold frees itself after 3 quiet minutes, or when you disconnect.
 | Message | one JSON line each way: `{op, token, client, conversation, ...}` |
 | Ops | `ping`, `info`, `release`, `begin`, `end`, `ask_keep` |
 
+**Units first ([D-19](DECISIONS.md)).** Nothing is changed in a drawing until Heron has run
+`autocad_status` on it, which reports its units. A switch to another drawing needs a new status check
+before the next change.
+
 For each tool call the server ([`core/gate.py`](../src/autocad_mcp/core/gate.py)):
 
 1. looks up the AutoCAD process behind COM (from its main window) and reads that AutoCAD's address file;
-2. refuses a change if the active drawing is not the one Heron last looked at;
+2. refuses a change if Heron has not checked this drawing's units with `autocad_status` yet, or the active drawing changed since;
 3. sends `begin {tool, risk, summary, drawing}`: the plug-in checks token, hold and padlock, shows
    the banner and answers whether it will ask Keep or Discard (`askToKeep`), or refuses naming the
    padlock;

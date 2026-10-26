@@ -129,6 +129,21 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-20 - A double-click on a ribbon switch counts once
+
+**Decided:** 2026-10-26, from the first live checks. **Status:** in force (built; live row A20 NOT RUN).
+The live log showed padlocks flipping on and straight back off within 0.4 s: modellers double-click.
+A second click on the same switch within 0.7 s is ignored (`RepeatClickFilter`).
+
+## D-19 - Units are checked before anything is changed in a drawing
+
+**Decided:** 2026-10-26, on Ajmal's instruction during the live checks: *"Whenever you are in one
+drawing for the first time, at that time you have to understand the unit."* **Status:** in force.
+A CHANGE, PUBLISH or ADMIN call is refused until `autocad_status` (or `autocad_create_drawing`) has run
+on that very drawing in this server; switching or opening a drawing does not count, and reading does
+not count. The live check showed why: Drawing1 was in inches, Drawing2 in millimetres.
+Replaces the looser D-17 re-arming rule.
+
 ## D-18 - Discard goes back to an UNDO mark, and only on a clear answer
 
 **Decided:** 2026-10-26, after the final review. **Status:** in force. Supersedes the "UNDO 1" design.

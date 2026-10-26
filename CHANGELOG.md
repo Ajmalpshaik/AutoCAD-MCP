@@ -4,6 +4,10 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- **Live checks on AutoCAD 2027:** 18 rows PASS. From them: units must be checked before any change
+  (D-19); a double-click on a padlock counts once (D-20); "press Heron" is said before the units rule;
+  `HERON_CONVERSATION_ID` for scripts. Batch drawing's security box (A21) is still open.
+
 - **Renamed Heron AI for AutoCAD** ([D-12](docs/DECISIONS.md)); repository `Ajmalpshaik/Heron-AutoCAD`.
 - **New plug-in** `autocad/`: ribbon tab Heron / AI Bridge, connect button (lit / dark heron),
   Changes, Publish, Admin and Ask to Keep padlocks, Bridge Status window, READING / CHANGING / DONE /
