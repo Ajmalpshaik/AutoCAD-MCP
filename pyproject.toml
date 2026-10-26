@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: Editors :: Vector-Based",
 ]
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp>=2.0",
     "pywin32>=306; sys_platform == 'win32'",
 ]
 
