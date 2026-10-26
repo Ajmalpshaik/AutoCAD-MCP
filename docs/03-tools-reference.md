@@ -104,16 +104,30 @@ nothing.
 `autocad_send_command` refuses commands known to open a modal dialog and names the command-line
 alternative, because a dialog blocks COM until a person closes it.
 
-## Take-off and dynamic blocks (get Read, set Change)
+## Take-off, text and placement (from the [Lee Mac study](08-lee-mac-study.md); our own code)
 
-From the [Lee Mac study](08-lee-mac-study.md); our own code.
-
-| Tool | Purpose |
-|---|---|
-| `autocad_count_blocks` | Count blocks by real name (dynamic blocks too); `group_by` name, name_layer, name_visibility, name_properties; name and layer wildcards |
-| `autocad_total_length` | Total length and closed area by layer, type or one total; splines and ellipses counted as unmeasured |
-| `autocad_get_dynamic_properties` | A dynamic block's properties: value, allowed choices, read-only |
-| `autocad_set_dynamic_properties` | Set visibility, size, distance, flip: `{name: value}`, typed and checked; failures listed |
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_count_blocks` | Read | Count blocks by real name (dynamic too); group by name, layer, visibility or properties; `include_nested` |
+| `autocad_total_length` | Read | Total length per layer or type, area of closed shapes; splines and ellipses measured |
+| `autocad_get_dynamic_properties` | Read | A dynamic block's properties: value, allowed choices, read-only |
+| `autocad_count_text` | Read | Count text / tag values (`source`, `tag`, `pattern`), optional `sum_numeric` |
+| `autocad_polyline_info` | Read | Vertices, segments (arcs: centre, radius, sweep), total, area, centroid |
+| `autocad_select_connected` | Read | A whole run joined end to end: handles, total length, open ends |
+| `autocad_list_layouts` | Read | Layouts in tab order with plotter, paper, object count |
+| `autocad_set_dynamic_properties` | Change | Set visibility, size, distance, flip; typed and checked; failures listed |
+| `autocad_set_attributes` | Change | Attributes from `values`, `rows` or `csv_path`, matched by `key` (a tag or `layout`); `dry_run` |
+| `autocad_number_tags` | Change | Prefix + padded number + suffix on blocks (`tag`), texts or new text; sort rows / columns / path |
+| `autocad_text_clean` | Change | Strip MText formatting codes; `dry_run` |
+| `autocad_find_replace_text` | Change | Find / replace (plain or regex) in text, mtext, attributes, mleaders, dim overrides, tables; `dry_run` |
+| `autocad_align_text` | Change | Line up (left, right, centre, top, bottom, middle) or space evenly; the first object stays put |
+| `autocad_add_field_label` | Change | Live Length / Area field (sum of several) in new text or an attribute; `factor` for m / m2 |
+| `autocad_label_segment_lengths` | Change | Length at each segment's middle; `split_at_layer` splits at crossings |
+| `autocad_place_along` | Change | Blocks along a run by `spacing` (equal ends) or `count`; `align` turns them to the run |
+| `autocad_place_from_csv` | Change | Blocks at x, y (rotation, block) from a CSV; other columns fill attributes |
+| `autocad_break_at_blocks` | Change | Cut lines / straight polylines through block extents + `gap` |
+| `autocad_import_from_drawing` | Change | Blocks, layers, linetypes, text / dim styles from a closed DWG; existing names skipped |
+| `autocad_manage_layouts` | Change | Order, renumber, rename layouts; copy paper-space objects to other layouts |
 
 ## Seeing and checking (Read)
 

@@ -18,58 +18,36 @@ This repository is public and MIT-licensed, which allows resale. So:
 - **On your own PC**, you can still load your own downloaded copies of his programs and run them
   with `autocad_run_lisp`. His terms allow that; Heron does not ship it.
 
-## Built so far
+## Built (all of it, 2026-10-26)
+
+Every idea on the list is now a Heron tool, written fresh and tested without AutoCAD, then checked
+live in AutoCAD 2027 ([NEEDS-CHECKING](NEEDS-CHECKING.md) A26-A29).
 
 | Heron tool | Idea from | What it does |
 |---|---|---|
-| `autocad_count_blocks` | [Block Counter](https://lee-mac.com/blockcounter.html), Dynamic Block Counter | Quantity take-off. Counts blocks by real name, so dynamic blocks are not counted under their `*U` names. Can also group by layer, visibility state or property values |
-| `autocad_total_length` | Total Length & Area, Chain Length | Run take-off. Total length and area by layer or type. Splines and ellipses are reported as unmeasured |
-| `autocad_get_dynamic_properties` | [Dynamic Block Functions](https://lee-mac.com/dynamicblockfunctions.html) | Lists a dynamic block's properties: current value, allowed choices, read-only flag |
-| `autocad_set_dynamic_properties` | Dynamic Block Functions | Sets visibility, size, distance and flip. Each value is converted to the property's own type, checked against its allowed choices, and done as one undo step |
+| `autocad_count_blocks` | [Block Counter](https://lee-mac.com/blockcounter.html), Dynamic / Nested Block Counter | Quantity take-off by real name (dynamic blocks too); by layer, visibility or property values; `include_nested` counts blocks inside blocks |
+| `autocad_total_length` | Total Length & Area, Segment Curve | Length per layer or type, area of closed shapes; splines and ellipses measured from their definition |
+| `autocad_get_dynamic_properties` / `autocad_set_dynamic_properties` | [Dynamic Block Functions](https://lee-mac.com/dynamicblockfunctions.html) | Read and set visibility, size, distance, flip; values typed and checked against the choices |
+| `autocad_set_attributes` | Batch Attribute Editor, Update Titleblock Attributes, Global Attribute Extractor | Fill attributes: the same values for all, or one row per block from a list or CSV, matched by a tag or layout name; dry run |
+| `autocad_number_tags` | Incremental Numbering Suite, Incremental Array | CAM-001, CAM-002 ... on blocks, texts or new text, in rows, columns or along a run |
+| `autocad_count_text` | Text Counter, Count / Sum Attribute Values | Count text and tag values, optional numeric sum |
+| `autocad_text_clean` | UnFormat String | Strip pasted MText formatting |
+| `autocad_find_replace_text` | Batch Find & Replace | Text, mtext, attributes, multileaders, dimension overrides, table cells; dry run |
+| `autocad_align_text` | Align Text, Dynamic Text Alignment | Line up left / right / centre / top / bottom / middle, or space evenly |
+| `autocad_polyline_info` | Polyline Information, Bulge Conversion, Polygon Centroid | Vertices, segments, arcs, total, area, centroid (room-tag point) |
+| `autocad_add_field_label` | Length & Area Field, Length / Area Field to Attribute | Live length or area (or a sum) as an AutoCAD field, in new text or an attribute |
+| `autocad_select_connected` | Chain Selection, Chain Length | The whole run joined end to end, its length and open ends |
+| `autocad_label_segment_lengths` | Length at Midpoint, Length Between Intersections | Length at each segment's middle, readable, optionally split where it crosses another layer |
+| `autocad_place_along` | Centered Measure, Align Objects to Curve | Blocks at equal spacing along a run, equal ends, turned to the run |
+| `autocad_place_from_csv` | Point Manager | Blocks at coordinates from a CSV, attributes from the same rows |
+| `autocad_break_at_blocks` | Automatic Block Break | Cut lines and straight polylines through blocks (extents + gap) |
+| `autocad_import_from_drawing` | Steal from Drawing, Import Block | Blocks, layers, linetypes, text and dim styles from a closed DWG; existing names skipped |
+| `autocad_list_layouts` / `autocad_manage_layouts` | TabSort, Renumber Layouts, Copy to Layouts | List sheets; order, renumber, rename; copy stamps and notes to every sheet |
+| add-ons | Double Offset, Background Mask, Dimension Overlap | `offset_entities(both_sides)`, `add_label(mask)`, `check_standards` rule `forbid_overlapping_dimensions` |
 
-## Next candidates (in order)
-
-1. `autocad_set_attributes`: fill title-block and tag attributes from a map or a CSV. It pairs
-   with `autocad_extract_attributes`. (Batch Attribute Editor, Update Titleblock Attributes,
-   Global Attribute Extractor & Editor)
-2. `autocad_number_tags`: incremental numbering with prefix and suffix, sorted by X, Y or along a
-   run. (Incremental Numbering Suite, Incremental Array)
-3. `autocad_count_text`: count text strings and attribute values, such as pipe-size tags, with an
-   optional numeric sum. (Text Counter, Count Attribute Values, Sum Attribute Values)
-   Moved up from 12: three separate pages do this take-off, and it is a cheap read-only tool.
-4. `autocad_text_clean`: strip MText formatting codes, so text searches and counts compare plain
-   words. (UnFormat String)
-5. `autocad_find_replace_text`: find and replace across text, mtext, attributes, multileaders and
-   dimension overrides, with a search-only preview. (Batch Find & Replace)
-6. `autocad_align_text`: line up labels left, right or top, or space them evenly. (Align Text,
-   Dynamic Text Alignment)
-7. `autocad_polyline_info`: vertices, segment lengths and arcs from bulges. (Polyline Information)
-8. `autocad_add_field_label`: length and area labels as live fields that update when the run
-   changes. (Length & Area Field, Length Field to Attribute, Area Field to Attribute)
-9. `autocad_select_connected`: every object joined end to end with a seed object. Heron can add
-   the run's total length itself. (Chain Selection, Chain Length)
-10. `autocad_label_segment_lengths`: length labels at object midpoints, or between intersections.
-    (Length at Midpoint, Length Between Intersections)
-11. `autocad_place_along`: insert a block at equal spacing along a run, centred so both ends
-    match, and turned to the run. New: found on the Centered Measure page; fits sprinklers,
-    lights and supports. (Centered Measure, Align Objects to Curve)
-12. `autocad_place_from_csv`: insert blocks at coordinates from a CSV and fill their attributes
-    from the same rows. New: found on the Point Manager page; fits device and pole schedules.
-    (Point Manager)
-13. `autocad_import_from_drawing`: bring blocks, layers and styles in from a standards DWG.
-    (Steal from Drawing, Import Block)
-14. `autocad_break_at_blocks`: break a pipe line where a valve block sits on it. This is best done
-    in the C# plug-in. (Automatic Block Break)
-15. `autocad_layouts`: list, renumber, rename and copy objects to layouts. New: Heron has no
-    layout tools yet. (TabSort, Renumber Layouts, Copy to Layouts, Layout Field)
-
-Smaller additions to existing tools:
-- a both-sides option on `offset_entities` (Double Offset);
-- polygon centroid for placing room tags;
-- a background mask on labels (Background Mask);
-- a nested-blocks option on `count_blocks` (Nested Block Counter);
-- spline length in `total_length` by measuring a segmented copy (Segment Curve);
-- an overlapping-dimensions rule in `check_standards` (Dimension Overlap).
+Not built, on purpose: the Layout Field (AutoCAD's own field already shows the layout name), break
+at blocks for polylines with arcs (needs the C# plug-in's curve splitting), and multi-drawing batch
+versions (Heron works on the open drawing; loop drawings with `autocad_open_drawing`).
 
 ## Left out
 

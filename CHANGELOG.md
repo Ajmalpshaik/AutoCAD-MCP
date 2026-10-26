@@ -4,6 +4,9 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- The whole Lee Mac study built (D-26): 16 more tools (attributes, numbering, text count / clean /
+  replace / align, polyline info, field labels, connected runs, segment labels, place along, place
+  from CSV, break at blocks, import from drawing, layouts) and 6 add-ons; 75 tools in all. Live A29.
 - Take-off tools from the Lee Mac study (ideas only, our own code, D-26): `autocad_count_blocks`,
   `autocad_total_length`, `autocad_get_dynamic_properties`, `autocad_set_dynamic_properties`.
 - Fixes from live check A28: `autocad_list_blocks` counts dynamic copies by real name and skips

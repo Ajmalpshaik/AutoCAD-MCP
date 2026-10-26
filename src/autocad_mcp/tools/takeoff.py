@@ -88,6 +88,15 @@ def coerce_value(current: Any, new: Any, allowed: list | None = None) -> Any:
     return value
 
 
+_CURVES = {"AcDbLine", "AcDbPolyline", "AcDb2dPolyline", "AcDb3dPolyline", "AcDbArc", "AcDbCircle",
+           "AcDbEllipse", "AcDbSpline"}
+
+
+def is_curve(object_name: str) -> bool:
+    """Only curves have a length; leaders, text, blocks and dimensions are not runs."""
+    return object_name in _CURVES
+
+
 def _length(entity: Any) -> float | None:
     return curve_length(entity)
 
@@ -240,7 +249,7 @@ async def autocad_total_length(
         try:
             for entity in iter_selection(sel):
                 kind = str(entity.ObjectName)
-                if kind in {"AcDbBlockReference", "AcDbText", "AcDbMText", "AcDbHatch"} or "Dimension" in kind:
+                if not is_curve(kind):
                     continue
                 items.append({"type": kind, "layer": str(entity.Layer), "length": _length(entity), "area": _area(entity)})
         finally:

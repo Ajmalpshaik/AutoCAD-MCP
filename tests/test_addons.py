@@ -99,3 +99,10 @@ def test_offset_both_sides_makes_two_copies(monkeypatch):
     monkeypatch.setattr(modify, "resolve_handle", lambda d, h: line)
     result = json.loads(asyncio.run(modify.autocad_offset_entities(handles=["1A"], distance=50, both_sides=True)))
     assert line.made == [50.0, -50.0] and result["offset"] == 2
+
+
+def test_total_length_reads_curves_only():
+    # Live check 2026-10-26: a label's LEADER was counted as an unmeasured item.
+    assert takeoff.is_curve("AcDbLine") and takeoff.is_curve("AcDbSpline") and takeoff.is_curve("AcDbPolyline")
+    for kind in ("AcDbLeader", "AcDbMLeader", "AcDbMText", "AcDbBlockReference", "AcDbRotatedDimension", "AcDbHatch"):
+        assert not takeoff.is_curve(kind)

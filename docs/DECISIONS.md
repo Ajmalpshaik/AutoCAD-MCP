@@ -136,7 +136,8 @@ banner on, because the banner is what shows the modeller that Heron is working.
 His terms need written consent to redistribute and forbid commercial use, which this public MIT
 repository cannot promise, so no Lee Mac code is copied, translated or bundled. Each idea is written
 fresh from the AutoCAD ActiveX reference, tested without AutoCAD, and credited in
-[08](08-lee-mac-study.md). First four: count blocks, total length, dynamic block get and set.
+[08](08-lee-mac-study.md). First four: count blocks, total length, dynamic block get and set; the rest followed the same
+day (every idea on the list, plus add-ons), with the shared geometry in `acad/geometry.py`.
 
 ## D-25 - The drafting rules ship inside Heron
 
