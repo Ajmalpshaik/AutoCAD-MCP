@@ -32,6 +32,9 @@ class FakeBridge:
             raise BridgeRefused(FakeBridge.refuse)
         return "job1", FakeBridge.ask_to_keep
 
+    def find(self):
+        return None if FakeBridge.refuse == NOT_CONNECTED else {"pipeName": "p", "token": "t"}
+
     def end(self, job, ok, outcome, summary, ms):
         FakeBridge.calls.append(("end", job, ok, outcome))
 
@@ -420,3 +423,12 @@ def test_batch_draw_marks_the_write():
     from autocad_mcp.tools import batch
 
     assert "mark_writing()" in inspect.getsource(batch)
+
+
+def test_not_connected_is_said_before_the_units_rule(env):
+    # Disconnected and not yet checked: "press Heron" is the useful message.
+    gate.reset()
+    FakeBridge.refuse = NOT_CONNECTED
+    draw, calls = make_tool("autocad_draw_line")
+    assert call(draw) == "Error: " + NOT_CONNECTED
+    assert calls == []

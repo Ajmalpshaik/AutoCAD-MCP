@@ -31,6 +31,7 @@ from typing import Any
 from . import audit, connection
 from .bridge import (
     CONVERSATION,
+    NOT_CONNECTED,
     NOTHING_SENT,
     Bridge,
     BridgeRefused,
@@ -244,6 +245,10 @@ async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
                     "Heron last checked. Call autocad_status first, so you know this drawing's "
                     f"units and the change goes where you mean it. {NOTHING_SENT}"
                 )
+
+        if refusal is not None and probed and bridge_enabled() and Bridge(pid).find() is None:
+            # Not connected at all: "press Heron" is the first thing to fix.
+            refusal = NOT_CONNECTED
 
         job: Job | None = None
         if refusal is None and probed and bridge_enabled():
