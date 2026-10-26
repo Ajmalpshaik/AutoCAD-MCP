@@ -55,6 +55,20 @@ namespace Heron.AutoCAD.Addin
             return asked ? answer : "discard";
         }
 
+        public void SendQuiet(string[] lines)
+        {
+            HeronLog.Write("quiet input: " + lines.Length + " line(s)");
+            // On the main thread, in order. Typed input, not a loaded file, so
+            // SECURELOAD does not apply; echoCommand=false keeps the command
+            // history clean (live check, 2026-10-26).
+            IdleQueue.Post(() =>
+            {
+                var doc = AcApp.DocumentManager.MdiActiveDocument;
+                if (doc == null) return;
+                foreach (var line in lines) doc.SendStringToExecute(line + "\n", true, false, false);
+            });
+        }
+
         /// <summary>Main thread. Select and zoom to what the job made, so the modeller sees it before choosing.</summary>
         private static int SelectAndZoom(string[] handles)
         {

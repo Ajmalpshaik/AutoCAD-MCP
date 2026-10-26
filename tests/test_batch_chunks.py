@@ -128,3 +128,46 @@ def test_batch_tool_sends_chunks_and_reads_results(monkeypatch):
     assert not any("(load" in s for s in doc.sent)
     assert len(doc.sent) >= 3
     assert all(len(s) <= CHUNK_LIMIT + 1 for s in doc.sent)
+
+
+def _run_batch(monkeypatch, sender):
+    doc = FakeDoc()
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(batch, "run", run)
+    monkeypatch.setattr(batch, "get_doc", lambda: doc)
+    monkeypatch.setattr(batch, "require_idle", lambda d: None)
+    monkeypatch.setattr(batch, "ensure_layer", lambda d, name: (None, False))
+    monkeypatch.setattr(batch, "quiet_sender", lambda: sender)
+    result = json.loads(asyncio.run(batch.autocad_batch_draw(operations=[{"type": "point", "position": [0, 0]}])))
+    return doc, result
+
+
+def test_batch_goes_through_the_plugin_quietly_when_it_can(monkeypatch):
+    delivered = []
+
+    def sender(lines):
+        delivered.extend(lines)
+        doc_holder[0].SendCommand("\n".join(lines))  # stand-in for AutoCAD running them
+        return True
+
+    doc_holder = [None]
+    original = FakeDoc.__init__
+
+    def init(self):
+        original(self)
+        doc_holder[0] = self
+
+    monkeypatch.setattr(FakeDoc, "__init__", init)
+    doc, result = _run_batch(monkeypatch, sender)
+    assert delivered and '"DONE"' in delivered[-1]
+    assert len(doc.sent) == 1  # only the stand-in above, no echoing SendCommand per chunk
+    assert result["completed"] is True
+
+
+def test_batch_falls_back_to_send_command_when_the_plugin_says_no(monkeypatch):
+    doc, result = _run_batch(monkeypatch, lambda lines: False)
+    assert len(doc.sent) >= 3
+    assert result["completed"] is True

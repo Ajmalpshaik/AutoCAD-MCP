@@ -160,6 +160,9 @@ public class FakeHost : IJobHost
         Asked.Add(request);
         return Answer;
     }
+
+    public List<string[]> Quiet { get; } = new();
+    public void SendQuiet(string[] lines) => Quiet.Add(lines);
 }
 
 public class ProtocolTests
@@ -515,5 +518,64 @@ public class RepeatClickFilterTests
         var filter = new RepeatClickFilter();
         filter.Accept("Changes", T0);
         Assert.True(filter.Accept("Publish", T0.AddMilliseconds(100)));
+    }
+}
+
+public class QuietSendTests
+{
+    private const string Token = "tok";
+    private readonly FakeHost _host = new();
+    private readonly HeronConfig _config = new() { WriteEnabled = true };
+    private readonly BridgeProtocol _protocol;
+
+    public QuietSendTests() =>
+        _protocol = new BridgeProtocol(_host, () => _config, Token, new HeronHold(), () => DateTime.UtcNow);
+
+    private JsonElement Send(object request) => JsonDocument.Parse(_protocol.Handle(JsonSerializer.Serialize(request))).RootElement;
+
+    private void Begin(string risk, string job = "j1", string conversation = "chat-a") => Send(new
+    {
+        op = "begin", token = Token, conversation, job, tool = "autocad_batch_draw", risk, summary = "Batch", drawing = "a.dwg",
+    });
+
+    private JsonElement Quiet(string job = "j1", string conversation = "chat-a") =>
+        Send(new { op = "send_quiet", token = Token, conversation, job, lines = new[] { "(progn 1)", "(progn 2)" } });
+
+    [Fact]
+    public void Refused_without_a_running_job()
+    {
+        Assert.False(Quiet().GetProperty("ok").GetBoolean());
+        Assert.Empty(_host.Quiet);
+    }
+
+    [Fact]
+    public void Refused_inside_a_read_job()
+    {
+        Begin("read");
+        Assert.False(Quiet().GetProperty("ok").GetBoolean());
+        Assert.Empty(_host.Quiet);
+    }
+
+    [Fact]
+    public void Delivered_in_order_inside_a_change_job()
+    {
+        Begin("change");
+        Assert.True(Quiet().GetProperty("ok").GetBoolean());
+        Assert.Equal(new[] { "(progn 1)", "(progn 2)" }, Assert.Single(_host.Quiet));
+    }
+
+    [Fact]
+    public void Refused_for_another_chats_job()
+    {
+        Begin("change");
+        Assert.False(Quiet(conversation: "chat-b").GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public void Refused_after_the_job_ended()
+    {
+        Begin("change");
+        Send(new { op = "end", token = Token, conversation = "chat-a", job = "j1", ok = true, outcome = "done", summary = "Batch", ms = 5 });
+        Assert.False(Quiet().GetProperty("ok").GetBoolean());
     }
 }

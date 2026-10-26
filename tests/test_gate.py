@@ -432,3 +432,25 @@ def test_not_connected_is_said_before_the_units_rule(env):
     draw, calls = make_tool("autocad_draw_line")
     assert call(draw) == "Error: " + NOT_CONNECTED
     assert calls == []
+
+
+def test_quiet_sender_exists_only_inside_a_job(env):
+    seen = []
+
+    class Quiet(FakeBridge):
+        def send_quiet(self, job, lines):
+            seen.append((job, list(lines)))
+            return True
+
+    gate.Bridge = Quiet
+    assert gate.quiet_sender() is None
+    captured = {}
+
+    async def tool() -> str:
+        captured["sender"] = gate.quiet_sender()
+        return captured["sender"](["(a)", "(b)"]) and '{"ok": true}'
+
+    tool.__name__ = "autocad_batch_draw"
+    call(tool_errors(tool))
+    assert seen == [("job1", ["(a)", "(b)"])]
+    assert gate.quiet_sender() is None

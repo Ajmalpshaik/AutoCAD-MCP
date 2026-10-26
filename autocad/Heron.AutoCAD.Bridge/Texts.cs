@@ -25,6 +25,9 @@ namespace Heron.AutoCAD.Bridge
         public const string UnknownRisk =
             "Heron in AutoCAD did not recognise this tool's level, so it refused it. " + NothingSent;
 
+        public const string NoJob =
+            "Heron in AutoCAD only takes drawing input inside a running change job of this chat. " + NothingSent;
+
         public const string BadRequest = "Heron in AutoCAD could not read the request. " + NothingSent;
 
         public static string UnknownOp(string op) =>

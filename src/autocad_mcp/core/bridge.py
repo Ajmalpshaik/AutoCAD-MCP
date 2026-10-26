@@ -164,6 +164,19 @@ class Bridge:
         except AutocadError:
             pass
 
+    def send_quiet(self, job: str, lines: list[str]) -> bool:
+        """Have the plug-in type these lines into AutoCAD with echo off.
+
+        True when the plug-in took them. False when it refused (no running
+        change job, or an older plug-in without this op) or could not be
+        reached: the caller then sends them itself. Never raises.
+        """
+        try:
+            reply = self.call("send_quiet", job=job, lines=lines)
+        except AutocadError:
+            return False
+        return reply.get("ok") is True
+
     def ask_keep(self, job: str, summary: str, handles: list[str]) -> str:
         """keep | discard | keep_rest, or "unknown" when the plug-in could not answer.
 

@@ -11,6 +11,12 @@ namespace Heron.AutoCAD.Bridge
 
         /// <summary>keep | discard | keep_rest. Called on a pipe thread; may wait for the modeller.</summary>
         string AskKeep(KeepRequest request);
+
+        /// <summary>
+        /// Hand lines of AutoLISP to AutoCAD as command input with echo off, in
+        /// order. Only ever called inside a running job that may change the drawing.
+        /// </summary>
+        void SendQuiet(string[] lines);
     }
 
     public sealed class JobInfo

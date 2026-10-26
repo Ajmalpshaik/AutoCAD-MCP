@@ -183,3 +183,18 @@ def test_conversation_id_can_be_fixed(monkeypatch):
     finally:
         monkeypatch.delenv("HERON_CONVERSATION_ID")
         importlib.reload(bridge)
+
+
+def test_send_quiet_sends_the_lines_for_the_job(home):
+    with FakePlugin({"ok": True}) as plugin:
+        write_address(home, os.getpid(), plugin.name)
+        assert Bridge(os.getpid()).send_quiet("j1", ["(progn 1)", "(progn 2)"]) is True
+    request = plugin.requests[0]
+    assert (request["op"], request["job"], request["lines"]) == ("send_quiet", "j1", ["(progn 1)", "(progn 2)"])
+
+
+def test_send_quiet_refused_or_unreachable_is_false_not_an_error(home):
+    with FakePlugin({"ok": False, "message": "no job"}) as plugin:
+        write_address(home, os.getpid(), plugin.name)
+        assert Bridge(os.getpid()).send_quiet("j1", ["x"]) is False
+    assert Bridge(os.getpid()).send_quiet("j1", ["x"]) is False  # no plug-in at all

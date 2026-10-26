@@ -25,6 +25,7 @@ namespace Heron.AutoCAD.Bridge
         private readonly Func<DateTime> _clock;
         private readonly object _grantGate = new object();
         private string? _grantConversation;
+        private readonly Dictionary<string, KeyValuePair<string, Risk>> _running = new Dictionary<string, KeyValuePair<string, Risk>>();
         private DateTime _grantLast;
 
         public BridgeProtocol(IJobHost host, Func<HeronConfig> config, string token, HeronHold hold, Func<DateTime> clock)
@@ -94,6 +95,8 @@ namespace Heron.AutoCAD.Bridge
                             return End(root, conversation);
                         case "ask_keep":
                             return AskKeep(root, conversation);
+                        case "send_quiet":
+                            return SendQuiet(root, conversation);
                         default:
                             return Refuse("BadRequest", Texts.UnknownOp(op));
                     }
@@ -131,6 +134,7 @@ namespace Heron.AutoCAD.Bridge
                 Drawing = Str(root, "drawing"),
                 Conversation = conversation,
             };
+            lock (_running) _running[job.Job] = new KeyValuePair<string, Risk>(conversation, risk);
             try
             {
                 _host.Begin(job);
@@ -154,6 +158,7 @@ namespace Heron.AutoCAD.Bridge
                 Summary = Str(root, "summary"),
                 Ms = root.TryGetProperty("ms", out var ms) && ms.ValueKind == JsonValueKind.Number ? ms.GetInt32() : 0,
             };
+            lock (_running) _running.Remove(end.Job);
             try
             {
                 _host.End(end);
@@ -199,6 +204,26 @@ namespace Heron.AutoCAD.Bridge
                     _grantLast = _clock();
                 }
             return Answer(answer);
+        }
+
+        /// <summary>
+        /// Drawing input with echo off, so a batch does not flood the command
+        /// history. Allowed only inside this chat's running job that may change
+        /// the drawing: the padlock check at begin already covered it.
+        /// </summary>
+        private string SendQuiet(JsonElement root, string conversation)
+        {
+            KeyValuePair<string, Risk> running;
+            bool found;
+            lock (_running) found = _running.TryGetValue(Str(root, "job"), out running);
+            if (!found || running.Key != conversation || running.Value == Risk.Read || running.Value == Risk.View)
+                return Refuse("Job", Texts.NoJob);
+            var lines = new List<string>();
+            if (root.TryGetProperty("lines", out var list) && list.ValueKind == JsonValueKind.Array)
+                foreach (var item in list.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String) lines.Add(item.GetString() ?? "");
+            _host.SendQuiet(lines.ToArray());
+            return Ok(null);
         }
 
         private static string Str(JsonElement root, string name) =>

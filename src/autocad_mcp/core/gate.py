@@ -59,6 +59,7 @@ COULD_NOT_ASK = (
 
 _lock = asyncio.Lock()
 _last_drawing: str | None = None
+_current: Job | None = None  # the job whose tool is running right now
 
 
 @dataclass
@@ -71,6 +72,18 @@ class Job:
     id: str | None
     ask_to_keep: bool
     started: float
+
+
+def quiet_sender() -> Callable[[list[str]], bool] | None:
+    """While a job runs with the plug-in: a way to send drawing input with echo off.
+
+    None outside a job or with the bridge off. The plug-in itself only accepts
+    the lines inside this chat's running change job.
+    """
+    job = _current
+    if job is None or job.bridge is None or job.id is None:
+        return None
+    return lambda lines: job.bridge.send_quiet(job.id, lines)
 
 
 def reset(looked_at: str | None = None) -> None:
@@ -214,7 +227,7 @@ def _with_note(result: str, note: str) -> str:
 
 async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
     """Run one tool call through the gate. Returns the tool's result."""
-    global _last_drawing
+    global _last_drawing, _current
     async with _lock:
         risk = risk_of(tool)
         started = time.monotonic()
@@ -275,11 +288,14 @@ async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
                 marked = await _mark()
 
             writes_before = connection.write_count()
+            _current = job
             try:
                 result = await work()
             except asyncio.CancelledError:
                 outcome = "cancelled"
                 raise
+            finally:
+                _current = None
             text = result if isinstance(result, str) else ""
             ok = not text.startswith("Error:")
             outcome = "done" if ok else ("unknown" if "Outcome unknown" in text else "failed")

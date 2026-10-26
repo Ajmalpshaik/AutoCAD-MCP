@@ -31,6 +31,7 @@ from ..acad.tables import ensure_layer
 from ..acad.units import rad
 from ..core.connection import get_doc, mark_writing, require_idle, run
 from ..core.errors import AutocadError
+from ..core.gate import quiet_sender
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta
 
 MAX_OPERATIONS = 5000
@@ -327,9 +328,13 @@ async def autocad_batch_draw(
 
         started = time.monotonic()
         # Short expressions, never a loaded file: a .lsp loaded from %TEMP%
-        # makes AutoCAD's SECURELOAD ask about an unsigned executable.
-        for chunk in chunks:
-            doc.SendCommand(chunk + "\n")
+        # makes AutoCAD's SECURELOAD ask about an unsigned executable. The
+        # Heron plug-in types them with echo off; without it (or an older
+        # plug-in) they go over COM and show in the command history.
+        sender = quiet_sender()
+        if not (sender and sender(chunks)):
+            for chunk in chunks:
+                doc.SendCommand(chunk + "\n")
 
         text = ""
         while time.monotonic() - started < OUTPUT_TIMEOUT:
