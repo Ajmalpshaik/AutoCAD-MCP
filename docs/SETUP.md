@@ -66,7 +66,7 @@ You should see 50 tools. If this fails, the problem is the install.
 Open AutoCAD with any drawing, then:
 
 ```bash
-.venv\Scripts\python.exe scripts/smoke_test.py
+.venv\Scripts\python.exe tools/smoke_test.py
 ```
 
 This creates its own scratch drawing and exercises every tool in it — it never

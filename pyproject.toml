@@ -46,6 +46,8 @@ markers = [
 [tool.ruff]
 line-length = 88
 src = ["src"]
+# generators/ and archive/ are project scripts, not the server; see docs/DECISIONS.md D-06
+extend-exclude = ["generators", "archive"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

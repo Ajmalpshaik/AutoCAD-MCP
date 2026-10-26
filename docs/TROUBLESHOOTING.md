@@ -267,7 +267,7 @@ tens of thousands of entities:
 Run the smoke test — it isolates which layer is broken:
 
 ```bash
-.venv\Scripts\python.exe scripts/smoke_test.py
+.venv\Scripts\python.exe tools/smoke_test.py
 ```
 
 It labels each of the 55 checks, so the first failure points straight at the

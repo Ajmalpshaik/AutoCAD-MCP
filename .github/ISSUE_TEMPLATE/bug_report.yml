@@ -1,0 +1,25 @@
+name: Bug report
+description: Something the server or a generator did wrong
+labels: [bug]
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool or script
+      placeholder: autocad_export / cctv_run.py pdf 102
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AutoCAD version
+      placeholder: AutoCAD 2027
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Paste the exact error message.
+    validations:
+      required: true

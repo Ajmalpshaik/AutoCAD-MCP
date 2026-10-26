@@ -3,12 +3,13 @@ import asyncio, json, os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 import ahu_run
+from paths import AHU_OUT
 
 
 def pt(x, y):
     return f"(vlax-make-variant (vlax-safearray-fill (vlax-make-safearray vlax-vbDouble '(0 . 1)) (list {x} {y})))"
 
-OUT = "D:/06_Development/09_Autocad MCP/Autocad MCP/drawings"
+OUT = AHU_OUT.replace("\\", "/")
 SHEETS = [("AHU-01_M-AHU-002_Isometric", (22430, -11000), (47660, 6820)),
           ("AHU-01_M-AHU-003_PID", (48060, -11000), (73290, 6820)),
           ("AHU-01_M-AHU-004_BMS_Details", (73690, -11000), (98920, 6820))]

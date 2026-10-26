@@ -1,354 +1,134 @@
-# autocad-mcp
+# AutoCAD MCP
 
-An MCP server that connects Claude to AutoCAD.
+> **Private repository.** This is Ajmal's working copy of the AutoCAD MCP server and the drawing
+> packages made with it. It is not published and not ready for anyone else to install.
 
-It drives the copy of AutoCAD **already open on your machine** through AutoCAD's
-COM Automation interface. Claude reads the drawing you have open and draws into
-it live — geometry appears on screen as it is created, and every tool call lands
-as a single undo step, so anything Claude does can be reversed with one Ctrl+Z.
+**An MCP server that lets Claude drive the AutoCAD already open on your machine.**
 
-50 tools across seven areas: session and files, drawing, bulk drawing,
-querying, modifying, layers and blocks, and raw command/AutoLISP escape
-hatches.
+> You describe the drawing. AutoCAD MCP does the AutoCAD work behind it.
 
 ---
 
-## Requirements
+## What it is
+
+AutoCAD MCP connects Claude to a running copy of full AutoCAD through AutoCAD's COM Automation
+interface. Claude reads the drawing you have open and draws into it live. Geometry appears on screen
+as it is created, and every tool call lands as **one undo step**, so anything Claude does can be
+reversed with one Ctrl+Z.
+
+```
+"Check the AutoCAD connection and tell me what's open."
+"Draw a 5000 x 3000 rectangle at the origin on a new layer A-WALL, in red."
+"Find every text that says FFL and tell me where it is."
+"Total the length of everything on layer M-PIPE-CWS."
+"I've selected some objects - move them 1200 to the right."
+```
+
+It is **not** an AutoCAD plug-in. Nothing is installed inside AutoCAD. It is an outside program that
+attaches to AutoCAD the same way a VBA macro would.
+
+## Four parts
+
+| Part | Responsibility | Folder |
+|---|---|---|
+| **The server** | The MCP server: 50 `autocad_*` tools, the COM link, AutoLISP helpers | [`src/autocad_mcp/`](src/autocad_mcp/README.md) |
+| **Generators** | Python scripts that build whole drawing packages through the server (AHU, CCTV) | [`generators/`](generators/README.md) |
+| **Drawings** | What the generators produced: DWG, PDF, PNG previews | [`drawings/`](drawings/README.md) |
+| **Tools & tests** | Live smoke test, protocol check, offline and live test suites | [`tools/`](tools/README.md), [`tests/`](tests/README.md) |
+
+Everything else is documentation ([`docs/`](docs/README.md)), configuration examples
+([`examples/`](examples/README.md)) and stopped experiments kept for reference
+([`archive/`](archive/README.md)).
+
+---
+
+## What you need
 
 | | |
 |---|---|
 | OS | Windows (COM Automation is Windows-only) |
-| AutoCAD | 2015 or newer, full AutoCAD — **not** AutoCAD LT |
+| AutoCAD | 2015 or newer, **full AutoCAD, not LT** (LT has no COM Automation) |
 | Python | 3.10 or newer |
 
-**On AutoCAD LT:** LT 2024+ for Windows *does* run AutoLISP internally — that
-part of LT's reputation is out of date. But this server drives AutoCAD from an
-*external* process through ActiveX/COM Automation, and
-[Autodesk's own documentation](https://help.autodesk.com/view/OARX/2024/ENU/?guid=GUID-2090E4E8-9AE0-4E01-B5EB-0843A30EB0E9)
-states that ActiveX is not supported in AutoCAD LT. There is no
-`AutoCAD.Application` COM server for a client to attach to, so this server
-cannot reach LT regardless of version. Full AutoCAD is required.
+AutoCAD must have been started normally at least once so it registers its COM interface.
 
-AutoCAD must also have been launched at least once normally, so it registers
-its COM interface.
-
----
-
-## Install
+## Quick start
 
 ```bash
-uv venv --python 3.11
+python -m venv .venv
 ```
 
 ```bash
-uv pip install -e .
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Verify the tools registered, without touching AutoCAD (expect 50):
+Check the 50 tools register (AutoCAD not needed):
 
 ```bash
 .venv\Scripts\autocad-mcp.exe --list-tools
 ```
 
-Then check it can actually reach AutoCAD (open AutoCAD with any drawing first):
+Check it reaches AutoCAD (open AutoCAD with any drawing first):
 
 ```bash
-.venv\Scripts\python.exe scripts/smoke_test.py
+.venv\Scripts\python.exe tools/smoke_test.py
 ```
 
-And check it over the real MCP protocol, exactly as Claude launches it:
-
-```bash
-.venv\Scripts\python.exe scripts/protocol_check.py
-```
-
----
-
-## Connect it to Claude
-
-### Claude Code
+Connect it to Claude Code (this repository's [`.mcp.json`](.mcp.json) already does this when Claude
+Code is opened in this folder):
 
 ```bash
 claude mcp add autocad -- "D:\06_Development\09_Autocad MCP\Autocad MCP\.venv\Scripts\autocad-mcp.exe"
 ```
 
-### Claude Desktop
-
-Edit `%APPDATA%\Claude\claude_desktop_config.json` and add the server, then
-restart Claude Desktop completely (quit from the tray, not just close the
-window):
-
-```json
-{
-  "mcpServers": {
-    "autocad": {
-      "command": "D:\\06_Development\\09_Autocad MCP\\Autocad MCP\\.venv\\Scripts\\autocad-mcp.exe"
-    }
-  }
-}
-```
-
-A ready-to-copy version is in [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json).
-
-### Over the network
-
-To drive AutoCAD on this machine from Claude running on another one:
-
-```bash
-.venv\Scripts\autocad-mcp.exe --transport http --host 0.0.0.0 --port 8000
-```
-
-There is no authentication, and the tools can modify and delete drawing
-content. Only do this on a network you trust.
+Full steps, Claude Desktop and network use: [docs/SETUP.md](docs/SETUP.md).
 
 ---
 
-## Using it
+## What it can do today
 
-Start every session by asking Claude to check the connection — that returns the
-drawing's units, which every coordinate afterwards depends on:
-
-> Check the AutoCAD connection and tell me what's open.
-
-Then work in plain language:
-
-> What's in this drawing? Give me a summary by layer.
-
-> Draw a 5000 x 3000 rectangle at the origin on a new layer called A-WALL, in red.
-
-> Find every text that says FFL and tell me where it is.
-
-> Total the length of everything on layer M-PIPE-CWS.
-
-> I've selected some objects in AutoCAD — move them 1200 to the right.
-
-Coordinates are always in the drawing's own units. In a millimetre drawing,
-`5000` means 5 metres.
-
----
-
-## The tools
-
-### Session and files (10)
-
-| Tool | Purpose |
-|---|---|
-| `autocad_status` | Connection check, units, current layer, entity counts |
-| `autocad_list_drawings` | Every drawing currently open |
-| `autocad_create_drawing` | New drawing, optionally from a template |
-| `autocad_open_drawing` | Open a .dwg or .dxf |
-| `autocad_save_drawing` | Save, or Save As to a new path |
-| `autocad_switch_drawing` | Change which open drawing is active |
-| `autocad_export` | Export to PDF (extents fitted to the sheet, optional `paper_size` such as `A3`), DXF, WMF, SAT, BMP, EPS or STL |
-| `autocad_zoom` | Zoom extents, all, or to a window |
-| `autocad_get_variable` | Read a system variable |
-| `autocad_set_variable` | Write a system variable |
-
-### Drawing (12)
-
-`autocad_draw_line`, `autocad_draw_polyline`, `autocad_draw_rectangle`,
-`autocad_draw_circle`, `autocad_draw_arc`, `autocad_draw_ellipse`,
-`autocad_draw_point`, `autocad_add_text`, `autocad_add_mtext`,
-`autocad_add_dimension`, `autocad_insert_block`, `autocad_add_hatch`
-
-All of them take the same `layer`, `color`, `linetype` and `space` options, and
-all return the handle of what they created. A layer that does not exist is
-created and reported.
-
-### Bulk drawing (1)
-
-`autocad_batch_draw` creates many entities in one call by sending a single
-**AutoLISP** script that runs inside AutoCAD, instead of one COM round trip per
-entity.
-
-Measured on AutoCAD 2020, 200 lines:
-
-| Method | Time | Rate |
-|---|---:|---:|
-| One at a time via `autocad_draw_*` (COM) | 20.3 s | 10/s |
-| `autocad_batch_draw` | 2.2 s | 93/s |
-| `autocad_batch_draw`, `return_handles=false` | 1.2 s | 173/s |
-
-Use it for anything above roughly ten entities — floor plans, grids, label
-sets. Every operation is validated in Python first, so a malformed batch fails
-naming the offending operation index without touching the drawing. Supports
-line, polyline, rectangle, circle, arc, text and point.
-
-### Querying (6)
-
-| Tool | Purpose |
-|---|---|
-| `autocad_list_entities` | Filter by type, layer, block or colour; paginated, with a summary mode |
-| `autocad_get_entity` | Full properties and bounding box of one entity |
-| `autocad_get_selection` | What the user has selected in AutoCAD right now |
-| `autocad_find_text` | Search text, mtext and block attributes |
-| `autocad_get_extents` | Bounding box of the drawing, or of one layer |
-| `autocad_measure` | Point-to-point distance, or total length/area of entities or a layer |
-
-### Modifying (9)
-
-`autocad_move_entities`, `autocad_copy_entities`, `autocad_rotate_entities`,
-`autocad_scale_entities`, `autocad_mirror_entities`, `autocad_offset_entities`,
-`autocad_array_entities`, `autocad_modify_entity`, `autocad_delete_entities`
-
-Deletion requires an explicit `confirm=true`; without it the tool returns a
-preview of what it *would* delete and changes nothing.
-
-### Layers and blocks (7)
-
-`autocad_list_layers`, `autocad_create_layer`, `autocad_set_layer_state`,
-`autocad_set_current_layer`, `autocad_delete_layer`, `autocad_list_blocks`,
-`autocad_list_styles`
-
-### Escape hatches (5)
-
-| Tool | Purpose |
-|---|---|
-| `autocad_send_command` | Any AutoCAD command — TRIM, FILLET, custom add-in commands |
-| `autocad_run_lisp` | Evaluate an AutoLISP expression **and get the result back** |
-| `autocad_purge` | Remove unused blocks, layers, linetypes, styles |
-| `autocad_regen` | Regenerate the display |
-| `autocad_audit` | Check and repair the drawing database |
-
-`autocad_send_command` refuses commands known to open a modal dialog and names
-the command-line alternative, because a dialog blocks AutoCAD's COM interface
-until a human dismisses it.
-
----
-
-## How it works
-
-```
-Claude  ──stdio/http──▶  MCP server (Python)
-                              │
-                              │  every call marshalled onto one
-                              │  CoInitialize'd worker thread
-                              ▼
-                         pywin32 COM
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-      typed COM operations            AutoLISP scripts
-      (one round trip each)           (one round trip total)
-              └───────────────┬───────────────┘
-                              ▼
-                    AutoCAD  ──▶  your open drawing
-```
-
-### Why Python *and* AutoLISP
-
-AutoLISP is AutoCAD's native language and is genuinely faster for bulk work —
-it runs inside AutoCAD instead of across a process boundary. But it cannot be
-the MCP server: MCP is a protocol spoken over stdio or HTTP to an *external*
-process, and AutoLISP only runs inside AutoCAD, with no way to open a socket or
-answer a client. So the protocol layer has to live outside, in Python.
-
-That makes the right design a hybrid, and this server uses each language where
-it wins:
-
-| Job | Uses | Why |
+| Group | Tools | Detail |
 |---|---|---|
-| MCP protocol | Python | AutoLISP cannot host it |
-| Typed single operations | COM | Returns real objects and values, with per-field validation |
-| Bulk creation | **AutoLISP** `entmake` | One round trip instead of hundreds — ~9x faster |
-| Reaching what COM cannot | **AutoLISP** | Xdata, dictionaries, xrecords, custom object properties |
+| Session and files | 10 | status, open, save, switch, export PDF/DXF, zoom, system variables |
+| Drawing | 12 | line, polyline, rectangle, circle, arc, ellipse, point, text, mtext, dimension, block, hatch |
+| Bulk drawing | 1 | `autocad_batch_draw`: hundreds of entities in one AutoLISP round trip (about 9x faster) |
+| Querying | 6 | list and filter entities, selection, find text, extents, measure |
+| Modifying | 9 | move, copy, rotate, scale, mirror, offset, array, modify, delete (delete needs `confirm=true`) |
+| Layers and blocks | 7 | list, create, state, current, delete, blocks, styles |
+| Escape hatches | 5 | any command, AutoLISP with a result, purge, regen, audit |
 
-The catch with AutoLISP is the return path: AutoCAD's COM interface has no
-"evaluate this and give me the answer" call — `SendCommand` is fire-and-forget.
-Two ways around it are used here. Small results come back through the `USERS1`
-system variable (`autocad_run_lisp`); large ones are written to a temp file by
-the LISP and read from Python (`autocad_batch_draw`).
+Every tool with its options: [docs/03-tools-reference.md](docs/03-tools-reference.md).
 
-### Two facts that drive the COM layer
+**Drawing packages made with it so far** (outputs in [`drawings/`](drawings/README.md)):
 
-**It is apartment-threaded.** Every COM call must happen on one thread that has
-called `CoInitialize`. FastMCP tools run on asyncio's event loop, so all COM
-work is marshalled onto a single dedicated worker thread
-([`core/connection.py`](src/autocad_mcp/core/connection.py)).
+| Package | Sheets | Generator |
+|---|---|---|
+| AHU-01 GA, isometric, P&ID, BMS, plant room, details, SLD, TAB | 11 (A1) | `generators/ahu_*.py` |
+| CCTV full package, sample building B1+G+4, MOI SSD Qatar | 42 (A1) | `generators/cctv_*.py` |
+| CCTV pole enclosure installation detail, Type A / B | 1 (A1) | `generators/encl_*.py` |
 
-**It rejects calls while AutoCAD is busy.** A modal dialog, a command waiting
-for input, or a regen in progress all produce `RPC_E_CALL_REJECTED`. That is
-transient, so it is retried for 10 seconds before being reported — and when it
-is reported, the message says to press Esc in AutoCAD, which is what actually
-fixes it.
+How to run them: [docs/04-drawing-generators.md](docs/04-drawing-generators.md).
 
 ---
 
-## Layout
+## Where to read next
 
-```
-Autocad MCP/
-├── README.md
-├── pyproject.toml
-├── src/autocad_mcp/
-│   ├── server.py            entry point and CLI
-│   ├── core/                COM link, VARIANTs, errors, MCP plumbing
-│   │   ├── connection.py    worker thread, retry, app/document access
-│   │   ├── variants.py      SAFEARRAY marshalling
-│   │   ├── errors.py        COM error interpretation
-│   │   └── registry.py      shared FastMCP instance, undo grouping
-│   ├── acad/                AutoCAD domain layer — no MCP knowledge
-│   │   ├── entities.py      entity serialization, handle lookup
-│   │   ├── selection.py     DXF filters and selection sets
-│   │   ├── tables.py        layers, linetypes, property application
-│   │   ├── lisp.py          AutoLISP generation and result retrieval
-│   │   └── units.py         INSUNITS, degree/radian conversion
-│   └── tools/               the MCP tools, grouped by subject
-│       ├── document.py  draw.py    batch.py  query.py
-│       └── modify.py    layers.py  advanced.py
-├── docs/
-│   ├── SETUP.md
-│   └── TROUBLESHOOTING.md
-├── scripts/
-│   ├── smoke_test.py        55 live checks against a scratch drawing
-│   └── protocol_check.py    MCP handshake over stdio
-├── tests/test_offline.py    85 tests, no AutoCAD needed
-└── examples/
-```
+| You are | Read |
+|---|---|
+| **The owner** | [docs/HANDOVER.md](docs/HANDOVER.md): where work stopped and what is next |
+| **Setting it up** | [docs/SETUP.md](docs/SETUP.md), then [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| **Changing the code** | [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
+| **An AI agent** | [AGENTS.md](AGENTS.md) |
 
-The layers only depend downward: `tools` → `acad` → `core`. Nothing in `acad`
-or `core` imports a tool, so the AutoCAD logic can be tested and reused
-independently of MCP.
+The full documentation index is [docs/README.md](docs/README.md).
 
----
+## Safety in one paragraph
 
-## Troubleshooting
+Each tool call is one undo group. Deleting needs an explicit `confirm=true`, and without it the tool
+only shows what it would delete. Commands that open a modal dialog are refused, because a dialog
+blocks AutoCAD until a person closes it. The HTTP transport has **no authentication**; use it only on
+a network you trust. More in [SECURITY.md](SECURITY.md).
 
-**"No running AutoCAD instance was found"** — Start AutoCAD and open a drawing.
-If it is already open, check whether it is running as Administrator: COM cannot
-connect from a non-elevated process to an elevated one. Run both the same way.
+## Licence
 
-**"AutoCAD stayed busy and never accepted the request"** — A dialog is open or a
-command is waiting for input. Switch to AutoCAD, press Esc, close any dialog.
-
-**"AutoCAD is in the middle of a command"** — Same fix: press Esc in AutoCAD.
-
-**Claude does not see the tools** — Restart Claude Desktop completely (quit from
-the system tray). Verify the path in the config points at
-`.venv\Scripts\autocad-mcp.exe` and that running it directly prints nothing and
-waits — that is correct for a stdio server.
-
-More detail in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
-
----
-
-## Development
-
-```bash
-uv pip install -e ".[dev]"
-```
-
-```bash
-.venv\Scripts\python.exe -m pytest -m "not live"
-```
-
-The default test run needs no AutoCAD. Tests marked `live` drive a real
-instance:
-
-```bash
-.venv\Scripts\python.exe -m pytest -m live
-```
-
-## License
-
-MIT
+MIT. See [LICENSE](LICENSE).

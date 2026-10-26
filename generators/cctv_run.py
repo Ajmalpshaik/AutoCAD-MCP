@@ -25,9 +25,9 @@ from mcp.client.stdio import stdio_client
 
 import cctv_lib
 import cctv_sheets
+from paths import CCTV_OUT as OUT
+from paths import SERVER
 
-SERVER = r"D:\06_Development\09_Autocad MCP\Autocad MCP\.venv\Scripts\autocad-mcp.exe"
-OUT = r"D:\06_Development\09_Autocad MCP\Autocad MCP\drawings\CCTV"
 DWG = "CCTV_Package.dwg"
 LSP_DIR = os.path.join(OUT, "_lsp")
 CTB = os.environ.get("CCTV_CTB", "")  # e.g. "monochrome.ctb" if available

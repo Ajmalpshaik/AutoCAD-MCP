@@ -6,7 +6,7 @@ handshake over stdio, lists the tools and calls one — exercising exactly the
 path Claude Desktop and Claude Code use, rather than importing the tools in
 process.
 
-    .venv\\Scripts\\python.exe scripts/protocol_check.py
+    .venv\\Scripts\\python.exe tools/protocol_check.py
 """
 
 from __future__ import annotations

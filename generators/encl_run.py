@@ -19,8 +19,8 @@ from mcp.client.stdio import stdio_client
 import cctv_lib
 import cctv_run
 import encl_detail
+from paths import ENCL_OUT as OUT
 
-OUT = r"D:\06_Development\09_Autocad MCP\Autocad MCP\drawings\CCTV\ENCLOSURE"
 OUT_DWG = os.path.join(OUT, "CCTV_Pole_Enclosure_Details.dwg")
 
 # point the CCTV-package runner at this single sheet

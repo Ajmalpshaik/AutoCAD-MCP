@@ -12,9 +12,9 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 import ahu_gen
+from paths import SERVER
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SERVER = r"D:\06_Development\09_Autocad MCP\Autocad MCP\.venv\Scripts\autocad-mcp.exe"
 HANDLES = os.path.join(HERE, "handles.json")
 
 

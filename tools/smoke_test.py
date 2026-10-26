@@ -5,7 +5,7 @@ Every tool is exercised the way an agent would call it. The test works inside a
 NEW drawing it creates for itself, so nothing it does can touch a drawing the
 user already has open. Leave the drawing unsaved and close it afterwards.
 
-    .venv\\Scripts\\python.exe scripts/smoke_test.py
+    .venv\\Scripts\\python.exe tools/smoke_test.py
 """
 
 from __future__ import annotations
