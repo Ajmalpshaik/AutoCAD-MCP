@@ -1,40 +1,36 @@
 # Session handover
 
 > **What this file is:** where the last session stopped and what comes next. It is a work note. Where
-> it disagrees with the code, the tests or [DECISIONS.md](DECISIONS.md), those win.
+> it disagrees with the code, the tests, [NEEDS-CHECKING](NEEDS-CHECKING.md) or
+> [DECISIONS.md](DECISIONS.md), those win.
 
 ## If you are the owner, starting work - say this
 
-> **"Read docs/HANDOVER.md in AutoCAD-MCP and carry on."**
+> **"Read docs/HANDOVER.md in Heron-AutoCAD and carry on."**
 
 ## Where things stand - 2026-10-26
 
 | Area | State | Evidence |
 |---|---|---|
-| Server, 50 tools | Working | `--list-tools`; offline tests pass 2026-10-26; used live on AutoCAD 2027 for all three packages (2026-10-19 to 22) |
-| PDF export on 2027 | Fixed 2026-10-19 | `tests/test_export.py` |
-| AHU-01 package, 11 sheets | Done | `drawings/AHU/` |
-| CCTV package, 42 sheets | Done | `drawings/CCTV/PDF/` |
-| CCTV pole enclosure detail | Drawn; **fibre type and title-block fields TBC** | `drawings/CCTV/ENCLOSURE/PDF/` |
-| Drawings | On this PC only, not in git ([D-11](DECISIONS.md)); paths in the table above are local | |
-| Git and GitHub | **Public** repo `Ajmalpshaik/AutoCAD-MCP` since 2026-10-26, branch `main` ([D-10](DECISIONS.md)) | |
-| Documentation | Full set written 2026-10-26 | [docs/README.md](README.md) |
-| CI | ruff + offline tests on `windows-latest`, **green** since the repository went public on 2026-10-26 (while private it was blocked by the account's Actions billing) | `.github/workflows/ci.yml` |
-
-## What changed last session (2026-10-26)
-
-- Repository created and pushed; folders re-arranged into parts ([D-05](DECISIONS.md)).
-- Generator paths made relative ([D-07](DECISIONS.md)). The generators were compiled and their
-  imports checked after the move; **no package has been redrawn in AutoCAD since the move.** Run one
-  `cctv_run.py png 102` (or similar) to confirm before relying on them.
+| Name and repository | **Heron AI for AutoCAD**, public, `Ajmalpshaik/Heron-AutoCAD` | [D-12](DECISIONS.md) |
+| Server tools | Every tool gated by the plug-in; 3 new READ tools (preview, standards, attributes); resources and prompts | `pytest -m "not live"` green; `tools/check_structure.py` OK |
+| Plug-in (C#) | Ribbon, padlocks, banner, Bridge Status, Keep or Discard, 6 commands. Builds for net48 / net8 / net10 with 0 warnings | `dotnet build`; bridge tests green incl. real Python <-> C# |
+| Plug-in live in AutoCAD | **Not run yet, on any version** | [NEEDS-CHECKING](NEEDS-CHECKING.md) group A |
+| Bundle and installer | `tools/build_plugin.py` -> `dist/HeronAutoCAD.bundle`; `tools/install_plugin.py` (refuses while AutoCAD runs) | `tests/test_plugin_bundle.py` |
+| CI | Two jobs on Windows: Python (ruff, tests, structure) and plug-in (3 builds + bridge tests) | `.github/workflows/ci.yml` |
+| Drawing packages | AHU-01, CCTV 42 sheets, pole enclosure: on this PC only, not in git ([D-11](DECISIONS.md)) | `drawings/` |
+| Enclosure detail | Fibre type and title-block fields still TBC | `generators/encl_detail.py` |
 
 ## Next, in order
 
-1. Confirm a generator still draws after the move (above).
-2. Enclosure detail: settle the fibre type (single-mode or OM3) and fill the title-block TBCs.
-3. Pick from [ROADMAP.md](ROADMAP.md).
+1. **Live checks on AutoCAD 2027**, rows A1-A19 of [NEEDS-CHECKING](NEEDS-CHECKING.md), with the
+   owner at the PC: close AutoCAD, `tools/install_plugin.py`, start AutoCAD, press Heron, then work
+   down the rows. Record PASS / FAIL with the date.
+2. Fix whatever A1-A19 finds (each fix with a test first).
+3. Tag `v1.1.0` once group A passes.
+4. Pick from [ROADMAP](ROADMAP.md).
 
 ## Before you stop
 
-Update the table above, add any decision to [DECISIONS.md](DECISIONS.md), add a line to
+Update the table above, add decisions to [DECISIONS.md](DECISIONS.md), a line to
 [CHANGELOG.md](../CHANGELOG.md), run the gates, commit and push.

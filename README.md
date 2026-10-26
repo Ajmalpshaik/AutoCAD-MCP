@@ -1,59 +1,104 @@
-# AutoCAD MCP
+# Heron AI for AutoCAD
 
-> **Public, but still a work in progress.** This is Ajmal's working copy of the AutoCAD MCP server
-> and the drawing packages made with it. You are welcome to read it, try it and share ideas through
-> an Issue, but expect things to change.
+> **Dear Modelers - please do not install this yet.**
+>
+> This repository is public so the work is open, but it is not finished. The plug-in inside AutoCAD
+> still has to pass its live checks ([NEEDS-CHECKING](docs/NEEDS-CHECKING.md)). I will announce it
+> when it is ready to install.
+>
+> **Programmers and AI engineers: your thoughts are welcome.** Read the code and share suggestions
+> or corrections through an Issue.
 
-**An MCP server that lets Claude drive the AutoCAD already open on your machine.**
+**Let a chat work in your AutoCAD - only when you connect it, and only as far as your padlocks allow.**
 
-> You describe the drawing. AutoCAD MCP does the AutoCAD work behind it.
+> The modeller focuses on the drawing. Heron does the AutoCAD work behind it.
+
+Heron AI for AutoCAD is the AutoCAD member of the [Heron AI](https://github.com/Ajmalpshaik/Heron-AI)
+family. Same name, same ribbon, same padlocks, same "Heron AI is changing your drawing" banner: a
+modeller who knows Heron in Revit knows it here.
 
 ---
 
 ## What it is
 
-AutoCAD MCP connects Claude to a running copy of full AutoCAD through AutoCAD's COM Automation
-interface. Claude reads the drawing you have open and draws into it live. Geometry appears on screen
-as it is created, and every tool call lands as **one undo step**, so anything Claude does can be
-reversed with one Ctrl+Z.
+You describe the work in plain language; Claude does it in the AutoCAD you already have open:
 
 ```
-"Check the AutoCAD connection and tell me what's open."
-"Draw a 5000 x 3000 rectangle at the origin on a new layer A-WALL, in red."
-"Find every text that says FFL and tell me where it is."
-"Total the length of everything on layer M-PIPE-CWS."
-"I've selected some objects - move them 1200 to the right."
+"Check the connection and tell me what's open."
+"Draw a 5000 x 3000 rectangle at the origin on layer A-WALL, in red."
+"Check this drawing against our layer standard."
+"Make me a camera schedule from the CAM blocks."
+"Show me what you drew."
 ```
 
-It is **not** an AutoCAD plug-in. Nothing is installed inside AutoCAD. It is an outside program that
-attaches to AutoCAD the same way a VBA macro would.
+Geometry appears live, every change is **one undo step**, and nothing reaches AutoCAD until you
+press **Heron** on the ribbon.
 
-## Four parts
+## What you see in AutoCAD
+
+Ribbon tab **Heron**, panel **AI Bridge**:
+
+| Button | Off (safe) | On |
+|---|---|---|
+| **Heron** | dark heron: no chat can see this AutoCAD | lit heron: a chat can reach it. The arrow opens **Bridge Status** |
+| **Changes** | blue padlock: Heron can only read and look | red padlock: Heron may draw, modify and delete |
+| **Publish** | Heron may not save or export | Heron may save, export, plot |
+| **Admin** | no commands or AutoLISP | Heron may run commands, AutoLISP, system variables |
+| **Ask to Keep** | changes are kept at once | after each change: **Keep it / Discard it** |
+
+While Heron works, a small card at the top of AutoCAD says **"Heron AI is reading your drawing"**
+(blue) or **"Heron AI is changing your drawing"** (amber), then **finished** (green) or **stopped**
+(red). The command line keeps a line such as `Heron: Draw Line. Done in 0.4 s`.
+
+Everything starts **off**. Turning a padlock on asks first; turning it off never asks. The same
+switches are commands: `HERON`, `HERONSTATUS`, `HERONCHANGES`, `HERONPUBLISH`, `HERONADMIN`,
+`HERONASKTOKEEP`. Full detail: [docs/06-heron-plugin.md](docs/06-heron-plugin.md).
+
+## Parts
 
 | Part | Responsibility | Folder |
 |---|---|---|
-| **The server** | The MCP server: 50 `autocad_*` tools, the COM link, AutoLISP helpers | [`src/autocad_mcp/`](src/autocad_mcp/README.md) |
-| **Generators** | Python scripts that build whole drawing packages through the server (AHU, CCTV) | [`generators/`](generators/README.md) |
-| **Drawings** | Where the generators write DWG, PDF and PNG. Kept on the PC only, not in git | `drawings/` ([where things go](docs/04-drawing-generators.md#where-the-output-goes)) |
-| **Tools & tests** | Live smoke test, protocol check, offline and live test suites | [`tools/`](tools/README.md), [`tests/`](tests/README.md) |
+| **Heron for AutoCAD** (C#) | The plug-in: ribbon, padlocks, banner, Keep or Discard, the secure pipe | [`autocad/`](autocad/README.md) |
+| **Heron MCP for AutoCAD** (Python) | The MCP server: the `autocad_*` tools, done over COM, gated by the plug-in | [`src/autocad_mcp/`](src/autocad_mcp/README.md) |
+| **Generators** | Scripts that build whole drawing packages through the server (AHU, CCTV) | [`generators/`](generators/README.md) |
+| **Tools & tests** | Build and install the plug-in, smoke test, structure check, test suites | [`tools/`](tools/README.md), [`tests/`](tests/README.md) |
 
-Everything else is documentation ([`docs/`](docs/README.md)), configuration examples
-([`examples/`](examples/README.md)) and stopped experiments kept for reference
-([`archive/`](archive/README.md)).
+Documentation is in [`docs/`](docs/README.md); stopped experiments in [`archive/`](archive/README.md).
+Generated drawings stay on the PC that made them and are not in this repository.
 
 ---
 
-## What you need
+## What it can do
 
-| | |
-|---|---|
-| OS | Windows (COM Automation is Windows-only) |
-| AutoCAD | 2015 or newer, **full AutoCAD, not LT** (LT has no COM Automation) |
-| Python | 3.10 or newer |
+The live list is always `.venv\Scripts\autocad-mcp.exe --list-tools`. Every tool has a level, and
+the level decides which padlock it needs:
 
-AutoCAD must have been started normally at least once so it registers its COM interface.
+| Level | Needs | What |
+|---|---|---|
+| Read | connected | status, list and find, measure, extents, selection, layers, blocks, styles, **preview image**, **standards check**, **attribute schedules** |
+| View | connected | zoom, regen, switch / open / create drawing |
+| Change | Changes | draw, text, dimensions, hatch, blocks, batch drawing, move ... array, modify, delete, layers |
+| Publish | Changes + Publish | save, export / plot to PDF |
+| Admin | Changes + Admin | any command, AutoLISP, system variables, purge, audit |
 
-## Quick start
+Every tool with its options: [docs/03-tools-reference.md](docs/03-tools-reference.md).
+
+## What keeps your drawing safe
+
+- **Invisible until connected.** AutoCAD starts disconnected every time. The pipe answers only your
+  Windows user, and each connect makes a new session password.
+- **Padlocks, off by default,** read fresh on every call. A broken settings file means all off.
+- **One undo step per call.** Optional **Keep or Discard** after each change.
+- **Wrong-drawing guard.** If you switch drawings mid-job, a change is refused until Heron looks again.
+- **No double drawing.** If AutoCAD goes busy half-way through a change, Heron does not retry; it
+  says "outcome unknown, read the drawing back first".
+- **Every call audited** to `%LOCALAPPDATA%\Heron\autocad\audit\`.
+
+More: [SECURITY.md](SECURITY.md).
+
+## Install (for testing only, see the banner above)
+
+Needs Windows, **full AutoCAD 2021 to 2027** (not LT), Python 3.10+, and the .NET SDK to build.
 
 ```bash
 python -m venv .venv
@@ -63,74 +108,29 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Check the 50 tools register (AutoCAD not needed):
-
 ```bash
-.venv\Scripts\autocad-mcp.exe --list-tools
+.venv\Scripts\python.exe tools/build_plugin.py
 ```
 
-Check it reaches AutoCAD (open AutoCAD with any drawing first):
+Close AutoCAD, then:
 
 ```bash
-.venv\Scripts\python.exe tools/smoke_test.py
+.venv\Scripts\python.exe tools/install_plugin.py
 ```
 
-Connect it to Claude Code (this repository's [`.mcp.json`](.mcp.json) already does this when Claude
-Code is opened in this folder):
-
-```bash
-claude mcp add autocad -- "D:\06_Development\09_Autocad MCP\Autocad MCP\.venv\Scripts\autocad-mcp.exe"
-```
-
-Full steps, Claude Desktop and network use: [docs/SETUP.md](docs/SETUP.md).
-
----
-
-## What it can do today
-
-| Group | Tools | Detail |
-|---|---|---|
-| Session and files | 10 | status, open, save, switch, export PDF/DXF, zoom, system variables |
-| Drawing | 12 | line, polyline, rectangle, circle, arc, ellipse, point, text, mtext, dimension, block, hatch |
-| Bulk drawing | 1 | `autocad_batch_draw`: hundreds of entities in one AutoLISP round trip (about 9x faster) |
-| Querying | 6 | list and filter entities, selection, find text, extents, measure |
-| Modifying | 9 | move, copy, rotate, scale, mirror, offset, array, modify, delete (delete needs `confirm=true`) |
-| Layers and blocks | 7 | list, create, state, current, delete, blocks, styles |
-| Escape hatches | 5 | any command, AutoLISP with a result, purge, regen, audit |
-
-Every tool with its options: [docs/03-tools-reference.md](docs/03-tools-reference.md).
-
-**Drawing packages made with it so far** (the generators are here; the drawings themselves are not
-published):
-
-| Package | Sheets | Generator |
-|---|---|---|
-| AHU-01 GA, isometric, P&ID, BMS, plant room, details, SLD, TAB | 11 (A1) | `generators/ahu_*.py` |
-| CCTV full package, sample building B1+G+4, MOI SSD Qatar | 42 (A1) | `generators/cctv_*.py` |
-| CCTV pole enclosure installation detail, Type A / B | 1 (A1) | `generators/encl_*.py` |
-
-How to run them: [docs/04-drawing-generators.md](docs/04-drawing-generators.md).
-
----
+Start AutoCAD, press **Heron**, and connect Claude Code (this folder's [`.mcp.json`](.mcp.json) does it
+when Claude Code opens here). Full steps: [docs/SETUP.md](docs/SETUP.md).
 
 ## Where to read next
 
 | You are | Read |
 |---|---|
-| **The owner** | [docs/HANDOVER.md](docs/HANDOVER.md): where work stopped and what is next |
-| **Setting it up** | [docs/SETUP.md](docs/SETUP.md), then [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| **The owner** | [docs/HANDOVER.md](docs/HANDOVER.md) and the live checks in [docs/NEEDS-CHECKING.md](docs/NEEDS-CHECKING.md) |
+| **A modeller** | [docs/06-heron-plugin.md](docs/06-heron-plugin.md) |
 | **Changing the code** | [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 | **An AI agent** | [AGENTS.md](AGENTS.md) |
 
-The full documentation index is [docs/README.md](docs/README.md).
-
-## Safety in one paragraph
-
-Each tool call is one undo group. Deleting needs an explicit `confirm=true`, and without it the tool
-only shows what it would delete. Commands that open a modal dialog are refused, because a dialog
-blocks AutoCAD until a person closes it. The HTTP transport has **no authentication**; use it only on
-a network you trust. More in [SECURITY.md](SECURITY.md).
-
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). AutoCAD is a trademark of Autodesk, Inc. This project is not affiliated
+with Autodesk.

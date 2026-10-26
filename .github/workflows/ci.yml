@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  offline:
+  python:
     # COM and pywin32 are Windows-only; AutoCAD is not on the runner, so live tests are skipped.
     runs-on: windows-latest
     steps:
@@ -20,3 +20,21 @@ jobs:
         run: python -m ruff check .
       - name: Offline tests
         run: python -m pytest -m "not live"
+      - name: Structure
+        run: python tools/check_structure.py
+
+  plugin:
+    # Builds the add-in for AutoCAD 2021-2024 (net48), 2025-2026 (net8) and 2027 (net10)
+    # against Autodesk's reference packages, and runs the bridge's offline tests.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Build all three
+        run: dotnet build autocad/Heron.AutoCAD.sln -c Release
+      - name: Bridge tests
+        run: dotnet test autocad/Heron.AutoCAD.Bridge.Tests -c Release

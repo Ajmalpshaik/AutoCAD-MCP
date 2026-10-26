@@ -1,9 +1,11 @@
 # 01 - Overview and principles
 
+> **Heron AI for AutoCAD.** The AutoCAD member of the Heron AI family ([D-12](DECISIONS.md)).
+
 ## What it is for
 
 A BIM / MEP modeller should be able to say what drawing they want and have it appear in the AutoCAD
-they already use, without learning AutoLISP, VBA, the COM object model or MCP. AutoCAD MCP is the
+they already use, without learning AutoLISP, VBA, the COM object model or MCP. Heron AI for AutoCAD is the
 piece that turns Claude's tool calls into AutoCAD work.
 
 Two ways it gets used:
@@ -26,15 +28,22 @@ Two ways it gets used:
 | 6 | **Say how to fix it** | Errors name the action that clears them: *"press Esc in AutoCAD"* |
 | 7 | **Look before claiming** | A drawing is checked from a PNG or PDF plot, not assumed right |
 | 8 | **Data in one place** | A generator keeps every number in one data module; sheets read from it |
+| 9 | **Invisible until connected** | No chat can reach an AutoCAD nobody pressed Heron in |
+| 10 | **Padlocks decide, not the request** | A tool's level is set in code; the modeller's padlocks decide what runs |
+| 11 | **Show when touching** | A banner while Heron reads or changes the drawing; a line on the command line after |
 
 ## What it will never do
 
 - Work with AutoCAD LT. LT has no COM Automation interface to attach to (see [SETUP](SETUP.md)).
-- Run inside AutoCAD as a plug-in. It is always an outside process.
-- Drive Revit. Revit work belongs to Heron AI, a separate project.
+- Do the drawing from inside AutoCAD. The MCP server is an outside process that works over COM; the
+  Heron plug-in inside AutoCAD only guards and shows ([D-14](DECISIONS.md)).
+- Drive Revit. Revit work belongs to Heron AI for Revit, a separate repository.
+- Change a drawing while the Changes padlock is off.
 - Hide a change from undo.
 
 ## Scope today
 
-Full AutoCAD 2015 or newer on Windows; tested on AutoCAD 2020 and 2027. Model-space drawing,
-querying and modifying; layers, blocks, styles; export; any command; any AutoLISP.
+Full AutoCAD on Windows. The Heron plug-in targets AutoCAD 2021 to 2027 ([D-13](DECISIONS.md)); the
+COM tools themselves were used on AutoCAD 2020 and 2027. Model-space drawing, querying and modifying;
+layers, blocks, styles; standards checks and attribute schedules; previews, export; any command; any
+AutoLISP.

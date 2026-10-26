@@ -1,32 +1,41 @@
 # Security
 
-## What the server can do to your files
+## What Heron can do to your files
 
-The tools can create, change and delete entities in any drawing open in AutoCAD, save drawings over
-existing files, export files, run any AutoCAD command and evaluate any AutoLISP. Treat whoever can
-call the server as someone sitting at your AutoCAD.
+While AutoCAD is connected and the padlocks allow it, the tools can create, change and delete
+objects in any open drawing, save drawings over existing files, export files, run any AutoCAD command
+and evaluate any AutoLISP. Treat a connected chat with Changes, Publish and Admin on as someone
+sitting at your AutoCAD.
 
 ## What keeps it safe
 
 | Guard | Where |
 |---|---|
-| Every tool call is **one undo group**: one Ctrl+Z reverses it | `core/registry.py` |
-| `autocad_delete_entities` and `autocad_delete_layer` do nothing without `confirm=true`; without it they show what would go | `tools/modify.py`, `tools/layers.py` |
-| Commands known to open a modal dialog are refused, with the command-line alternative named | `tools/advanced.py` |
-| The default transport is **stdio**: only the program that started the server can talk to it | `server.py` |
+| AutoCAD starts **disconnected**; until Heron is pressed no chat can find it | `autocad/Heron.AutoCAD.Addin/HeronApplication.cs` |
+| The pipe is open to **the current Windows user only**; a new random session token on every connect, compared in constant time | `autocad/Heron.AutoCAD.Bridge/BridgeServer.cs`, `BridgeIdentity.cs` |
+| **Padlocks off by default**, read fresh on every call; an unreadable settings file = all off | `HeronConfig.cs`, `Permissions.cs` |
+| Every tool's level is declared in code, never taken from the request | `src/autocad_mcp/core/risk.py` |
+| One chat at a time per AutoCAD | `HeronHold.cs` |
+| A change to a drawing other than the one Heron last looked at is refused | `src/autocad_mcp/core/gate.py` |
+| A write that AutoCAD interrupted is never re-run ("outcome unknown") | `core/connection.py` |
+| One undo group per call; optional Keep or Discard | `core/registry.py`, `HeronKeepQuestion.cs` |
+| Deletes need `confirm=true` | `tools/modify.py`, `tools/layers.py` |
+| Dialog-opening commands refused | `tools/advanced.py` |
+| Every call audited, never pruned | `core/audit.py` |
 
 ## What does not keep it safe
 
+- **COM is still open to other programs on your PC.** The padlocks bind Heron, not every program
+  that can reach AutoCAD's Automation interface.
+- `--no-bridge` turns the plug-in checks off. It is for developers only.
 - **The HTTP transport has no authentication.** `--transport http --host 0.0.0.0` lets anyone on the
-  network draw, delete and run LISP in your AutoCAD. Use it only on a network you trust, and prefer
-  `--host 127.0.0.1`.
-- `autocad_send_command` and `autocad_run_lisp` are deliberate escape hatches. They can do anything
-  AutoCAD can do, including writing files.
+  network reach the server. Prefer stdio, or `--host 127.0.0.1`.
+- `autocad_send_command` and `autocad_run_lisp` (Admin) can do anything AutoCAD can do.
 
 ## Secrets
 
-This repository holds no keys or passwords and needs none. Never commit one. If you find one, remove
-it, rotate it, and tell the owner.
+This repository holds no keys or passwords and needs none. The session token lives only in the
+address file under your own `%LOCALAPPDATA%` and changes on every connect.
 
 ## Reporting a problem
 

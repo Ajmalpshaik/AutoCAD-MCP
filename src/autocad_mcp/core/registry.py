@@ -21,8 +21,8 @@ from .errors import AutocadError, com_message
 
 mcp = MCPServer(
     "autocad_mcp",
-    title="AutoCAD",
-    version="1.0.0",
+    title="Heron AI for AutoCAD",
+    version="1.1.0",
     instructions=(
         "Controls the AutoCAD instance running on this machine through its COM "
         "Automation interface. Changes appear live in the user's open drawing.\n\n"
@@ -32,7 +32,14 @@ mcp = MCPServer(
         "Entities are identified by their drawing 'handle', which every creation "
         "and query tool returns and every modify tool accepts.\n\n"
         "If a tool reports AutoCAD is busy or mid-command, the user needs to "
-        "press Esc in AutoCAD — no retry will clear it."
+        "press Esc in AutoCAD — no retry will clear it.\n\n"
+        "This is Heron AI for AutoCAD. Nothing reaches AutoCAD until the user "
+        "presses the Heron button on the Heron tab (or types HERON), and the "
+        "padlocks there decide what is allowed: Changes for drawing and "
+        "modifying, Publish for saving and exporting, Admin for commands and "
+        "AutoLISP. When a tool is refused, pass the refusal on in plain words; "
+        "never try to get round it. Call autocad_preview to look at what you "
+        "drew before saying it is done."
     ),
 )
 

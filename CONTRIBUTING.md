@@ -29,7 +29,17 @@ Run both before every push:
 .venv\Scripts\python.exe -m pytest -m "not live"
 ```
 
-The same two run on GitHub for every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+And for the plug-in and the repository rules:
+
+```bash
+dotnet test autocad/Heron.AutoCAD.Bridge.Tests
+```
+
+```bash
+.venv\Scripts\python.exe tools/check_structure.py
+```
+
+The same run on GitHub for every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 GitHub has no AutoCAD, so **live tests run only on your PC**, with AutoCAD open:
 
 ```bash
@@ -42,7 +52,8 @@ GitHub has no AutoCAD, so **live tests run only on your PC**, with AutoCAD open:
 
 ## Adding a tool
 
-1. Put it in the matching file in [`src/autocad_mcp/tools/`](src/autocad_mcp/tools/).
+1. Put it in the matching file in [`src/autocad_mcp/tools/`](src/autocad_mcp/tools/), wearing `@tool_errors` (that is what puts it behind the Heron gate).
+1. Give it a level in [`src/autocad_mcp/core/risk.py`](src/autocad_mcp/core/risk.py). Without one, a test and `tools/check_structure.py` fail.
 2. Keep the layer rule: `tools` -> `acad` -> `core`, never upward.
 3. Add an offline test in [`tests/test_offline.py`](tests/test_offline.py) and, if it changes the
    drawing, a live one in [`tests/test_live.py`](tests/test_live.py).
@@ -53,3 +64,10 @@ GitHub has no AutoCAD, so **live tests run only on your PC**, with AutoCAD open:
 
 Follow [docs/04-drawing-generators.md](docs/04-drawing-generators.md): one data module as the single
 source of truth, one sheet module per group, one runner. Outputs go in `drawings/<PACKAGE>/`.
+
+## Changing the plug-in
+
+1. Rules and texts go in `autocad/Heron.AutoCAD.Bridge` (testable); only what is seen goes in the add-in.
+2. Never touch the AutoCAD API from a pipe thread: use `IdleQueue`, and lock the document to change it.
+3. Build all three targets: `dotnet build autocad/Heron.AutoCAD.sln -c Release`.
+4. A change to what the modeller sees adds or updates a row in [docs/NEEDS-CHECKING.md](docs/NEEDS-CHECKING.md).

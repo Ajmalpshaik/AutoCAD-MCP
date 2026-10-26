@@ -2,6 +2,24 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
+
+- **Renamed Heron AI for AutoCAD** ([D-12](docs/DECISIONS.md)); repository `Ajmalpshaik/Heron-AutoCAD`.
+- **New plug-in** `autocad/`: ribbon tab Heron / AI Bridge, connect button (lit / dark heron),
+  Changes, Publish, Admin and Ask to Keep padlocks, Bridge Status window, READING / CHANGING / DONE /
+  STOPPED banner, Keep or Discard, commands `HERON*`. Builds for AutoCAD 2021-2027 ([D-13](docs/DECISIONS.md)).
+  **Not yet run live** ([NEEDS-CHECKING](docs/NEEDS-CHECKING.md)).
+- **Every tool is gated** by the plug-in: risk level per tool, padlocks, one chat at a time,
+  wrong-drawing guard, Keep or Discard, audit log ([D-14](docs/DECISIONS.md)).
+- A write AutoCAD interrupts is never re-run: "outcome unknown" instead ([D-15](docs/DECISIONS.md)).
+- Created objects are read back by handle (`verified`).
+- New tools: `autocad_preview` (PNG back to the AI), `autocad_check_standards`,
+  `autocad_extract_attributes`. New resources `autocad://drawing/{status,layers,blocks,styles}` and
+  prompts `check_standards`, `draw_from_spec`. New start options `--read-only`, `--no-bridge`.
+- `tools/build_plugin.py`, `tools/install_plugin.py`, `tools/check_structure.py`; CI builds the
+  plug-in three ways and runs the bridge tests.
+- `pyproject.toml` now says `mcp>=2.0` (the code needs 2.x).
+
 ## 2026-10-26 - Repository and documentation
 
 - Made the repository public ([D-10](docs/DECISIONS.md)).

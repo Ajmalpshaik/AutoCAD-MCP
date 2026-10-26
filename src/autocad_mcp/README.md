@@ -4,10 +4,10 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 
 | Folder / file | Owns | Knows about |
 |---|---|---|
-| `server.py` | Command line: `--transport stdio/http`, `--host`, `--port`, `--list-tools` | everything below |
-| `tools/` | The 50 MCP tools, one file per subject | MCP, `acad`, `core` |
+| `server.py` | Command line: `--transport stdio/http`, `--host`, `--port`, `--list-tools`, `--read-only`, `--no-bridge` | everything below |
+| `tools/` | The MCP tools, resources and prompts, one file per subject (`--list-tools` counts them) | MCP, `acad`, `core` |
 | `acad/` | AutoCAD domain: entities, selections, tables, AutoLISP, units | `core` only |
-| `core/` | COM worker thread, VARIANTs, errors, the FastMCP instance, undo groups | pywin32 only |
+| `core/` | COM worker thread, VARIANTs, errors, the FastMCP instance, undo groups, and the Heron gate (`gate.py`, `bridge.py`, `risk.py`, `audit.py`) | pywin32 only |
 
 **The one rule:** imports point down only, `tools` -> `acad` -> `core`.
 
@@ -20,6 +20,8 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 | `tools/modify.py` | move, copy, rotate, scale, mirror, offset, array, modify, delete |
 | `tools/layers.py` | layers, blocks, styles |
 | `tools/advanced.py` | send command, run LISP, purge, regen, audit |
+| `tools/standards.py` | standards check, attribute extraction |
+| `tools/resources.py` | MCP resources and prompts |
 | `tools/_shared.py` | option types and helpers shared by the tool files |
 
 After changing anything here: run the gates ([CONTRIBUTING](../../CONTRIBUTING.md)), then **restart the

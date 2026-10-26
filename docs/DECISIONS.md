@@ -88,3 +88,50 @@ small code base, and the pole-enclosure sheet is real site work that should not 
 helped nobody), and the files were **removed from the whole git history**
 (rewritten and force-pushed the same day, while the repository was one day old with no other copies).
 The files themselves stay on Ajmal's PC.
+
+## D-12 - Heron AI for AutoCAD: same family, separate repository
+
+**Decided:** 2026-10-26, with Ajmal ("Heron AI for AutoCAD", repository renamed `Heron-AutoCAD`).
+**Status:** in force.
+Heron AI's own decisions defer every non-Revit platform "until Revit works properly", and an AutoCAD
+plug-in needs its own C# builds, so it lives here, separate. It carries Heron's name, ribbon, padlocks,
+banner and wording so a modeller sees one product. When Heron's capability registry is ready, this
+repository is offered as its AutoCAD adapter. Heron AI itself is not changed (its icon PNGs were
+copied once, read only).
+
+## D-13 - AutoCAD 2021 to 2027, three builds
+
+**Decided:** 2026-10-26, Ajmal chose "2021 to 2027". **Status:** in force.
+`net48` for 2021-2024 (R24), `net8.0-windows` for 2025-2026 (R25), `net10.0-windows` for 2027 (R26),
+against Autodesk's `AutoCAD.NET` NuGet packages 24.0.0 / 25.0.1 / 26.0.0, in one `HeronAutoCAD.bundle`.
+Only 2027 is on this PC: the other versions stay NO MACHINE in [NEEDS-CHECKING](NEEDS-CHECKING.md)
+until someone runs them; the docs never claim them as working before that.
+
+## D-14 - The plug-in guards, COM draws
+
+**Decided:** 2026-10-26, Ajmal chose this over rewriting every tool in C#. **Status:** in force.
+The plug-in owns connection, padlocks, banner and Keep or Discard; the Python server keeps its COM
+tools and asks the plug-in `begin` / `end` / `ask_keep` around every call, from one place
+(`tool_errors` -> `core/gate.py`). Tools can move into the plug-in later, one at a time.
+Known limit: COM stays reachable by other programs; the guard binds Heron, not the whole PC.
+
+## D-15 - A write AutoCAD interrupted is never re-run
+
+**Decided:** 2026-10-26. **Status:** in force.
+The busy-retry loop re-ran a whole tool. Once `undo_mark` has started a write, a busy signal now
+raises `OutcomeUnknown` ("read the drawing back before retrying") instead, so nothing is drawn twice.
+Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark the write; on the
+[ROADMAP](ROADMAP.md).
+
+## D-16 - A broken padlock file means padlocks off, banner on
+
+**Decided:** 2026-10-26. **Status:** in force.
+An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
+banner on, because the banner is what shows the modeller that Heron is working.
+
+## D-17 - Status always answers; resources go through the gate
+
+**Decided:** 2026-10-26. **Status:** in force.
+`autocad_status` runs even when AutoCAD is not connected, and adds `"heron": {connected, message}`,
+so a chat can always tell the modeller how to connect. MCP resources call the matching gated tools,
+so a resource read is refused and audited exactly like a tool call.

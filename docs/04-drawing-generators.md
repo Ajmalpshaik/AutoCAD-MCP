@@ -12,6 +12,10 @@ python generators/cctv_run.py status
 
 The server path and every output folder come from [`generators/paths.py`](../generators/paths.py).
 
+**With the Heron plug-in installed**, a generator goes through the same gate as Claude: press
+**Heron** in AutoCAD and turn on **Changes** (and **Publish** for PDF plots) before running one
+([05 §12](05-known-limits.md#12-live-scripts-and-generators-now-need-heron-connected)).
+
 ## How a generator is built
 
 | Piece | Job | AHU example | CCTV example |

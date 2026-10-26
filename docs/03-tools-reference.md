@@ -3,6 +3,11 @@
 The live list, always right: `.venv\Scripts\autocad-mcp.exe --list-tools`. This page groups them and
 adds what the one-line descriptions leave out.
 
+**Levels.** Every tool has a level ([`core/risk.py`](../src/autocad_mcp/core/risk.py)) that decides
+which padlock it needs in AutoCAD: Read and View need only the connection; Change needs **Changes**;
+Publish needs Changes + **Publish**; Admin needs Changes + **Admin** ([06](06-heron-plugin.md)).
+The group headings below give the level.
+
 **Rules for every tool**
 
 - Coordinates are in the drawing's own units. Call `autocad_status` first to learn them.
@@ -11,7 +16,7 @@ adds what the one-line descriptions leave out.
 - Drawing tools share `layer`, `color`, `linetype` and `space` options. A missing layer is created
   and reported.
 
-## Session and files (10)
+## Session and files (Read / View; save and export are Publish)
 
 | Tool | Purpose |
 |---|---|
@@ -26,20 +31,20 @@ adds what the one-line descriptions leave out.
 | `autocad_get_variable` | Read a system variable |
 | `autocad_set_variable` | Write a system variable |
 
-## Drawing (12)
+## Drawing (Change)
 
 `autocad_draw_line`, `autocad_draw_polyline`, `autocad_draw_rectangle`, `autocad_draw_circle`,
 `autocad_draw_arc`, `autocad_draw_ellipse`, `autocad_draw_point`, `autocad_add_text`,
 `autocad_add_mtext`, `autocad_add_dimension`, `autocad_insert_block`, `autocad_add_hatch`
 
-## Bulk drawing (1)
+## Bulk drawing (Change)
 
 `autocad_batch_draw` sends one AutoLISP script that creates many entities inside AutoCAD. Use it for
 anything above about ten entities. Every operation is checked in Python first, so a bad batch fails
 naming the operation index without touching the drawing. Supports line, polyline, rectangle, circle,
 arc, text and point. Speeds are in [02](02-architecture.md#why-python-and-autolisp).
 
-## Querying (6)
+## Querying (Read)
 
 | Tool | Purpose |
 |---|---|
@@ -50,7 +55,7 @@ arc, text and point. Speeds are in [02](02-architecture.md#why-python-and-autoli
 | `autocad_get_extents` | Bounding box of the drawing or one layer |
 | `autocad_measure` | Point-to-point distance, or total length / area of entities or a layer |
 
-## Modifying (9)
+## Modifying (Change)
 
 `autocad_move_entities`, `autocad_copy_entities`, `autocad_rotate_entities`,
 `autocad_scale_entities`, `autocad_mirror_entities`, `autocad_offset_entities`,
@@ -59,13 +64,13 @@ arc, text and point. Speeds are in [02](02-architecture.md#why-python-and-autoli
 `autocad_delete_entities` needs `confirm=true`. Without it the tool returns a preview and changes
 nothing.
 
-## Layers and blocks (7)
+## Layers and blocks (lists Read, the rest Change)
 
 `autocad_list_layers`, `autocad_create_layer`, `autocad_set_layer_state`,
 `autocad_set_current_layer`, `autocad_delete_layer` (needs `confirm=true`), `autocad_list_blocks`,
 `autocad_list_styles`
 
-## Escape hatches (5)
+## Escape hatches (Admin; regen is View)
 
 | Tool | Purpose |
 |---|---|
@@ -77,3 +82,31 @@ nothing.
 
 `autocad_send_command` refuses commands known to open a modal dialog and names the command-line
 alternative, because a dialog blocks COM until a person closes it.
+
+## Seeing and checking (Read)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_preview` | Plot the extents, the current view or a window to PNG and return the **picture** to the AI. Use after drawing, before saying it is done. Page setup put back |
+| `autocad_check_standards` | Check layers and objects against rules: `layer_name_pattern`, `layers {name: {color, linetype}}`, `forbid_entities_on_layer_0`, `require_bylayer_color`, `require_bylayer_linetype`, `max_findings`. Inline or a JSON file |
+| `autocad_extract_attributes` | Every block reference with attributes as rows (block, handle, layer, insertion, tags), JSON or CSV - for schedules |
+
+## Resources and prompts
+
+| Resource | Same as |
+|---|---|
+| `autocad://drawing/status` | `autocad_status` |
+| `autocad://drawing/layers` | `autocad_list_layers` |
+| `autocad://drawing/blocks` | `autocad_list_blocks` |
+| `autocad://drawing/styles` | `autocad_list_styles` |
+
+They call the gated tools, so they are refused the same way while AutoCAD is not connected.
+Prompts: `check_standards` (report only), `draw_from_spec` (draw, then preview).
+
+## Start options
+
+| Option | Effect |
+|---|---|
+| `--read-only` | Only Read and View tools are offered; nothing can change a drawing |
+| `--no-bridge` | Developers only: skip the plug-in (no padlocks, banner, Keep or Discard) |
+| `--transport http --host --port` | Serve over HTTP (no authentication: trusted networks only) |
