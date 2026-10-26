@@ -178,4 +178,7 @@ def test_every_chunk_returns_nothing_to_print():
     # (setq *heron-p* ...) printed the whole polyline (live, 2026-10-26).
     pairs = [dotted(0, lisp_string("LWPOLYLINE"))] + [dotted(10, f"(list {i}.0 {i}.0)") for i in range(300)]
     for chunk in build_chunks([pairs, point(1)], True, OUT):
-        assert chunk.endswith("(princ))") or chunk.startswith("(heron-run "), chunk[:60]
+        # The top-level form itself must return nothing printable: a progn
+        # ending in (princ), or heron-run (which ends in (princ)). A defun at
+        # top level printed "HERON-RUN" (live, 2026-10-26).
+        assert chunk.startswith("(progn ") and chunk.endswith("(princ))") or chunk.startswith("(heron-run "), chunk[:60]

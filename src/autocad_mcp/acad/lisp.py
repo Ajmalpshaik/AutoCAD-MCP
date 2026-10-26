@@ -136,11 +136,11 @@ def _entmake_expr(entity_list: str, capture_handle: bool) -> str:
 # ``f``; an error is caught, written to the file as "ERROR ..." and the file is
 # closed, so every later piece skips (*heron-f* is nil) and Python reports it.
 _HELPER = (
-    "(defun heron-run (fn / e) (if *heron-f* (progn"
+    "(progn (defun heron-run (fn / e) (if *heron-f* (progn"
     " (setq e (vl-catch-all-apply fn (list *heron-f*)))"
     " (if (vl-catch-all-error-p e) (progn"
     ' (write-line (strcat "ERROR " (vl-catch-all-error-message e)) *heron-f*)'
-    " (close *heron-f*) (setq *heron-f* nil))))) (princ))"
+    " (close *heron-f*) (setq *heron-f* nil))))) (princ)) (princ))"
 )
 
 # Closes however many undo groups are open: a single vla-EndUndoMark can leave
