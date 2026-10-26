@@ -1,0 +1,254 @@
+"""The COM link to a running AutoCAD.
+
+AutoCAD's Automation interface is an out-of-process, single-threaded-apartment
+COM server. Two consequences shape this module:
+
+1. Every COM call must happen on one thread that has called CoInitialize.
+   FastMCP tools run on asyncio's event loop, so all COM work is marshalled
+   onto a single dedicated worker thread via ``run()``.
+
+2. AutoCAD rejects calls while it is busy — a modal dialog is up, the user is
+   mid-command, a regen is running. That is transient and must be retried, not
+   reported as a failure.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import queue
+import threading
+import time
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+import pythoncom
+import win32com.client
+
+from .errors import (
+    AutocadError,
+    StaleDispatchError,
+    com_message,
+    is_dispatch_failure,
+    is_retryable,
+)
+
+T = TypeVar("T")
+
+PROG_ID = "AutoCAD.Application"
+
+RETRY_ATTEMPTS = 40
+RETRY_DELAY = 0.25
+
+# Space selector accepted by tools.
+MODEL_SPACE = "model"
+PAPER_SPACE = "paper"
+
+
+class _ComWorker:
+    """Runs every COM call on one dedicated apartment thread.
+
+    A single thread rather than a pool: AutoCAD's interface is
+    apartment-threaded, so marshalling the same document across threads is both
+    slower and a source of spurious rejections.
+    """
+
+    def __init__(self) -> None:
+        self._jobs: queue.Queue[tuple[Callable[[], Any], queue.Queue]] = queue.Queue()
+        self._thread = threading.Thread(
+            target=self._loop, name="autocad-com", daemon=True
+        )
+        self._started = False
+        self._lock = threading.Lock()
+
+    def _ensure_started(self) -> None:
+        with self._lock:
+            if not self._started:
+                self._thread.start()
+                self._started = True
+
+    def _loop(self) -> None:
+        pythoncom.CoInitialize()
+        try:
+            while True:
+                fn, reply = self._jobs.get()
+                try:
+                    reply.put((True, fn()))
+                except BaseException as exc:  # noqa: BLE001 - relayed to the caller
+                    reply.put((False, exc))
+        finally:  # pragma: no cover - daemon thread outlives the process
+            pythoncom.CoUninitialize()
+
+    def submit(self, fn: Callable[[], T]) -> T:
+        self._ensure_started()
+        reply: queue.Queue = queue.Queue(maxsize=1)
+        self._jobs.put((fn, reply))
+        ok, result = reply.get()
+        if ok:
+            return result
+        raise result
+
+
+_worker = _ComWorker()
+
+
+def _with_retry(fn: Callable[[], T]) -> T:
+    """Call ``fn``, retrying for as long as AutoCAD reports it is busy."""
+    last: BaseException | None = None
+    for _ in range(RETRY_ATTEMPTS):
+        try:
+            return fn()
+        except BaseException as exc:  # noqa: BLE001
+            if not is_retryable(exc):
+                raise
+            last = exc
+            if is_dispatch_failure(exc):
+                # The cached pointer, or an object reached through it, stopped
+                # resolving members. Drop it so the next attempt rebuilds from
+                # a fresh dispatch rather than retrying against the same
+                # broken one. A plain busy signal needs no such reset.
+                invalidate()
+            time.sleep(RETRY_DELAY)
+
+    window = RETRY_ATTEMPTS * RETRY_DELAY
+    if last is not None and is_dispatch_failure(last):
+        raise AutocadError(
+            f"Lost the COM connection to AutoCAD and could not re-establish it "
+            f"within {window:.0f}s. Check that AutoCAD is still running and has "
+            "not shown a crash or recovery dialog. If it was restarted, this "
+            f"server will reconnect on the next call. (details: {last})"
+        )
+    raise AutocadError(
+        f"AutoCAD stayed busy for {window:.0f}s and never accepted the request. "
+        "This almost always means a dialog box is open or a command is waiting "
+        "for input. Switch to AutoCAD, press Esc to cancel any running command, "
+        "close any open dialog, then try again. "
+        f"(last COM error: {com_message(last) if last else 'unknown'})"
+    )
+
+
+async def run(fn: Callable[[], T]) -> T:
+    """Execute a COM callable on the worker thread without blocking the loop.
+
+    Every tool funnels its COM work through here, so thread affinity and retry
+    are handled in exactly one place.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, lambda: _worker.submit(lambda: _with_retry(fn))
+    )
+
+
+class _AppCache:
+    """Holds the AutoCAD Application object between calls.
+
+    Re-dispatching per call is slow across an out-of-process boundary, so the
+    pointer is kept — but it goes stale when AutoCAD closes, and pywin32's
+    dynamic dispatch can also stop resolving property names while AutoCAD is
+    busy. Both are handled by probing on each access and, when the probe fails
+    for any reason other than a plain busy signal, dropping the pointer and
+    asking the retry loop for another attempt with a fresh one.
+    """
+
+    def __init__(self) -> None:
+        self.app: Any = None
+
+    def _dispatch(self, launch_if_needed: bool) -> Any:
+        try:
+            return win32com.client.GetActiveObject(PROG_ID)
+        except BaseException as exc:  # noqa: BLE001
+            if not launch_if_needed:
+                raise AutocadError(
+                    "No running AutoCAD instance was found. Start AutoCAD and "
+                    "open a drawing, then try again. If AutoCAD is already open "
+                    "it may still be loading, or it may be running elevated (as "
+                    "Administrator) while this server is not — COM cannot "
+                    f"connect across that boundary. (details: {com_message(exc)})"
+                ) from exc
+
+        try:
+            app = win32com.client.Dispatch(PROG_ID)
+            app.Visible = True
+            return app
+        except BaseException as exc:  # noqa: BLE001
+            raise AutocadError(
+                "Could not start AutoCAD via COM. Verify AutoCAD is installed "
+                "and has been run at least once, so its Automation interface is "
+                f"registered. (details: {com_message(exc)})"
+            ) from exc
+
+    def get(self, launch_if_needed: bool = False) -> Any:
+        if self.app is None:
+            self.app = self._dispatch(launch_if_needed)
+
+        # Probe the property callers actually go through, not a cheaper one:
+        # Documents is where a stale dispatch shows up first.
+        try:
+            _ = self.app.Documents.Count
+            return self.app
+        except BaseException as exc:  # noqa: BLE001
+            self.app = None
+            if is_retryable(exc):
+                raise
+            raise StaleDispatchError(
+                f"AutoCAD's COM interface stopped answering ({exc})"
+            ) from exc
+
+
+_cache = _AppCache()
+
+
+def invalidate() -> None:
+    """Drop the cached Application pointer so the next call re-dispatches."""
+    _cache.app = None
+
+
+def get_app(launch_if_needed: bool = False) -> Any:
+    """The AutoCAD Application object. Worker-thread only."""
+    return _cache.get(launch_if_needed=launch_if_needed)
+
+
+def get_doc(launch_if_needed: bool = False) -> Any:
+    """The active document, with a guiding error when there is none."""
+    app = get_app(launch_if_needed=launch_if_needed)
+    try:
+        if app.Documents.Count == 0:
+            raise AutocadError(
+                "AutoCAD is running but has no drawing open. Open or create one "
+                "first — autocad_create_drawing will make a new one."
+            )
+        return app.ActiveDocument
+    except AutocadError:
+        raise
+    except BaseException as exc:  # noqa: BLE001
+        # Reaching the document failed after the probe passed, so the pointer
+        # went stale between the two. Retry with a fresh one rather than
+        # reporting a problem the user cannot act on.
+        invalidate()
+        if is_retryable(exc):
+            raise
+        raise StaleDispatchError(
+            f"Could not reach the active drawing ({com_message(exc)})"
+        ) from exc
+
+
+def get_space(doc: Any, space: str = MODEL_SPACE) -> Any:
+    """ModelSpace or PaperSpace for the given document."""
+    return doc.PaperSpace if space == PAPER_SPACE else doc.ModelSpace
+
+
+def require_idle(doc: Any) -> None:
+    """Fail early and clearly when AutoCAD is waiting for user input.
+
+    Writing to a drawing while CMDACTIVE is set produces confusing partial
+    results, so that state becomes an explicit instruction instead.
+    """
+    try:
+        active = int(doc.GetVariable("CMDACTIVE"))
+    except BaseException:  # noqa: BLE001 - probing CMDACTIVE is best-effort
+        return
+    if active:
+        raise AutocadError(
+            "AutoCAD is in the middle of a command and cannot accept new "
+            "drawing operations. Switch to AutoCAD, press Esc to cancel it, "
+            "then retry."
+        )

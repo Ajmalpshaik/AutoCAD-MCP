@@ -1,0 +1,2 @@
+[mcp_servers.autocad]
+command = 'D:\Ajmal\AutoCAD APP\Autocad MCP\.venv\Scripts\autocad-mcp.exe'

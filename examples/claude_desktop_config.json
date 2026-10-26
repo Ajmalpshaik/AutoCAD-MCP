@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "autocad": {
+      "command": "D:\\06_Development\\09_Autocad MCP\\Autocad MCP\\.venv\\Scripts\\autocad-mcp.exe"
+    }
+  }
+}

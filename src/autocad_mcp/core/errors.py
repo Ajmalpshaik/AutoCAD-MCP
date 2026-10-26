@@ -1,0 +1,114 @@
+"""Error types and COM error interpretation.
+
+AutoCAD reports failure through pythoncom's ``com_error``, whose payload is a
+nested tuple that is unreadable on its own. Everything here exists to turn that
+into a sentence an agent can act on.
+"""
+
+from __future__ import annotations
+
+import re
+
+import pythoncom
+
+# pywin32's dynamic dispatch reports an unresolvable COM member as a bare
+# AttributeError, in one of two literal formats from win32com/client/dynamic.py:
+#
+#   __getattr__:  "AutoCAD.Application.Documents"   /  "<unknown>.SendCommand"
+#   __setattr__:  "Property 'AddLine.Layer' can not be set."
+#
+# Both appear when AutoCAD is busy and GetIDsOfNames fails, which is exactly
+# the transient condition the HRESULT would have marked retryable. A genuine
+# Python AttributeError always reads "... has no attribute ...", which is what
+# separates the two.
+_COM_MEMBER_PATH = re.compile(r"^[\w<>. ]+\.[A-Za-z_]\w*$")
+_COM_SET_FAILURE = re.compile(r"^Property '[^']+' can ?not be set\.?$")
+
+# HRESULTs AutoCAD raises when it is merely busy and the call should be retried.
+RETRYABLE_HRESULTS = {
+    -2147418111,  # 0x80010001 RPC_E_CALL_REJECTED
+    -2147417846,  # 0x8001010A RPC_E_SERVERCALL_RETRYLATER
+    -2147417851,  # 0x80010105 RPC_E_SERVERFAULT
+    -2146777998,  # 0x800AC472 VBA_E_IGNORE - AutoCAD is in a modal dialog
+}
+
+
+class AutocadError(Exception):
+    """An AutoCAD operation that could not be completed.
+
+    Messages are written as instructions, not diagnoses: they say what the user
+    or agent should do next.
+    """
+
+
+class StaleDispatchError(Exception):
+    """The cached COM pointer stopped answering; retry with a fresh one.
+
+    pywin32's dynamic dispatch resolves property names through
+    ``GetIDsOfNames``. When AutoCAD is busy that call fails, and pywin32
+    converts the COM error into a plain ``AttributeError`` — losing the
+    HRESULT that would have marked it retryable. So a busy AutoCAD can surface
+    as ``AttributeError: AutoCAD.Application.Documents`` rather than
+    RPC_E_CALL_REJECTED.
+
+    Both that case and a genuinely dead pointer are fixed the same way: drop
+    the cached object, dispatch a new one, and try again. Raising this makes
+    the retry loop do exactly that.
+    """
+
+
+def hresult_of(exc: BaseException) -> int | None:
+    """The HRESULT of a COM error, or None for anything else."""
+    if isinstance(exc, pythoncom.com_error) and exc.args:
+        return exc.args[0]
+    return None
+
+
+def is_dispatch_failure(exc: BaseException) -> bool:
+    """True when a COM member could not be resolved on a dispatch object.
+
+    This covers the case pywin32 hides: ``GetIDsOfNames`` fails while AutoCAD
+    is busy, pywin32 discards the HRESULT and raises a plain ``AttributeError``,
+    and the call looks like a coding mistake rather than the transient
+    condition it is. Both a busy AutoCAD and a genuinely dead pointer are fixed
+    by re-dispatching and trying again.
+    """
+    if isinstance(exc, StaleDispatchError):
+        return True
+    if isinstance(exc, AttributeError):
+        message = str(exc).strip()
+        if "has no attribute" in message:
+            return False
+        return bool(
+            _COM_MEMBER_PATH.match(message) or _COM_SET_FAILURE.match(message)
+        )
+    return False
+
+
+def is_retryable(exc: BaseException) -> bool:
+    """True when the error means "AutoCAD is busy", not "this cannot work"."""
+    if is_dispatch_failure(exc):
+        return True
+    if hresult_of(exc) in RETRYABLE_HRESULTS:
+        return True
+    # The busy state also arrives wrapped in DISP_E_EXCEPTION, where only the
+    # description distinguishes it from a real failure.
+    if isinstance(exc, pythoncom.com_error) and len(exc.args) >= 3 and exc.args[2]:
+        desc = str(exc.args[2][2] or "").lower()
+        return any(
+            phrase in desc
+            for phrase in ("rejected by callee", "busy", "retry later")
+        )
+    return False
+
+
+def com_message(exc: BaseException) -> str:
+    """The most human-useful text available from a COM error."""
+    if isinstance(exc, pythoncom.com_error):
+        if len(exc.args) >= 3 and exc.args[2]:
+            source, desc = exc.args[2][1], exc.args[2][2]
+            if desc:
+                return str(desc).strip() + (f" (source: {source})" if source else "")
+        if len(exc.args) >= 2 and exc.args[1]:
+            return str(exc.args[1])
+    return f"{type(exc).__name__}: {exc}"

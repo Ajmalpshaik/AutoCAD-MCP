@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv.*/
+venv/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# AutoCAD leaves these beside any drawing it opens
+*.bak
+*.dwl
+*.dwl2
+*.adt
+*.err
+*.sv$
+*.ac$
+
+# Local scratch output
+out/
+tmp/
