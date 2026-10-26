@@ -43,8 +43,10 @@ from .risk import Risk, risk_of
 
 DISCARDED = "Discarded: nothing was kept."
 STATUS_TOOL = "autocad_status"
-# Calls after which Heron has deliberately looked at (or moved to) a drawing.
-_REARMS_GUARD = {STATUS_TOOL, "autocad_switch_drawing", "autocad_open_drawing", "autocad_create_drawing"}
+# The calls that tell Heron a drawing's units. Nothing is changed in a drawing
+# until one of them has run on it (Ajmal, 2026-10-26: "the first time in a
+# drawing, you have to understand the unit").
+_CHECKS_DRAWING = {STATUS_TOOL, "autocad_create_drawing"}
 BRIDGE_OFF = (
     "Heron's plug-in checks are switched off for this server (--no-bridge, "
     "developer use): no padlocks, banner or Keep or Discard apply."
@@ -70,10 +72,10 @@ class Job:
     started: float
 
 
-def reset() -> None:
-    """Forget the last drawing (tests, and a fresh server start)."""
+def reset(looked_at: str | None = None) -> None:
+    """Forget which drawing Heron checked (tests, and a fresh server start)."""
     global _last_drawing
-    _last_drawing = None
+    _last_drawing = looked_at
 
 
 def _title(tool: str) -> str:
@@ -230,11 +232,17 @@ async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
                 refusal = str(exc)
 
         if refusal is None and probed and risk not in (Risk.READ, Risk.VIEW):
-            if _last_drawing is not None and drawing != _last_drawing:
+            if _last_drawing is None:
+                refusal = (
+                    f"Heron has not checked {drawing or 'this drawing'} yet. Call autocad_status "
+                    "first: it gives the drawing's units, and every coordinate depends on them. "
+                    + NOTHING_SENT
+                )
+            elif drawing != _last_drawing:
                 refusal = (
                     f"The active drawing changed from {_last_drawing} to {drawing} since "
-                    "Heron last looked. Call autocad_status (or autocad_switch_drawing) "
-                    f"first, so the change goes where you mean it. {NOTHING_SENT}"
+                    "Heron last checked. Call autocad_status first, so you know this drawing's "
+                    f"units and the change goes where you mean it. {NOTHING_SENT}"
                 )
 
         job: Job | None = None
@@ -282,7 +290,7 @@ async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
                 result, outcome = await _keep_or_discard(job, text, marked)
                 ok = outcome != "failed"
 
-            if ok and (tool in _REARMS_GUARD or _last_drawing is None):
+            if ok and tool in _CHECKS_DRAWING:
                 if risk is Risk.VIEW:
                     try:
                         _, drawing = await _probe()

@@ -67,7 +67,7 @@ def env(monkeypatch):
     monkeypatch.setattr(gate, "_mark", mark)
     monkeypatch.setattr(gate, "_discard", discard)
     monkeypatch.setattr(gate, "_still_there", still_there)
-    gate.reset()
+    gate.reset(looked_at=state["drawing"])  # as if autocad_status had run on it
     return state
 
 
@@ -191,6 +191,30 @@ def test_audit_write_failure_does_not_fail_tool(env, monkeypatch):
 # --- wrong-drawing guard -----------------------------------------------------
 
 
+def test_change_before_any_status_is_refused(env):
+    # Units come from autocad_status: nothing is drawn in a drawing Heron has
+    # not checked, so a fresh chat cannot draw in inches thinking millimetres.
+    gate.reset()
+    draw, calls = make_tool("autocad_draw_line")
+    result = call(draw)
+    assert calls == []
+    assert "autocad_status" in result and "units" in result
+    assert result.endswith(NOTHING_SENT)
+    status, _ = make_tool("autocad_status", '{"connected": true}', writes=False)
+    call(status)
+    call(draw)
+    assert calls == [1]
+
+
+def test_reading_does_not_count_as_checking_units(env):
+    gate.reset()
+    read, _ = make_tool("autocad_list_layers", "[]", writes=False)
+    call(read)
+    draw, calls = make_tool("autocad_draw_line")
+    call(draw)
+    assert calls == []
+
+
 def test_wrong_drawing_refused_for_change(env):
     look, _ = make_tool("autocad_list_layers", "[]", writes=False)
     call(look)
@@ -202,7 +226,7 @@ def test_wrong_drawing_refused_for_change(env):
     assert result.endswith(NOTHING_SENT)
 
 
-def test_guard_is_re_armed_only_by_status_or_switch(env):
+def test_guard_is_re_armed_only_by_status(env):
     look, _ = make_tool("autocad_list_layers", "[]", writes=False)
     call(look)
     env["drawing"] = r"C:\b.dwg"

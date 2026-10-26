@@ -121,14 +121,23 @@ namespace Heron.AutoCAD.Addin
             ShowImage = true,
             Size = RibbonItemSize.Large,
             Orientation = Orientation.Vertical,
-            CommandHandler = new RibbonCommand(action),
+            // The first label names the switch for the click log and the
+            // double-click filter; it never changes, unlike the button text.
+            CommandHandler = new RibbonCommand(text.Replace(" off", ""), action),
         };
+
+        private static readonly RepeatClickFilter Clicks = new RepeatClickFilter();
 
         private sealed class RibbonCommand : ICommand
         {
             private readonly Action _action;
+            private readonly string _name;
 
-            public RibbonCommand(Action action) => _action = action;
+            public RibbonCommand(string name, Action action)
+            {
+                _name = name;
+                _action = action;
+            }
 
             public event EventHandler? CanExecuteChanged
             {
@@ -140,6 +149,12 @@ namespace Heron.AutoCAD.Addin
 
             public void Execute(object? parameter)
             {
+                if (!Clicks.Accept(_name, DateTime.UtcNow))
+                {
+                    HeronLog.Write("ribbon click: " + _name + " (second click of a double-click, ignored)");
+                    return;
+                }
+                HeronLog.Write("ribbon click: " + _name);
                 try
                 {
                     _action();

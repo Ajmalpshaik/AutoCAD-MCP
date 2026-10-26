@@ -66,6 +66,7 @@ namespace Heron.AutoCAD.Addin
 
         public static void TogglePadlock(Padlock padlock)
         {
+            HeronLog.Write("toggle padlock: " + padlock);
             var config = HeronApplication.LoadConfig();
             var on = Get(config, padlock);
             var asking = padlock == Padlock.AskToKeep ? on : !on;

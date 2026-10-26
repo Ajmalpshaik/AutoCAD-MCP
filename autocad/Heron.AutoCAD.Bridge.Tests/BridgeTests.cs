@@ -488,3 +488,32 @@ public class OneShotWorkTests
         Assert.IsType<InvalidOperationException>(work.Error);
     }
 }
+
+public class RepeatClickFilterTests
+{
+    private static readonly DateTime T0 = new(2026, 10, 26, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Double_click_counts_once()
+    {
+        var filter = new RepeatClickFilter();
+        Assert.True(filter.Accept("Changes", T0));
+        Assert.False(filter.Accept("Changes", T0.AddMilliseconds(460)));
+    }
+
+    [Fact]
+    public void A_later_click_counts_again()
+    {
+        var filter = new RepeatClickFilter();
+        filter.Accept("Changes", T0);
+        Assert.True(filter.Accept("Changes", T0.AddMilliseconds(1200)));
+    }
+
+    [Fact]
+    public void Different_buttons_never_block_each_other()
+    {
+        var filter = new RepeatClickFilter();
+        filter.Accept("Changes", T0);
+        Assert.True(filter.Accept("Publish", T0.AddMilliseconds(100)));
+    }
+}
