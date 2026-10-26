@@ -31,6 +31,10 @@ You describe the work in plain language; Claude does it in the AutoCAD you alrea
 "Put sheet E-101 on A1 with our title block, ground floor at 1:100."
 "This IFC came in on IfcWall, IfcDuct... make it a shop drawing."
 "My UCS is rotated 23 degrees - draw it square to that."
+"Draw a 200 flange, 8 holes on a 160 PCD."
+"Give me the flat pattern for that 200 to 100 reducer."
+"Dimension these grid lines, with the overall above."
+"Extrude this outline 200 up and cut the bolt holes out."
 "Show me what you drew."
 ```
 
@@ -77,15 +81,17 @@ the level decides which padlock it needs:
 
 | Level | Needs | What |
 |---|---|---|
-| Read | connected | status, list and find, measure, extents, selection, layers, blocks, styles, **the UCS**, **saved locations**, **preview image**, **standards check**, **attribute schedules** |
-| View | connected | zoom, regen, switch / open / create drawing |
-| Change | Changes | draw, text, dimensions, hatch, blocks, batch drawing, move ... array, modify, delete, layers, **the UCS**, **sheets, title blocks and viewports**, **drawing settings and styles**, **remap layers / tidy an import**, **several tools in one call** |
+| Read | connected | status, list and find, measure, extents, selection, layers, blocks, styles, the UCS, saved locations, **solid volumes and centroids**, preview image, standards check, attribute schedules |
+| View | connected | zoom, regen, switch / open / create drawing, **3D view direction and visual style** |
+| Change | Changes | draw, text, dimensions, hatch, blocks, batch drawing, move ... array, modify, delete, layers, the UCS, sheets / title blocks / viewports, drawing settings and styles, remap layers / tidy an import, several tools in one call, **24 named shapes**, **dimension runs and centre marks**, **multileaders, tables and revision clouds**, **3D solids, extrude / revolve, booleans** |
 | Publish | Changes + Publish | save, export / plot to PDF (whole sheet, a window, or a saved location) |
 | Admin | Changes + Admin | any command, AutoLISP, system variables, purge, audit |
 
 Every tool with its options: [docs/03-tools-reference.md](docs/03-tools-reference.md).
 Sheets, the UCS and turning an import into a shop drawing:
 [docs/09-sheets-and-coordinates.md](docs/09-sheets-and-coordinates.md).
+Named shapes, dimension runs, annotation and 3D:
+[docs/10-geometry-annotation-3d.md](docs/10-geometry-annotation-3d.md).
 
 ## What keeps your drawing safe
 
@@ -130,7 +136,7 @@ when Claude Code opens here). Full steps: [docs/SETUP.md](docs/SETUP.md).
 | You are | Read |
 |---|---|
 | **The owner** | [docs/HANDOVER.md](docs/HANDOVER.md) and the live checks in [docs/NEEDS-CHECKING.md](docs/NEEDS-CHECKING.md) |
-| **A modeller** | [docs/06-heron-plugin.md](docs/06-heron-plugin.md), then [docs/09-sheets-and-coordinates.md](docs/09-sheets-and-coordinates.md) |
+| **A modeller** | [docs/06-heron-plugin.md](docs/06-heron-plugin.md), then [docs/09](docs/09-sheets-and-coordinates.md) and [docs/10](docs/10-geometry-annotation-3d.md) |
 | **Changing the code** | [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 | **An AI agent** | [AGENTS.md](AGENTS.md) |
 

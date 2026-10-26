@@ -22,7 +22,7 @@ from .errors import AutocadError, com_message
 mcp = MCPServer(
     "autocad_mcp",
     title="Heron AI for AutoCAD",
-    version="1.2.0",
+    version="1.3.0",
     instructions=(
         "Controls the AutoCAD instance running on this machine through its COM "
         "Automation interface. Changes appear live in the user's open drawing.\n\n"
@@ -77,7 +77,28 @@ mcp = MCPServer(
         "12. Name an area once with autocad_save_view, then use that view_name for the "
         "viewport and for autocad_export(area='view') — one location, not two guesses.\n"
         "13. An import is not a drawing: autocad_remap_layers, then autocad_tidy_entities "
-        "(both show a dry run first), then autocad_check_standards to prove it."
+        "(both show a dry run first), then autocad_check_standards to prove it.\n\n"
+        "GEOMETRY, ANNOTATION AND 3D (docs/10):\n"
+        "14. Never build a named shape out of lines. autocad_make_shape draws 24 of "
+        "them from their dimensions - slot, rounded_rectangle, hexagon, flange, "
+        "steel_section, elbow, duct_transition, stair, ladder, truss, grating, gear, "
+        "cone_development (a reducer's flat pattern), and the furniture (detail_bubble, "
+        "section_mark, north_arrow, scale_bar, level_mark, revision_tag). dry_run shows "
+        "the geometry first.\n"
+        "15. An arc belongs to its object: a slot, a rounded corner or an elbow is one "
+        "polyline with bulges, never loose arcs. autocad_batch_draw takes bulges.\n"
+        "16. Dimension the run, not the dimension: autocad_dimension_run does a chain, "
+        "a baseline set or ordinates in one call, in order, at one offset, with the "
+        "overall above. autocad_add_centre_marks puts the cross on every circle.\n"
+        "17. One note with several arrows is one autocad_add_multileader. A schedule is "
+        "an autocad_add_table, not a grid of loose text. A revision is an "
+        "autocad_add_revision_cloud round the object.\n"
+        "18. In 3D: draw the section, then autocad_extrude_profile it (extrude or "
+        "revolve), then autocad_solid_boolean the holes out, then "
+        "autocad_solid_properties for the volume. autocad_add_solid places a primitive "
+        "by the centre of its BASE. Before saying a 3D job is done, "
+        "autocad_set_3d_view(direction='sw_iso', visual_style='hidden') then "
+        "autocad_preview."
     ),
 )
 

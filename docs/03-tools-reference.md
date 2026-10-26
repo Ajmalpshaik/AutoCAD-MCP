@@ -16,8 +16,11 @@ The group headings below give the level.
 - Drawing tools share `layer`, `color`, `linetype` and `space` options. A missing layer is created
   and reported.
 - **Coordinates are WORLD coordinates.** `autocad_status` reports the drawing's UCS and warns when
-  it is not the world one. `autocad_batch_draw` takes `coords="ucs"`; for the other tools convert
-  first with `autocad_convert_points` ([09](09-sheets-and-coordinates.md)).
+  it is not the world one. `autocad_batch_draw`, `autocad_make_shape` and the other tools built on
+  that engine take `coords="ucs"`; for the rest convert first with `autocad_convert_points`
+  ([09](09-sheets-and-coordinates.md)).
+- `autocad_batch_draw` polylines take **`bulges`** (one per vertex, `tan(sweep/4)`, positive
+  anticlockwise) so arcs stay part of the object, and text takes **`align`** and `style`.
 
 ## Session and files (Read / View; save and export are Publish)
 
@@ -189,6 +192,43 @@ tool's own schema **before the first one runs**, so a sequence with a mistake in
 nothing. Steps at the Publish or Admin level, and a sequence inside a sequence, are refused: a
 sequence holds the **Changes** padlock only ([D-29](DECISIONS.md)). `stop_on_error` (default true)
 and `dry_run`.
+
+## Shapes from a few numbers (Change)
+
+`autocad_make_shape` draws a named shape from its dimensions — 24 of them, from
+a slot to a reducer's flat pattern. Detail: [10 §1](10-geometry-annotation-3d.md#1-simple-words-complex-geometry).
+
+| Group | Shapes |
+|---|---|
+| Plain | polygon, hexagon (across flats), star, slot, rounded_rectangle, spiral, zigzag |
+| Fabrication | flange, bolt_circle, steel_section (i/h/c/l/t/shs/rhs/chs), gear, **cone_development** (the flat pattern for a reducer) |
+| MEP | elbow (with centreline), duct_transition, grating |
+| Building | stair (section or plan), ladder, truss |
+| Furniture | detail_bubble, section_mark, north_arrow, scale_bar, level_mark, revision_tag |
+
+Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
+`dry_run=true` returns the geometry instead of drawing it.
+
+## Dimensioning and annotation (Change)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_dimension_run` | A whole run in one call: `chain`, `baseline` (stepped clear of each other), `overall`, `ordinate`. Horizontal, vertical or aligned; the points are put in order first; `include_overall` adds the overall above. Reports both its own arithmetic and AutoCAD's measurement |
+| `autocad_add_centre_marks` | The cross on every circle and arc, by handle or by layer; `extend` makes full centre lines |
+| `autocad_add_multileader` | One note with **as many arrows as it needs**; text or block content |
+| `autocad_add_table` | A schedule as a real AutoCAD table, with title and headings |
+| `autocad_add_revision_cloud` | A cloud round a boundary, a rectangle, or an object's own extents. One polyline with bulges, like REVCLOUD |
+
+## 3D (Change; reading is Read, the view is View)
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_add_solid` | Change | box, wedge, cylinder, cone, sphere, torus — placed by the centre of its **base**, not its bounding box |
+| `autocad_extrude_profile` | Change | A closed 2D profile into a solid: extrude along Z (with taper) or revolve about an axis. The intermediate region is cleaned up |
+| `autocad_solid_boolean` | Change | union / subtract / intersect. The others are **consumed**, as AutoCAD's own commands do; every handle is checked first |
+| `autocad_solid_properties` | Read | Volume, centroid, bounding box, moments — for a weight take-off |
+| `autocad_draw_3d_path` | Change | A pipe or cable route as one 3D polyline, or a helix |
+| `autocad_set_3d_view` | View | A named direction (top, front, sw_iso …) and a visual style. Changes only what is on screen ([D-31](DECISIONS.md)) |
 
 ## Seeing and checking (Read)
 

@@ -129,6 +129,61 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-31 - Looking at a model in 3D is a View tool
+
+**Decided:** 2026-10-26. **Status:** in force.
+`autocad_set_3d_view` sets the view direction and the visual style. Nothing in
+the drawing moves, nothing is created, nothing is deleted - it changes what is on
+screen, which is exactly what the **View** level is for, and the level
+`autocad_zoom` and `autocad_regen` already sit at.
+
+The argument against was that the visual style is written with `SetVariable`
+(VSCURRENT), and `autocad_set_variable` is ADMIN. But the level is a property of
+the *tool*, not of the call it happens to make inside: this tool writes one
+named variable from a fixed list of ten style names, and it cannot be talked
+into writing anything else. Putting it behind Admin would mean a modeller had to
+turn on the most dangerous padlock in the product to look at their own model from
+the front, which is backwards.
+
+The viewport's own quirk is handled rather than worked around: a viewport's
+changes only take effect once it is made active again, so the tool reassigns
+`doc.ActiveViewport` after setting the direction, and says in `not_set` when
+that is refused.
+
+## D-30 - A shape is a pure generator, drawn through the batch engine
+
+**Decided:** 2026-10-26. **Status:** in force.
+`autocad_make_shape` draws 24 named shapes. Each one could have been a COM
+routine of its own. Instead each is a **pure function** in `acad/shapes.py` that
+returns a list of operations in exactly the shape `autocad_batch_draw` takes,
+and the tool hands that list to the one shared engine (`draw_operations`).
+
+Three things follow, and they are the reason:
+
+* **The geometry is tested without AutoCAD.** A flat pattern is checked by
+  measuring whether its arcs are as long as the girths they must roll onto -
+  real arithmetic against a real requirement, on a Linux CI runner.
+* **It is fast and atomic for free.** One round trip, one undo step, and
+  `coords='ucs'` already works, because all of that lives in the engine.
+* **Nothing is duplicated.** `autocad_make_shape`, `autocad_add_centre_marks`
+  and `autocad_add_revision_cloud` all generate operations and all go through
+  the same validation and the same sender.
+
+Two things had to be added to the batch to make it possible, and both are
+improvements in their own right: **bulges** on a polyline (DXF group 42), so a
+slot, a rounded corner, an elbow and a flat pattern stay *one object* instead of
+a pile of loose arcs; and **justification** on text (groups 72, 73 and 11), so a
+bubble's number sits on its point.
+
+What the shape library is **not**: an office block library. A block carries the
+office's own line weights and its attributes, and is better. The furniture
+shapes (bubbles, section marks, north points, scale bars) exist for the drawing
+that has no block library to hand, and the tool says so.
+
+The gear says plainly in its own docstring that `show_teeth` draws a
+straight-flank representation at the pressure angle and **not** a generated
+involute, so nobody cuts a gear from it.
+
 ## D-29 - A sequence spends the Changes padlock and nothing more
 
 **Decided:** 2026-10-26. **Status:** in force.

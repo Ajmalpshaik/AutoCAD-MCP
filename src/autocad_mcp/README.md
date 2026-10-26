@@ -6,7 +6,7 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 |---|---|---|
 | `server.py` | Command line: `--transport stdio/http`, `--host`, `--port`, `--list-tools`, `--read-only`, `--no-bridge` | everything below |
 | `tools/` | The MCP tools, resources and prompts, one file per subject (`--list-tools` counts them) | MCP, `acad`, `core` |
-| `acad/` | AutoCAD domain: entities, selections, tables, AutoLISP, units, the UCS transform, sheet arithmetic | `core` only |
+| `acad/` | AutoCAD domain: entities, selections, tables, AutoLISP, units, the UCS transform, sheet arithmetic, the shape library | `core` only |
 | `core/` | COM worker thread, VARIANTs, errors, the FastMCP instance, undo groups, and the Heron gate (`gate.py`, `bridge.py`, `risk.py`, `audit.py`) | pywin32 only |
 
 **The one rule:** imports point down only, `tools` -> `acad` -> `core`.
@@ -27,6 +27,10 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 | `tools/settings.py` | drawing settings, text and dimension styles |
 | `tools/convert.py` | an import into a shop drawing: remap layers, tidy overrides |
 | `tools/sequence.py` | `autocad_sequence`: several tools in one call |
+| `tools/shapes.py` | `autocad_make_shape`: 24 named shapes from their dimensions |
+| `tools/dimensions.py` | dimension runs (chain, baseline, ordinate), centre marks |
+| `tools/annotate.py` | multileaders, tables, revision clouds |
+| `tools/solids.py` | 3D solids, extrude and revolve, booleans, mass properties, 3D views |
 | `tools/resources.py` | MCP resources and prompts |
 | `tools/_shared.py` | option types and helpers shared by the tool files, including the UCS funnel |
 

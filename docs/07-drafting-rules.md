@@ -32,6 +32,22 @@ same standard carried through to the issued drawing.
 | 14 | **Set the drawing up before drawing in it**: units, scale, snaps. The scale sets DIMSCALE, LTSCALE and the annotation scale together | `autocad_drawing_setup` |
 | 15 | **An import is not a drawing.** Layers first, then clear the per-object overrides, then flatten, then check the standard | `autocad_remap_layers`, `autocad_tidy_entities`, `autocad_check_standards` |
 
+## The geometry and annotation rules
+
+Added with the shape, dimension and 3D tools ([10](10-geometry-annotation-3d.md),
+[D-30](DECISIONS.md)).
+
+| # | Rule | Tool |
+|---|---|---|
+| 16 | **A named shape is never drawn by hand.** A slot, a flange, a stair, a reducer's flat pattern: ask for the shape, do not build it from lines | `autocad_make_shape` (24 shapes) |
+| 17 | **An arc stays part of its object.** A slot, a rounded corner, an elbow is one polyline with bulges, never a pile of loose arcs | `bulges` on `autocad_batch_draw`; every shape already does it |
+| 18 | **Dimension the run, not the dimension.** A chain on one line at one offset, in order, with the overall above it | `autocad_dimension_run` |
+| 19 | **Centre marks on every circle.** A fabricator needs the hole centres | `autocad_add_centre_marks` |
+| 20 | **One note, one multileader** — however many things it points at | `autocad_add_multileader` |
+| 21 | **A schedule is a table**, not a grid of loose text | `autocad_extract_attributes`, then `autocad_add_table` |
+| 22 | **Model the part, then take the numbers off it.** Draw the section, extrude or revolve it, boolean the holes out, read the volume | `autocad_extrude_profile`, `autocad_solid_boolean`, `autocad_solid_properties` |
+| 23 | **Look at a 3D model before saying it is done**: a south-west isometric in the hidden style, then preview | `autocad_set_3d_view`, `autocad_preview` |
+
 ## Where it came from
 
 The live session of 2026-10-26: a roof pipe-support detail drawn first as loose lines with long,

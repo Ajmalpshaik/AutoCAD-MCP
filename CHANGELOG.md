@@ -2,6 +2,62 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.3.0 - 2026-10-26 - Complex geometry, annotation and 3D
+
+Server only; the plug-in is unchanged at 1.1.0. 12 new tools, 101 in all.
+Everything COM touches is **NOT RUN**: see
+[NEEDS-CHECKING group E](docs/NEEDS-CHECKING.md). Detail:
+[docs/10](docs/10-geometry-annotation-3d.md).
+
+- **Simple words, complex geometry.** `autocad_make_shape` draws 24 named
+  shapes from their dimensions: slot, rounded rectangle, hexagon sized across
+  the flats, flange with its bolt circle, steel sections (i/h/c/l/t/shs/rhs/chs),
+  elbow with its centreline, duct transition, stair in section or plan, ladder,
+  truss, grating, gear, spiral, star, zigzag, and **the flat pattern for a
+  reducer** - plus the drafting furniture (detail bubble, section mark, north
+  point, scale bar, level mark, revision tag). Each shape is a pure generator
+  ([D-30](docs/DECISIONS.md)) drawn through the batch engine, so the geometry is
+  tested without AutoCAD, it lands as one undo step, and `coords="ucs"` works
+  on all of it. `dry_run` hands back the geometry instead of drawing it.
+- **Arcs stay part of their object.** `autocad_batch_draw` polylines now take
+  `bulges`, so a slot, a rounded corner, an elbow and a flat pattern are each
+  *one* polyline rather than a pile of loose arcs. Text now takes `align` and
+  `style`, so a bubble's number sits on its point.
+- **Dimension the run, not the dimension.** `autocad_dimension_run` lays out a
+  whole run in one call - `chain` (AutoCAD's Continue), `baseline` stepped
+  clear of itself, `overall`, or `ordinate` from a datum, on any of the three
+  axes. The points are put in order first, and every span is worked out here as
+  well as measured by AutoCAD, so a run that does not add up says so.
+  `autocad_add_centre_marks` puts the cross on every circle and arc, by handle
+  or by layer.
+- **Annotation that needs more than one object.** `autocad_add_multileader` is
+  one note with as many arrows as it needs, text or block content.
+  `autocad_add_table` puts a schedule on the sheet as a real AutoCAD table with
+  a title and headings - pair it with `autocad_extract_attributes`.
+  `autocad_add_revision_cloud` clouds a boundary, a rectangle or an object's
+  own extents as one polyline with bulges, its arc spacing adjusted to divide
+  the boundary exactly and its bulge signed so the arcs always face outward.
+- **3D.** `autocad_add_solid` (box, wedge, cylinder, cone, sphere, torus),
+  placed by the centre of its **base** rather than of its bounding box, which
+  is what AutoCAD's own calls do and is never what a drafter means.
+  `autocad_extrude_profile` turns a closed 2D profile into a solid by extruding
+  (with taper) or revolving, cleaning up the intermediate region afterwards.
+  `autocad_solid_boolean` does union, subtract and intersect, checking every
+  handle **before** anything is consumed and reporting the volume before and
+  after. `autocad_solid_properties` reads volume, centroid, bounding box and
+  moments. `autocad_draw_3d_path` draws a pipe route or a helix as one 3D
+  polyline. `autocad_set_3d_view` sets a named direction and a visual style and
+  needs no padlock, because it changes only what is on screen
+  ([D-31](docs/DECISIONS.md)).
+- Drafting rules 16-23 added to [docs/07](docs/07-drafting-rules.md) and to the
+  server's own instructions.
+- 402 more offline tests. The flat pattern is checked the only way that counts:
+  its arcs have to be exactly as long as the girths they roll onto. Two real
+  faults were found and fixed while writing them - a `color` key that was doing
+  double duty as both a filter and a target colour in the layer remapper, and a
+  cone-development guard that could never fire while the hazard it was meant to
+  catch (a polyline bulge running away near 360 degrees) went unguarded.
+
 ## 1.2.0 - 2026-10-26 - Sheets, coordinates and shop drawings
 
 Server only; the plug-in is unchanged at 1.1.0. 14 new tools, 89 in all. Everything COM touches is

@@ -90,6 +90,57 @@ Nothing below may be called working until its row says PASS with a date and a ve
 | D30 | `autocad_sequence` containing `autocad_save_drawing`, and one containing `autocad_run_lisp` | Both refused, naming the level; nothing ran. **This is the padlock ceiling (D-29) and must be re-run whenever a tool is added** | NOT RUN |
 | D31 | After the whole set, `autocad_preview` and `autocad_check_standards` | The sheet looks right and the standard passes | NOT RUN |
 
+## Group E - Geometry, annotation and 3D (AutoCAD 2027, this PC)
+
+The 12 tools added on 2026-10-26 ([10](10-geometry-annotation-3d.md)). The
+geometry and the layout arithmetic are covered offline (`tests/test_shapes.py`,
+`test_dimension_run.py`, `test_annotate.py`, `test_solids.py` - 400 tests);
+**every COM call below is NOT RUN.** Four of these methods were matched to
+Autodesk's reference but have never been called from this server, and they are
+marked.
+
+**Set-up:** a scratch drawing in millimetres, Changes on, DIMSCALE set with
+`autocad_drawing_setup(scale="1:10")`.
+
+| Row | Do | Pass looks like | Result |
+|---|---|---|---|
+| E1 | `autocad_make_shape(shape="slot", settings={"length":120,"width":40})` then LIST it | **One** LWPOLYLINE, not a pile of arcs; measure it: 120 long, 40 wide, round both ends | NOT RUN |
+| E2 | `shape="rounded_rectangle"` 2400 x 1200 r50 | One polyline, overall size exactly 2400 x 1200, corners truly tangent | NOT RUN |
+| E3 | `shape="flange"` 200 OD, 8 holes, 160 PCD, bore 100, with `centreline_layer` | 11 circles; every hole centre 80 from the middle; the pitch circle on its own layer | NOT RUN |
+| E4 | `shape="cone_development"` 200 to 100 over 150 | **Measure the two arcs.** Outer must be 628.3 (pi x 200), inner 314.2 (pi x 100). This is the one row that proves a flat pattern | NOT RUN |
+| E5 | `shape="stair"` 14 risers at 175, going 280, both `view="section"` and `view="plan"` | Section climbs to 3920 x 2450; plan is 3920 x 1200 with 13 tread lines | NOT RUN |
+| E6 | `shape="steel_section"` for i, c, l, t, shs, chs | Each outline is the right depth and width, corners square | NOT RUN |
+| E7 | `shape="detail_bubble"` with a sheet, and `shape="revision_tag"` | **The text sits centred on its point, both ways** - this is the DXF 72/73/11 justification working | NOT RUN |
+| E8 | `shape="scale_bar"` scale 1:50, length 100 | Bar 100 long on the paper; labels read 0 to 5000 | NOT RUN |
+| E9 | `autocad_make_shape(..., coords="ucs")` on a 23 degree UCS | The shape comes out square to the UCS grid, not to the world | NOT RUN |
+| E10 | `autocad_make_shape(..., dry_run=true)` | Operations come back, nothing is drawn | NOT RUN |
+| E11 | `autocad_dimension_run` chain along 4 grid points, offset 500, `include_overall=true` | 4 dimensions; the three gaps on one line, the overall above; **each "measured" equals its "expected"** | NOT RUN |
+| E12 | The same as `mode="baseline"` | Each dimension back to the first point, each on its own line stepped 500 clear | NOT RUN |
+| E13 | `mode="ordinate"` with a datum | **AddDimOrdinate: never called from here before.** Ordinate dimensions with leaders, reading the distance from the datum | NOT RUN |
+| E14 | `axis="aligned"` on a sloping run | The true length, text offset perpendicular to the run | NOT RUN |
+| E15 | `autocad_add_centre_marks(layer_filter=..., extend=...)` | A cross on every circle, centre lines running past, all on the layer asked for; `min_radius` skips the small ones | NOT RUN |
+| E16 | `autocad_add_multileader` with **three** arrow points | One MULTILEADER, three leader lines, one note. **AddLeader / AddLeaderLine: never called from here before** | NOT RUN |
+| E17 | `autocad_add_multileader(block=...)` | The block is carried at the end of the leader | NOT RUN |
+| E18 | `autocad_add_table` with a title, headers and 5 rows | A real TABLE object, editable, title and header rows filled, column widths as asked. **AddTable / SetText / SetColumnWidth: never called from here before** | NOT RUN |
+| E19 | `autocad_extract_attributes` then `autocad_add_table` with those rows | The schedule appears as a table with one row per block | NOT RUN |
+| E20 | `autocad_add_revision_cloud(handle=...)` with a margin | One polyline round the object, arcs bulging **outward**, even size, no stub arc | NOT RUN |
+| E21 | The same on a boundary traced clockwise | Arcs still bulge outward, not inward | NOT RUN |
+| E22 | `autocad_add_solid` box 2400 x 1200 x 200 at the origin | **The base sits on z=0**, not z=-100. Check with LIST | NOT RUN |
+| E23 | `autocad_add_solid` for wedge, cylinder, cone, sphere, torus | Each the right size, base on z=0 where it has one | NOT RUN |
+| E24 | `autocad_extrude_profile` on a closed polyline, height 200 | A 3D solid; the intermediate REGION is **gone**; the original polyline is **still there** | NOT RUN |
+| E25 | The same with a taper | The sides draw in as it rises | NOT RUN |
+| E26 | `autocad_extrude_profile` with `revolve_angle=360` and an axis | A solid of revolution. **AddRevolvedSolid: never called from here before** | NOT RUN |
+| E27 | `autocad_extrude_profile` on curves with a gap in them | Refused in plain words, naming what to check; nothing left behind | NOT RUN |
+| E28 | `autocad_solid_boolean` subtract: 4 cylinders out of a plate | Holes through the plate; the cylinders gone; **volume_after is less than volume_before** | NOT RUN |
+| E29 | `autocad_solid_boolean` with a handle that is a line | Refused **before anything is consumed** - the other solids must all still be there | NOT RUN |
+| E30 | `autocad_solid_boolean` subtract two solids that do not touch | The warning about the volume not changing appears | NOT RUN |
+| E31 | `autocad_solid_properties` on that plate | Volume matches 2400x1200x200 less the holes; centroid sensible; bounding box right | NOT RUN |
+| E32 | `autocad_draw_3d_path` with helix r100, 3 turns, rise 600 | One 3D polyline; starts at (100,0,0), ends at (100,0,600) | NOT RUN |
+| E33 | `autocad_draw_3d_path` with points through a building | One 3D polyline following them | NOT RUN |
+| E34 | `autocad_set_3d_view(direction="sw_iso", visual_style="hidden")` then `autocad_preview` | The model is shown from the south-west with hidden lines; **no padlock was needed** | NOT RUN |
+| E35 | `autocad_set_3d_view(direction="top", visual_style="2dwireframe")` | Back to plan and normal drafting | NOT RUN |
+| E36 | `autocad_batch_draw` with `bulges` on a polyline and `align` on a text | The arc is part of the polyline; the text is justified. These two are what every shape depends on | NOT RUN |
+
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)
 
 Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026. **NO MACHINE.**
