@@ -130,6 +130,15 @@ class FakeEntity:
         self.Document = doc
 
 
+def xy(point):
+    """A point VARIANT as [x, y].
+
+    The real pywin32 VARIANT is not iterable: it keeps its tuple in `.value`.
+    Reading it any other way passes against a stub and fails on Windows.
+    """
+    return [float(v) for v in getattr(point, "value", point)][:2]
+
+
 class FakeSpace:
     def __init__(self, doc):
         self.doc = doc
@@ -137,7 +146,7 @@ class FakeSpace:
     def AddLine(self, start, end):
         if self.doc.refuse_at is not None and len(self.doc.drawn) == self.doc.refuse_at:
             raise pythoncom.com_error("on a locked layer")
-        self.doc.drawn.append((list(start)[:2], list(end)[:2]))
+        self.doc.drawn.append((xy(start), xy(end)))
         return FakeEntity(self.doc)
 
 
