@@ -75,6 +75,22 @@ NDR-75-48 PSU per camera, 13 A fused spur, fibre splice box. Type A = 1 camera, 
 **Open items:** the fibre type is marked TBC (single-mode was asked for, the site photos show aqua
 OM3). Client, project and location in the title block are `TBC` at the top of `encl_detail.py`.
 
+## Where the output goes
+
+Everything is written under `drawings/`, which is **not in git** ([D-11](DECISIONS.md)): it stays on
+the PC that made it. `generators/paths.py` creates the folders on first use. Never edit these files by
+hand; change the generator and run it again.
+
+| Folder | Holds | Made by |
+|---|---|---|
+| `drawings/AHU/` | AHU-01 DWG and the 11 A1 PDFs | `ahu_*.py`, `sheet_run.py`, `pdf_plot*.py` |
+| `drawings/CCTV/` | `CCTV_Package.dwg` | `cctv_run.py` |
+| `drawings/CCTV/PDF/` | The 42 A1 PDFs | `cctv_run.py pdf all` |
+| `drawings/CCTV/PNG/` | AutoCAD PNG plots used for checking | `cctv_run.py png ...` |
+| `drawings/CCTV/preview/` | Pure-Python previews | `cctv_preview.py` |
+| `drawings/CCTV/_lsp/` | AutoLISP for solid fills, one per sheet | `cctv_run.py` |
+| `drawings/CCTV/ENCLOSURE/` | Pole enclosure DWG, PDF and LISP | `encl_run.py` |
+
 ## Rules for any new generator
 
 1. Data in one module; sheets never type a number the data module owns.

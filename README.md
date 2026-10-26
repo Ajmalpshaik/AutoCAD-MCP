@@ -34,7 +34,7 @@ attaches to AutoCAD the same way a VBA macro would.
 |---|---|---|
 | **The server** | The MCP server: 50 `autocad_*` tools, the COM link, AutoLISP helpers | [`src/autocad_mcp/`](src/autocad_mcp/README.md) |
 | **Generators** | Python scripts that build whole drawing packages through the server (AHU, CCTV) | [`generators/`](generators/README.md) |
-| **Drawings** | Where the generators write DWG, PDF and PNG. Kept on the PC only, not in git | [`drawings/`](drawings/README.md) |
+| **Drawings** | Where the generators write DWG, PDF and PNG. Kept on the PC only, not in git | `drawings/` ([where things go](docs/04-drawing-generators.md#where-the-output-goes)) |
 | **Tools & tests** | Live smoke test, protocol check, offline and live test suites | [`tools/`](tools/README.md), [`tests/`](tests/README.md) |
 
 Everything else is documentation ([`docs/`](docs/README.md)), configuration examples

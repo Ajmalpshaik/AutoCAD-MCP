@@ -27,5 +27,4 @@ out/
 tmp/
 
 # Generated drawings stay on this PC only; re-run generators/ to make them (docs/DECISIONS.md D-11)
-drawings/*
-!drawings/README.md
+drawings/

@@ -83,7 +83,8 @@ the repository is public.**
 **Decided:** 2026-10-26, on Ajmal's instruction ("why you keep drawings on this repo?? ... remove
 this"). **Status:** in force. Supersedes the *drawings included* part of D-09.
 The DWG, PDF, PNG and LISP output can be made again from `generators/`, it was about 10 MB against a
-small code base, and the pole-enclosure sheet is real site work that should not be public. Everything
-under `drawings/` except its README is ignored, and the files were **removed from the whole git history**
+small code base, and the pole-enclosure sheet is real site work that should not be public. The whole
+`drawings/` folder is ignored (its README too, since 2026-10-26: an empty-looking folder on GitHub
+helped nobody), and the files were **removed from the whole git history**
 (rewritten and force-pushed the same day, while the repository was one day old with no other copies).
 The files themselves stay on Ajmal's PC.
