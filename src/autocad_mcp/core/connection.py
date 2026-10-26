@@ -93,6 +93,12 @@ _worker = _ComWorker()
 
 
 _attempt = threading.local()
+_writes = 0
+
+
+def write_count() -> int:
+    """How many writes have started since the server started (the gate compares)."""
+    return _writes
 
 
 def mark_writing() -> None:
@@ -102,7 +108,9 @@ def mark_writing() -> None:
     is no longer safe to retry: the first try may already have drawn part of
     the work.
     """
+    global _writes
     _attempt.writing = True
+    _writes += 1
 
 
 def _with_retry(fn: Callable[[], T]) -> T:

@@ -141,8 +141,8 @@ class Bridge:
 
     def begin(
         self, tool: str, risk: str, summary: str, drawing: str, timeout: float = CALL_TIMEOUT
-    ) -> str:
-        """Ask to start a job; returns its id or raises BridgeRefused."""
+    ) -> tuple[str, bool]:
+        """Ask to start a job: (job id, will the plug-in ask Keep or Discard). Raises BridgeRefused."""
         job = uuid.uuid4().hex[:12]
         reply = self.call(
             "begin",
@@ -155,7 +155,7 @@ class Bridge:
         )
         if not reply.get("ok"):
             raise BridgeRefused(_ensure_sentence(str(reply.get("message", ""))))
-        return job
+        return job, reply.get("askToKeep") is True
 
     def end(self, job: str, ok: bool, outcome: str, summary: str, ms: int) -> None:
         """Tell the plug-in the job finished. Never raises: the work is already done."""
@@ -165,15 +165,19 @@ class Bridge:
             pass
 
     def ask_keep(self, job: str, summary: str, handles: list[str]) -> str:
-        """keep | discard | keep_rest. Anything but a clear answer is discard."""
+        """keep | discard | keep_rest, or "unknown" when the plug-in could not answer.
+
+        Only a clear "discard" may undo anything: a broken pipe is not the
+        modeller saying no, so it comes back as "unknown" and the change stays.
+        """
         try:
             reply = self.call(
                 "ask_keep", timeout=KEEP_TIMEOUT, job=job, summary=summary, handles=handles
             )
         except AutocadError:
-            return "discard"
+            return "unknown"
         answer = reply.get("answer")
-        return answer if answer in {"keep", "discard", "keep_rest"} else "discard"
+        return answer if answer in {"keep", "discard", "keep_rest"} else "unknown"
 
 
 def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:

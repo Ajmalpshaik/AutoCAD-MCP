@@ -31,7 +31,7 @@ from ..acad.lisp import (
 )
 from ..acad.tables import ensure_layer
 from ..acad.units import rad
-from ..core.connection import get_doc, require_idle, run
+from ..core.connection import get_doc, mark_writing, require_idle, run
 from ..core.errors import AutocadError
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta
 
@@ -314,6 +314,9 @@ async def autocad_batch_draw(
     def work() -> dict[str, Any]:
         doc = get_doc()
         require_idle(doc)
+        # From here the drawing changes (layers, then the LISP batch): a busy
+        # signal must not re-run it, and the gate must know it wrote.
+        mark_writing()
 
         # entmake will not create a layer, so any that are missing are made
         # over COM first. This is a handful of calls, not one per entity.

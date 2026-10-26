@@ -116,7 +116,7 @@ def test_dead_pid_file_is_deleted(home):
 def test_begin_sends_token_client_conversation(home):
     with FakePlugin({"ok": True}) as plugin:
         write_address(home, os.getpid(), plugin.name, token="secret")
-        job = Bridge(os.getpid()).begin("autocad_draw_line", "change", "Drawing a line", "a.dwg")
+        job, ask = Bridge(os.getpid()).begin("autocad_draw_line", "change", "Drawing a line", "a.dwg")
     request = plugin.requests[0]
     assert request["op"] == "begin"
     assert request["token"] == "secret"
@@ -125,6 +125,14 @@ def test_begin_sends_token_client_conversation(home):
     assert request["tool"] == "autocad_draw_line"
     assert request["risk"] == "change"
     assert request["job"] == job
+    assert ask is False
+
+
+def test_begin_reports_when_the_plugin_will_ask(home):
+    with FakePlugin({"ok": True, "askToKeep": True}) as plugin:
+        write_address(home, os.getpid(), plugin.name)
+        _, ask = Bridge(os.getpid()).begin("autocad_draw_line", "change", "Drawing", "a.dwg")
+    assert ask is True
 
 
 def test_refusal_message_passed_through(home):
@@ -151,9 +159,10 @@ def test_end_never_raises_when_not_connected(home):
     Bridge(os.getpid()).end("job", ok=True, outcome="done", summary="x", ms=1)
 
 
-def test_ask_keep_falls_back_to_discard(home):
-    # A plug-in that cannot be reached must never be read as "keep".
-    assert Bridge(os.getpid()).ask_keep("job", "Drew a line", ["2A"]) == "discard"
+def test_ask_keep_failure_is_unknown_not_discard(home):
+    # A plug-in that cannot be reached is not the modeller saying "discard":
+    # undoing on a broken pipe would remove work nobody chose to remove.
+    assert Bridge(os.getpid()).ask_keep("job", "Drew a line", ["2A"]) == "unknown"
 
 
 def test_bridge_can_be_switched_off(monkeypatch):
