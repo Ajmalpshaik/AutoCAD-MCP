@@ -33,6 +33,8 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "list_styles",
         "get_variable",
         "preview",
+        "check_standards",
+        "extract_attributes",
     ),
     Risk.VIEW: (
         "zoom",
