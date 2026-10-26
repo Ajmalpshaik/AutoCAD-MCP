@@ -47,6 +47,49 @@ folder.
 | A29 | Every Lee Mac study tool on a test layout: import blocks from a closed DWG, place along, place from CSV, number tags, set attributes, count / total / polyline info / connected, segment and field labels, count / clean / find-replace / align text, break at block, double offset, overlapping dims, layouts | Results match hand checks | **PASS** 2026-10-26 after one fix (total length counted a leader). The field label updated itself from 22.00 m to 18.31 m after the break; the ellipse measured 9688.4 = its perimeter |
 | A19 | Run a CCTV generator sheet (`python generators/cctv_run.py png 102`) with Changes on | Draws and plots as before the folder move | **PASS** 2026-10-26: CCTV_Package.dwg (23,303 objects) opened, sheet 102 plotted to PNG correctly. Found: generators started their server without the user's environment; now passed through |
 
+## Group D - Sheets, coordinates and shop drawings (AutoCAD 2027, this PC)
+
+The 14 tools added on 2026-10-26 ([09](09-sheets-and-coordinates.md)). Their arithmetic and their
+planning are covered by the offline suites (`tests/test_coords.py`, `test_sheets.py`,
+`test_settings.py`, `test_convert.py`, `test_sequence.py`); **everything COM touches is NOT RUN.**
+Nothing below may be called working until its row says PASS with a date and a version.
+
+**Set-up:** a scratch drawing in millimetres, Changes on, one piece of geometry in model space.
+
+| Row | Do | Pass looks like | Result |
+|---|---|---|---|
+| D1 | Set a UCS by hand in AutoCAD (`UCS` > 3 point, turned about 23 degrees), then `autocad_status` | Reports `ucs.rotated` true, the rotation in degrees, and a `ucs_advice` sentence | NOT RUN |
+| D2 | `autocad_get_ucs` with that UCS set | Origin, axes and rotation match what AutoCAD's `UCSORG` / `UCSXDIR` show; `saved` lists any named UCS | NOT RUN |
+| D3 | `autocad_convert_points(points=[[100,0]], into="world")`, then draw a line to that world point | The line lands where 100,0 reads on the modeller's own screen | NOT RUN |
+| D4 | `autocad_batch_draw(coords="ucs")` with a rectangle on that turned UCS | The rectangle is square to the UCS grid, not to the world; the drawing's UCS is unchanged | NOT RUN |
+| D5 | `autocad_set_ucs(mode="world")`, then `mode="3point"`, then `mode="named"` back | The UCS icon moves and turns each time; one Ctrl+Z per call; `HERON-UCS` is reused, not duplicated | NOT RUN |
+| D6 | `autocad_set_ucs(mode="entity")` on a rotated block, and on a block on a tilted plane | Lines up with the block; the tilted one is refused in plain words, not guessed | NOT RUN |
+| D7 | Tilt the UCS out of the XY plane, then `autocad_batch_draw(coords="ucs")` | Refused, naming `autocad_convert_points`; nothing drawn | NOT RUN |
+| D8 | `autocad_create_layout(name="D-101", paper_size="A1", plot_style_table="monochrome.ctb")` | New tab; Page Setup shows A1, DWG To PDF, monochrome; the returned `sheet` frame matches what PAGESETUP shows | NOT RUN |
+| D9 | `autocad_create_layout(copy_from="D-101")` | The copy carries the page setup | NOT RUN |
+| D10 | `autocad_page_setup(all_layouts=true, paper_size="A1", plotter="DWG To PDF.pc3", scale="1:1")` | Every tab changes; only the options passed are different afterwards | NOT RUN |
+| D11 | `autocad_page_setup` with a plotter and a sheet size AutoCAD does not have | Named in the error, with the sizes that plotter does offer; the sheet is unchanged | NOT RUN |
+| D12 | `autocad_place_title_block` with a real A1 title block, `all_layouts=true`, `per_layout_attributes` | One per sheet, bottom-right inside the ISO frame, right attributes per sheet; `replace_existing` does not stack a second | NOT RUN |
+| D13 | `autocad_add_viewport(scale="1:100", view_name=...)` | Viewport fills the frame clear of the title block; **measure a known 10 m wall on the plot: 100 mm**; the viewport is locked | NOT RUN |
+| D14 | `autocad_add_viewport` with no `scale` and a window | The reported scale is a standard one, the area fits, and the measurement matches that scale | NOT RUN |
+| D15 | `autocad_add_viewport(align_to_ucs=true)` on the 23 degree UCS | The plan reads upright on the sheet; nothing falls outside the frame; the reported twist matches. **If it comes out turned the wrong way, the sign of the twist in `_aim` (sheets.py) is inverted — flip it and re-run.** The twist follows VIEWTWIST, which is +23 for a plan view of a UCS turned +23, but that has only been reasoned, not measured | NOT RUN |
+| D16 | `autocad_add_viewport(paper_centre=..., paper_width=..., paper_height=...)` | The viewport is where those numbers say, in paper units | NOT RUN |
+| D17 | After D13, zoom inside the viewport | Refused / no change: the lock held and the scale is still true | NOT RUN |
+| D18 | `autocad_save_view` from a window, then `autocad_list_views` | The corners come back the same; `zoom_to` showed the area | NOT RUN |
+| D19 | `autocad_export(area="view", view_name=...)` then `autocad_add_viewport(view_name=...)` | The PDF and the viewport show the **same** area | NOT RUN |
+| D20 | `autocad_export(area="layout", scale="1:1")` on the D-101 sheet | The PDF is the sheet, title block and all, at full size; the layout's page setup is put back | NOT RUN |
+| D21 | `autocad_drawing_setup(units="millimeters", scale="1:50", paper_text_height=2.5, osnaps=[...])` with `dry_run=true`, then false | The dry run writes nothing; the real run sets INSUNITS, DIMSCALE 50, LTSCALE 50, CANNOSCALE 1:50, TEXTSIZE 125, OSMODE; each `from`/`to` matches what SETVAR reports | NOT RUN |
+| D22 | `autocad_drawing_setup` on a drawing where one variable is read-only for that release | That one is in `failed`; the rest still land | NOT RUN |
+| D23 | `autocad_create_styles` with a text style and a dim style, then dimension something | The dim uses the new style at the right size; **the drawing's own DIM variables are back where they were** (check DIMSCALE and DIMTXT with SETVAR) | NOT RUN |
+| D24 | `autocad_remap_layers(preset="ifc", dry_run=true)` on a real IFC or Revit export | `counts` and `by_rule` match a hand count of 3 sampled layers; nothing changed | NOT RUN |
+| D25 | The same with `dry_run=false, set_bylayer=true` | Objects moved, the layers exist with the right colours, the drawing now plots in those colours; a locked layer appears in `failed` and the rest still land | NOT RUN |
+| D26 | `autocad_tidy_entities(flatten_z=0, off_layer_0=..., dry_run=false)` on that import | Z is 0 throughout (check with LIST), layer 0 is empty of geometry, the plan now hatches and trims | NOT RUN |
+| D27 | `autocad_sequence` of layout + title block + viewport | All three land in order; each step's own answer comes back; Ctrl+Z backs them out one at a time | NOT RUN |
+| D28 | `autocad_sequence` with a bad argument in step 3 | Refused before step 1 runs; **the drawing is untouched** | NOT RUN |
+| D29 | `autocad_sequence` with a step that fails at run time (a locked layer) | Steps 1-2 are in the drawing, that step reports the refusal, the rest are skipped, and the hint names the step | NOT RUN |
+| D30 | `autocad_sequence` containing `autocad_save_drawing`, and one containing `autocad_run_lisp` | Both refused, naming the level; nothing ran. **This is the padlock ceiling (D-29) and must be re-run whenever a tool is added** | NOT RUN |
+| D31 | After the whole set, `autocad_preview` and `autocad_check_standards` | The sheet looks right and the standard passes | NOT RUN |
+
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)
 
 Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026. **NO MACHINE.**

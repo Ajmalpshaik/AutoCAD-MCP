@@ -2,6 +2,51 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.2.0 - 2026-10-26 - Sheets, coordinates and shop drawings
+
+Server only; the plug-in is unchanged at 1.1.0. 14 new tools, 89 in all. Everything COM touches is
+**NOT RUN**: see [NEEDS-CHECKING group D](docs/NEEDS-CHECKING.md). Detail:
+[docs/09](docs/09-sheets-and-coordinates.md).
+
+- **The UCS, at last.** Every coordinate here is a world coordinate and the modeller's are not, so
+  `autocad_status` now reports the drawing's UCS and warns in plain words when it is not the world
+  one; `autocad_get_ucs`, `autocad_set_ucs` and `autocad_convert_points` (AutoLISP's `trans`) make
+  it workable; and `autocad_batch_draw` takes `coords="ucs"`, converting every point and angle
+  before anything is sent — a rectangle square to a turned grid comes out turned. A tilted UCS is
+  refused for a flat request rather than guessed ([D-27](docs/DECISIONS.md)).
+- **Sheets.** `autocad_create_layout`, `autocad_page_setup` (one sheet or all of them),
+  `autocad_place_title_block` (one sheet or all of them, with per-sheet attributes) and
+  `autocad_add_viewport`. The viewport's model window is worked out to the viewport's own
+  proportions, so 1:50 comes out 1:50; leave the scale out and the largest standard scale that fits
+  is chosen; `twist` / `align_to_ucs` makes a rotated plan read upright; and viewports lock by
+  default, because an unlocked one gets scrolled and the scale on the title block stops being true.
+  Frame to ISO 5457 (20 mm binding edge, 10 elsewhere, title block bottom-right).
+- **One location, used everywhere.** `autocad_save_view` and `autocad_list_views` name an area once;
+  `autocad_export` gained `area` (`layout`, `window`, `view`, ...) and `scale`, and
+  `autocad_add_viewport` takes the same `view_name` — so the area plotted and the area in the
+  viewport are the same area.
+- **Drawing settings.** `autocad_drawing_setup` takes the scale once and sets DIMSCALE, the
+  annotation scale and LTSCALE from it, plus units, precision, snaps, point style and limits;
+  `autocad_create_styles` makes text and dimension styles, putting the drawing's own DIM variables
+  back afterwards. Both write only from a fixed list in code, which is why they need Changes and not
+  Admin ([D-28](docs/DECISIONS.md)), and both report every old value beside its new one.
+- **An import into a shop drawing.** `autocad_remap_layers` puts everything on the right layers and
+  makes those layers properly (rules match the old layer name *or* the block name, the type, the
+  colour or the text; `preset="ifc"` is a starting point, `rules_path` takes an office standard);
+  `autocad_tidy_entities` clears the per-object colour / linetype / lineweight overrides that make a
+  layer change look like it did nothing, flattens Z, moves geometry off layer 0 and deletes the
+  zero-length leftovers. Both default to `dry_run=true`.
+- **`autocad_sequence`:** AutoLISP's `progn` as a tool. Several tools in one call, every step's
+  arguments checked against that tool's own schema before the first one runs. It refuses Publish and
+  Admin steps and a sequence inside a sequence, so it can never spend more than the Changes padlock
+  ([D-29](docs/DECISIONS.md)); a test asserts that against every registered Publish and Admin tool
+  by name.
+- Drafting rules 9-15 added to [docs/07](docs/07-drafting-rules.md) and to the server's own
+  instructions, so every AI that connects follows them.
+- 286 more offline tests (`tests/test_coords.py`, `test_sheets.py`, `test_settings.py`,
+  `test_convert.py`, `test_sequence.py`): all the UCS arithmetic, the sheet arithmetic, the
+  plain-words-to-system-variables mapping, the layer and tidy plans, and the sequence's ceiling.
+
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
 - The whole Lee Mac study built (D-26): 16 more tools (attributes, numbering, text count / clean /

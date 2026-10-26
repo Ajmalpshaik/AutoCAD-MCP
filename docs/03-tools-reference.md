@@ -15,6 +15,9 @@ The group headings below give the level.
 - Entities are identified by their **handle**. Creation and query tools return it; modify tools take it.
 - Drawing tools share `layer`, `color`, `linetype` and `space` options. A missing layer is created
   and reported.
+- **Coordinates are WORLD coordinates.** `autocad_status` reports the drawing's UCS and warns when
+  it is not the world one. `autocad_batch_draw` takes `coords="ucs"`; for the other tools convert
+  first with `autocad_convert_points` ([09](09-sheets-and-coordinates.md)).
 
 ## Session and files (Read / View; save and export are Publish)
 
@@ -26,7 +29,7 @@ The group headings below give the level.
 | `autocad_open_drawing` | Open a .dwg or .dxf |
 | `autocad_save_drawing` | Save, or Save As to a new path |
 | `autocad_switch_drawing` | Make another open drawing active |
-| `autocad_export` | PDF (extents fitted, optional `paper_size` such as `A3`, `A1 portrait`), DXF, WMF, SAT, BMP, EPS, STL |
+| `autocad_export` | PDF, DXF, WMF, SAT, BMP, EPS, STL. PDF takes `paper_size` (`A3`, `A1 portrait`), `area` (`extents` default, `layout`, `limits`, `display`, `window`, `view`), `corner1`/`corner2`, `view_name` and `scale` |
 | `autocad_zoom` | Extents, all, or a window |
 | `autocad_get_variable` | Read a system variable |
 | `autocad_set_variable` | Write a system variable |
@@ -128,6 +131,64 @@ alternative, because a dialog blocks COM until a person closes it.
 | `autocad_break_at_blocks` | Change | Cut lines / straight polylines through block extents + `gap` |
 | `autocad_import_from_drawing` | Change | Blocks, layers, linetypes, text / dim styles from a closed DWG; existing names skipped |
 | `autocad_manage_layouts` | Change | Order, renumber, rename layouts; copy paper-space objects to other layouts |
+
+## Coordinates and the UCS (Read; setting it is Change)
+
+A rotated or moved UCS is why a line lands somewhere nobody meant. Detail:
+[09 §1](09-sheets-and-coordinates.md#1-the-ucs-why-a-line-lands-in-the-wrong-place).
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_get_ucs` | Read | Is a UCS set? Origin, axes, rotation in degrees, moved / rotated / tilted / flipped, the saved ones, and what to do about it |
+| `autocad_convert_points` | Read | AutoLISP's `trans`: points and angles between the UCS and the world. Changes nothing |
+| `autocad_set_ucs` | Change | `world`, `named`, `origin` + angle, `3point`, `entity`, `view`; `save_as` keeps it by name |
+
+## Sheets, title blocks and viewports (Change)
+
+A sheet from nothing in four calls, or one `autocad_sequence`. Detail:
+[09 §3](09-sheets-and-coordinates.md#3-laying-out-a-sheet).
+
+| Tool | Purpose |
+|---|---|
+| `autocad_create_layout` | New sheet: paper size, orientation, plotter, plot style table, optionally copied from another layout. Returns the frame, the drawing space and where the title block goes |
+| `autocad_page_setup` | Page Setup on one sheet or `all_layouts`: plotter, paper, `plot_area`, scale, `monochrome.ctb`, lineweights. Only what you pass is written |
+| `autocad_place_title_block` | The title block in the sheet's corner (ISO 5457 bottom-right by default) with its attributes filled; `all_layouts` and `per_layout_attributes` do a whole set |
+| `autocad_add_viewport` | A viewport at a real scale (`"1:50"`, or omitted to fit) looking at a point, a window, a saved view or a set of objects; `twist` / `align_to_ucs` for a rotated plan; locked by default |
+
+## Saved locations (Read; saving is Change)
+
+One named area, used for a plot, a viewport and a measurement. Detail:
+[09 §2](09-sheets-and-coordinates.md#2-one-location-used-everywhere).
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_list_views` | Read | Every saved view with its centre, size and both corners |
+| `autocad_save_view` | Change | Name an area, from two corners or from the objects' own extents + `pad` |
+
+## Drawing settings and styles (Change)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_drawing_setup` | Units, precision, the drawing `scale` (which sets DIMSCALE, the annotation scale and LTSCALE), `paper_text_height`, object snaps, point style, linetype scaling, limits. `dry_run` shows the plan; writes only from a fixed list ([D-28](DECISIONS.md)) |
+| `autocad_create_styles` | Text styles (font, height, width factor, oblique) and dimension styles (scale, text height, arrows, precision, or raw `DIM...` variables). The drawing's own DIM variables are put back |
+
+## An import into a shop drawing (Change)
+
+Both default to `dry_run=true`: read the counts, then run it. Detail:
+[09 §5](09-sheets-and-coordinates.md#5-an-ifc-or-revit-export-into-a-shop-drawing).
+
+| Tool | Purpose |
+|---|---|
+| `autocad_remap_layers` | Rules match `name_like` (layer **or** block name), `source_layer`, `block_name`, `entity_type`, `source_color`, `text_contains`; the target layer is created with its colour, linetype, lineweight, description and plot setting. `preset="ifc"` is a starting point; `rules_path` takes an office standard |
+| `autocad_tidy_entities` | Colour / linetype / lineweight back to ByLayer, `flatten_z`, `zero_thickness`, `off_layer_0`, `delete_empty` |
+
+## Several tools in one call (Change)
+
+`autocad_sequence` runs a list of steps in order. Every step's arguments are checked against that
+tool's own schema **before the first one runs**, so a sequence with a mistake in step four changes
+nothing. Steps at the Publish or Admin level, and a sequence inside a sequence, are refused: a
+sequence holds the **Changes** padlock only ([D-29](DECISIONS.md)). `stop_on_error` (default true)
+and `dry_run`.
 
 ## Seeing and checking (Read)
 

@@ -38,12 +38,26 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 - [ ] `autocad_batch_draw`: hatch, mtext and dimension operations.
 - [ ] Draw an attribute schedule as an AutoCAD table (a CHANGE tool beside `autocad_extract_attributes`).
 - [ ] Standards check against a reference DWG / DWS, not only a rules file.
+- [ ] A layer-standard rule file shipped for Ajmal's own office standard, beside the `ifc` preset
+  in `tools/convert.py` (which is a starting point, not a standard).
 - [ ] Read DXF / DWG files without AutoCAD (ezdxf, plus the ODA converter for DWG), read only.
-- [ ] Paper-space layouts and viewports.
+- [x] Paper-space layouts and viewports: `autocad_create_layout`, `autocad_page_setup`,
+  `autocad_place_title_block`, `autocad_add_viewport` (D-27, [09](09-sheets-and-coordinates.md)).
+- [ ] `coords="ucs"` on the single-entity `autocad_draw_*` and `autocad_modify_*` tools. Today only
+  `autocad_batch_draw` has it; the rest need each tool's rotation and planar vertex list converted
+  too, and no live check behind it yet (D-27).
+- [ ] Multileader, table and plot-style-table creation: no Automation API, so today they come in
+  with `autocad_import_from_drawing`. Worth moving into the plug-in.
+- [ ] `autocad_add_viewport`: clip a viewport to a polyline, and annotative viewport scales.
+- [ ] A sheet-set tool: one call per drawing list (sheet number, title, scale, view) across a whole
+  package, on top of `autocad_sequence`.
 - [ ] Split long `autocad_run_lisp` expressions instead of failing silently.
+- [ ] `core/audit.py`: with `%LOCALAPPDATA%` unset, `audit_dir()` resolves to a relative
+  `Heron/autocad/audit` in the working directory. Windows always sets it, so this only
+  shows up running the code off Windows; worth an explicit fallback anyway.
 - [ ] `send_command` / `run_lisp` that manage their own undo do not mark "write started", so a busy retry can still re-run them ([D-15](DECISIONS.md)).
 
 ## Repository
 
-- [ ] Tag `v1.1.0` after NEEDS-CHECKING group A passes.
+- [ ] Tag `v1.2.0` after NEEDS-CHECKING groups A and D pass.
 - [ ] Later: offer this repository to Heron AI as its AutoCAD adapter when Heron's capability registry is ready ([D-12](DECISIONS.md)).

@@ -14,6 +14,8 @@ def register_all() -> None:
         advanced,
         batch,
         blocks,
+        convert,
+        coordinates,
         document,
         draw,
         drawing_tools,
@@ -23,9 +25,13 @@ def register_all() -> None:
         modify,
         query,
         resources,
+        sequence,
+        settings,
+        sheets,
         standards,
         takeoff,
         text_tools,
+        views,
     )
 
 

@@ -13,11 +13,14 @@ import win32com.client
 from mcp.server.mcpserver import Image
 from pydantic import Field
 
+from ..acad import sheets as sheet_plan
+from ..acad.coords import advice as ucs_advice
 from ..acad.units import unit_name
 from ..core.connection import get_app, get_doc, run
 from ..core.errors import AutocadError, com_message, is_retryable
 from ..core.registry import dumps, mcp, tool_errors, tool_meta, undo_mark
 from ..core.variants import apoint, point_to_list
+from ._shared import current_ucs
 
 # Formats doc.Export writes directly. PDF goes through the plotter instead.
 EXPORT_FORMATS = {"dxf", "wmf", "sat", "bmp", "eps", "stl"}
@@ -137,8 +140,21 @@ def _restore_plot_state(
     return failed
 
 
-def _plot_pdf(doc: Any, target: str, paper_size: str | None) -> dict[str, Any]:
-    """Plot the active layout's extents to a PDF, fitted to the sheet.
+# AcPlotType: acDisplay = 0, acExtents = 1, acLimits = 2, acView = 3,
+# acWindow = 4, acLayout = 5.
+PLOT_AREAS = {"display": 0, "extents": AC_EXTENTS, "limits": 2, "view": 3, "window": 4, "layout": 5}
+
+
+def _plot_pdf(
+    doc: Any,
+    target: str,
+    paper_size: str | None,
+    area: str = "extents",
+    window: tuple[Any, Any] | None = None,
+    view_name: str | None = None,
+    scale: str | float | None = None,
+) -> dict[str, Any]:
+    """Plot part of the active layout to a PDF, fitted to the sheet by default.
 
     PlotToFile(path, "DWG To PDF.pc3") raises a bare "Exception occurred" on
     AutoCAD 2027, so the plotter is chosen on the layout itself and
@@ -165,9 +181,17 @@ def _plot_pdf(doc: Any, target: str, paper_size: str | None) -> dict[str, Any]:
         if paper_size:
             names = tuple(layout.GetCanonicalMediaNames())
             layout.CanonicalMediaName = _match_media(names, paper_size)
-        layout.PlotType = AC_EXTENTS
-        layout.UseStandardScale = True
-        layout.StandardScale = AC_SCALE_TO_FIT
+        if area == "window":
+            layout.SetWindowToPlot(window[0], window[1])
+        if area == "view":
+            layout.ViewToPlot = str(view_name).strip()
+        layout.PlotType = PLOT_AREAS[area]
+        if scale is None:
+            layout.UseStandardScale = True
+            layout.StandardScale = AC_SCALE_TO_FIT
+        else:
+            layout.UseStandardScale = False
+            layout.CustomScale = sheet_plan.parse_scale(scale)
         layout.CenterPlot = True
         paper = str(layout.GetLocaleMediaName(layout.CanonicalMediaName))
 
@@ -180,7 +204,11 @@ def _plot_pdf(doc: Any, target: str, paper_size: str | None) -> dict[str, Any]:
     finally:
         unrestored = _restore_plot_state(doc, layout, snapshot, background, quiet)
 
-    result = {"layout": str(layout.Name), "paper": paper}
+    result = {"layout": str(layout.Name), "paper": paper, "area": area}
+    if area == "view":
+        result["view"] = str(view_name).strip()
+    if scale is not None:
+        result["scale"] = sheet_plan.scale_text(sheet_plan.parse_scale(scale))
     if unrestored:
         result["warning"] = (
             "The PDF was plotted, but these could not be put back as they "
@@ -253,6 +281,14 @@ def _plot_png(
     return result
 
 
+def _ucs_name_of(doc: Any) -> str:
+    """The name of the current UCS; an unnamed one reads back empty."""
+    try:
+        return str(doc.GetVariable("UCSNAME")).strip()
+    except BaseException:  # noqa: BLE001 - absent on a drawing with no UCS set
+        return ""
+
+
 def _units_of(doc: Any) -> str:
     try:
         return unit_name(int(doc.GetVariable("INSUNITS")))
@@ -301,6 +337,12 @@ async def autocad_status(
             "read_only": bool,
             "active_space": str,       # "model" or "paper"
             "units": str,              # e.g. "millimeters"
+            "ucs": {                   # the coordinate system the modeller is working in
+              "name": str, "is_world": bool, "origin": [float],
+              "rotation_degrees": float, "moved": bool, "rotated": bool,
+              "tilted": bool, "flipped": bool
+            },
+            "ucs_advice": str | null,  # present only when the UCS is not the world one
             "current_layer": str,
             "model_space_entities": int,
             "paper_space_entities": int,
@@ -314,6 +356,8 @@ async def autocad_status(
     Examples:
         - Use when: starting work, to confirm Claude can reach AutoCAD.
         - Use when: you need the drawing's units before placing geometry.
+        - Use when: you are about to draw — "ucs_advice" warns you when the
+          modeller's coordinates are not world coordinates.
         - Don't use when: you want the entity list (use autocad_list_entities).
     """
 
@@ -334,6 +378,7 @@ async def autocad_status(
             return result
 
         doc = app.ActiveDocument
+        ucs = current_ucs(doc)
         result["active_drawing"] = {
             "name": str(doc.Name),
             "path": str(doc.FullName) if str(doc.FullName) != str(doc.Name) else "",
@@ -341,12 +386,19 @@ async def autocad_status(
             "read_only": bool(doc.ReadOnly),
             "active_space": "model" if int(doc.ActiveSpace) == 1 else "paper",
             "units": _units_of(doc),
+            "ucs": ucs.describe(_ucs_name_of(doc) or None),
             "current_layer": str(doc.ActiveLayer.Name),
             "model_space_entities": int(doc.ModelSpace.Count),
             "paper_space_entities": int(doc.PaperSpace.Count),
             "layer_count": int(doc.Layers.Count),
             "block_definition_count": int(doc.Blocks.Count),
         }
+        # Coordinates here are always world ones. When the modeller has set a
+        # UCS, say so on the first call of every session rather than letting a
+        # line land somewhere nobody meant (autocad_get_ucs has the detail).
+        note = ucs_advice(ucs)
+        if note:
+            result["active_drawing"]["ucs_advice"] = note
         return result
 
     return dumps(await run(work))
@@ -640,6 +692,42 @@ async def autocad_export(
             ),
         ),
     ] = None,
+    area: Annotated[
+        Literal["extents", "layout", "limits", "display", "window", "view"],
+        Field(
+            default="extents",
+            description=(
+                "PDF only: what to plot. 'extents' (the default) plots "
+                "everything drawn. 'layout' plots the sheet itself, which is "
+                "what a sheet with a title block wants. 'window' plots the "
+                "rectangle given by corner1/corner2. 'view' plots a saved view "
+                "by name, so the very area saved with autocad_save_view is the "
+                "area that comes out."
+            ),
+        ),
+    ] = "extents",
+    corner1: Annotated[
+        list[float] | None,
+        Field(default=None, description="For area='window': one corner, in the units of the space being plotted."),
+    ] = None,
+    corner2: Annotated[
+        list[float] | None,
+        Field(default=None, description="For area='window': the opposite corner."),
+    ] = None,
+    view_name: Annotated[
+        str | None,
+        Field(default=None, description="For area='view': the saved view to plot. autocad_list_views shows them."),
+    ] = None,
+    scale: Annotated[
+        str | float | None,
+        Field(
+            default=None,
+            description=(
+                "PDF only: plot scale, e.g. '1:1' for a laid-out sheet or "
+                "'1:50' for a model-space plot. Omit to scale to fit the sheet."
+            ),
+        ),
+    ] = None,
 ) -> str:
     """Export the active drawing to DXF, PDF or another supported format.
 
@@ -651,17 +739,27 @@ async def autocad_export(
     Args:
         path (str): Output path whose extension selects the format.
         paper_size (Optional[str]): PDF sheet size; None keeps the current.
+        area (str): PDF only — extents, layout, limits, display, window or view.
+        corner1 (Optional[list[float]]): PDF window, first corner.
+        corner2 (Optional[list[float]]): PDF window, opposite corner.
+        view_name (Optional[str]): PDF saved view to plot.
+        scale (Optional[str | float]): PDF plot scale; None scales to fit.
 
     Returns:
         str: JSON: {"exported": true, "path": str, "format": str,
              "size_bytes": int}
-             PDF adds "layout" (e.g. "Model") and "paper", the sheet used
-             (e.g. "ISO full bleed A3 (420.00 x 297.00 MM)").
+             PDF adds "layout" (e.g. "Model"), "paper", the sheet used
+             (e.g. "ISO full bleed A3 (420.00 x 297.00 MM)"), "area", and
+             "view" / "scale" when those were given.
 
     Examples:
         - Use when: "give me this drawing as a DXF" -> path ending in .dxf.
         - Use when: "export a PDF of the current layout" -> path ending in .pdf.
         - Use when: "PDF it on A1" -> path ending in .pdf, paper_size="A1".
+        - Use when: "plot the sheet, not the geometry" -> area="layout",
+          scale="1:1".
+        - Use when: "plot the same area as the viewport" -> autocad_save_view
+          once, then area="view", view_name that name.
         - Don't use when: you want to save the .dwg itself (use
           autocad_save_drawing).
 
@@ -682,18 +780,50 @@ async def autocad_export(
             + ", ".join(sorted(EXPORT_FORMATS))
             + "."
         )
-    if paper_size and ext != "pdf":
-        raise AutocadError(
-            f"paper_size only applies to PDF exports, not '{ext}'. Leave it "
-            "out, or give a path ending in .pdf."
+    # Everything below the format is a plotting option, so none of it means
+    # anything to AutoCAD's exporter for DXF, SAT, STL and the rest.
+    pdf_only = [
+        name
+        for name, value in (
+            ("paper_size", paper_size),
+            ("corner1", corner1),
+            ("corner2", corner2),
+            ("view_name", view_name),
+            ("scale", scale),
         )
+        if value is not None
+    ]
+    if area != "extents":
+        pdf_only.append("area")
+    if ext != "pdf" and pdf_only:
+        raise AutocadError(
+            f"{', '.join(sorted(pdf_only))} only applies to PDF exports, not '{ext}'. "
+            "Leave it out, or give a path ending in .pdf."
+        )
+
+    window = None
+    if area == "window":
+        if not (corner1 and corner2):
+            raise AutocadError("area='window' needs both corner1 and corner2, each as [x, y].")
+        window = (_point2d(corner1, "corner1"), _point2d(corner2, "corner2"))
+    if area == "view" and not view_name:
+        raise AutocadError(
+            "area='view' needs view_name. autocad_list_views shows the drawing's saved views."
+        )
+    if scale is not None:
+        try:
+            sheet_plan.parse_scale(scale)
+        except ValueError as exc:
+            raise AutocadError(str(exc)) from exc
 
     def work() -> dict[str, Any]:
         doc = get_doc()
         result: dict[str, Any] = {"exported": True, "path": target, "format": ext}
         with undo_mark(doc):
             if ext == "pdf":
-                result.update(_plot_pdf(doc, target, paper_size))
+                result.update(
+                    _plot_pdf(doc, target, paper_size, area, window, view_name, scale)
+                )
             else:
                 # Export takes the name without extension plus a format code,
                 # and a selection set naming what to write.

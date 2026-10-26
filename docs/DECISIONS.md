@@ -129,6 +129,73 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-29 - A sequence spends the Changes padlock and nothing more
+
+**Decided:** 2026-10-26. **Status:** in force.
+`autocad_sequence` runs several tools in one call. It cannot go back through the gate to do it: the
+gate holds an `asyncio` lock for the whole call, so a nested `guarded()` would wait on a lock the
+sequence itself is holding. So each step's **undecorated body** is called directly
+(`tool.fn.__wrapped__`), which means the sequence, not the gate, is what stands between a step and
+the drawing.
+
+Therefore the ceiling is in code and is tested: a sequence refuses any step at the **Publish** or
+**Admin** level, and refuses a sequence inside a sequence. It is itself a Change tool, so it can do
+exactly what the Changes padlock already allows and can never save, plot, run a command or evaluate
+AutoLISP on the way. `tests/test_sequence.py` asserts this against every registered Publish and
+Admin tool by name, so a new one is covered the day it is added.
+
+Every step's arguments are validated against that tool's own schema before the first step runs
+(the rule `autocad_batch_draw` already follows: a call that cannot be completed changes nothing).
+Undo: each step keeps its own undo step, and any group a step leaves open is closed at the end —
+the same hazard `autocad_batch_draw` handles in AutoLISP. Whole-call atomicity is the **Ask to
+Keep** padlock's job, not this tool's.
+
+## D-28 - Drafting settings are a Change tool, written from a fixed list
+
+**Decided:** 2026-10-26. **Status:** in force.
+`autocad_set_variable` is **Admin** because it will set any system variable: an escape hatch, and
+rightly gated. But a modeller cannot be asked to turn on the Admin padlock to set the drawing's
+units, and setting units is not an escape hatch.
+
+So `autocad_drawing_setup` and `autocad_create_styles` are **Change** tools that write only from a
+list kept in `tools/settings.py`: `DRAWING_VARIABLES` for the drawing, and names beginning `DIM`
+for a dimension style. The list is in code, not in the request, so nothing a caller writes can widen
+it — the same principle as `core/risk.py` itself. A test asserts that everything
+`plan_settings` can produce is on the list, and that `plan_dim_style` refuses a name outside the DIM
+family.
+
+Both report the old value beside the new one, and `dry_run` shows the whole plan without writing.
+`autocad_set_variable` stays Admin for everything else.
+
+## D-27 - Coordinates are world coordinates, and Heron says so
+
+**Decided:** 2026-10-26. **Status:** in force.
+Every coordinate AutoCAD's Automation API takes or returns is a **World** coordinate, and `entmake`
+writes world coordinates straight into the database. The modeller works in the UCS they set. Two
+honest options: convert silently everywhere, or say so and offer the conversion.
+
+Converting silently was rejected: it would have to guess on a tilted UCS, and it would change what
+every existing tool means. So:
+
+* world stays the contract for every tool;
+* `autocad_status` reports the drawing's UCS and adds a plain `ucs_advice` sentence when it is not
+  the world one — and the gate already forces `autocad_status` before any change (D-19), so the warning always
+  arrives first;
+* `autocad_get_ucs`, `autocad_set_ucs` and `autocad_convert_points` (AutoLISP's `trans`) make it
+  workable;
+* `autocad_batch_draw` takes `coords="ucs"` and converts every point and angle in Python before a
+  single expression is sent, so the conversion is tested without AutoCAD;
+* a tilted UCS is **refused** for a flat 2D request rather than guessed, and says to convert the
+  points instead.
+
+The transform is built from `UCSORG`, `UCSXDIR` and `UCSYDIR` rather than
+`Utility.TranslateCoordinates`: those three are documented, read-only, saved with the drawing, and
+the arithmetic from them is pure Python that `tests/test_coords.py` checks without AutoCAD.
+
+The single-entity `autocad_draw_*` tools do not take `coords` yet; adding it means converting each
+tool's rotation and its planar vertex lists as well, which has no live check behind it today
+([ROADMAP](ROADMAP.md)).
+
 ## D-26 - Lee Mac's ideas are rebuilt as Heron tools; his code never enters the repository
 
 **Decided:** 2026-10-26, Ajmal: *"study lee-mac.com word by word ... make it part of this mcp"*.

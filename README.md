@@ -28,6 +28,9 @@ You describe the work in plain language; Claude does it in the AutoCAD you alrea
 "Draw a 5000 x 3000 rectangle at the origin on layer A-WALL, in red."
 "Check this drawing against our layer standard."
 "Make me a camera schedule from the CAM blocks."
+"Put sheet E-101 on A1 with our title block, ground floor at 1:100."
+"This IFC came in on IfcWall, IfcDuct... make it a shop drawing."
+"My UCS is rotated 23 degrees - draw it square to that."
 "Show me what you drew."
 ```
 
@@ -74,13 +77,15 @@ the level decides which padlock it needs:
 
 | Level | Needs | What |
 |---|---|---|
-| Read | connected | status, list and find, measure, extents, selection, layers, blocks, styles, **preview image**, **standards check**, **attribute schedules** |
+| Read | connected | status, list and find, measure, extents, selection, layers, blocks, styles, **the UCS**, **saved locations**, **preview image**, **standards check**, **attribute schedules** |
 | View | connected | zoom, regen, switch / open / create drawing |
-| Change | Changes | draw, text, dimensions, hatch, blocks, batch drawing, move ... array, modify, delete, layers |
-| Publish | Changes + Publish | save, export / plot to PDF |
+| Change | Changes | draw, text, dimensions, hatch, blocks, batch drawing, move ... array, modify, delete, layers, **the UCS**, **sheets, title blocks and viewports**, **drawing settings and styles**, **remap layers / tidy an import**, **several tools in one call** |
+| Publish | Changes + Publish | save, export / plot to PDF (whole sheet, a window, or a saved location) |
 | Admin | Changes + Admin | any command, AutoLISP, system variables, purge, audit |
 
 Every tool with its options: [docs/03-tools-reference.md](docs/03-tools-reference.md).
+Sheets, the UCS and turning an import into a shop drawing:
+[docs/09-sheets-and-coordinates.md](docs/09-sheets-and-coordinates.md).
 
 ## What keeps your drawing safe
 
@@ -125,7 +130,7 @@ when Claude Code opens here). Full steps: [docs/SETUP.md](docs/SETUP.md).
 | You are | Read |
 |---|---|
 | **The owner** | [docs/HANDOVER.md](docs/HANDOVER.md) and the live checks in [docs/NEEDS-CHECKING.md](docs/NEEDS-CHECKING.md) |
-| **A modeller** | [docs/06-heron-plugin.md](docs/06-heron-plugin.md) |
+| **A modeller** | [docs/06-heron-plugin.md](docs/06-heron-plugin.md), then [docs/09-sheets-and-coordinates.md](docs/09-sheets-and-coordinates.md) |
 | **Changing the code** | [docs/PROJECT-MAP.md](docs/PROJECT-MAP.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 | **An AI agent** | [AGENTS.md](AGENTS.md) |
 

@@ -22,13 +22,19 @@ from .errors import AutocadError, com_message
 mcp = MCPServer(
     "autocad_mcp",
     title="Heron AI for AutoCAD",
-    version="1.1.0",
+    version="1.2.0",
     instructions=(
         "Controls the AutoCAD instance running on this machine through its COM "
         "Automation interface. Changes appear live in the user's open drawing.\n\n"
         "Call autocad_status first: coordinates are in the drawing's own units, "
         "and that tool reports whether the drawing is in millimetres, metres or "
         "inches. All angles in this server are DEGREES.\n\n"
+        "COORDINATES ARE WORLD COORDINATES. autocad_status also reports the "
+        "drawing's UCS and adds a 'ucs_advice' line when it is not the world "
+        "one. If a UCS is set, the modeller's numbers are not world numbers: "
+        "convert them with autocad_convert_points, or pass coords='ucs' on a "
+        "tool that offers it (autocad_batch_draw does). Never ignore that "
+        "advice — the geometry lands somewhere nobody meant.\n\n"
         "Entities are identified by their drawing 'handle', which every creation "
         "and query tool returns and every modify tool accepts.\n\n"
         "If a tool reports AutoCAD is busy or mid-command, the user needs to "
@@ -58,7 +64,20 @@ mcp = MCPServer(
         "titled, underlined, with a smaller 'SCALE 1:n' line; notes aligned to the top.\n"
         "7. Proper layers per discipline; text heights as paper size x scale.\n"
         "8. Check autocad_preview: fix any overlap or crossing before saying it is done. "
-        "The draw_detail prompt has the full checklist."
+        "The draw_detail prompt has the full checklist.\n\n"
+        "SHEET RULES (docs/09):\n"
+        "9. Set the drawing up before drawing in it: autocad_drawing_setup with the "
+        "units and the scale. The scale sets DIMSCALE, LTSCALE and the annotation "
+        "scale together, and paper_text_height gives the model text height.\n"
+        "10. Sheets: autocad_create_layout, then autocad_place_title_block (all_layouts "
+        "and per_layout_attributes do a whole set), then autocad_add_viewport. All of it "
+        "in one autocad_sequence where it belongs together.\n"
+        "11. Every viewport gets a real scale and stays locked (the default). A plan on "
+        "a rotated grid gets align_to_ucs=true so it reads upright on the sheet.\n"
+        "12. Name an area once with autocad_save_view, then use that view_name for the "
+        "viewport and for autocad_export(area='view') — one location, not two guesses.\n"
+        "13. An import is not a drawing: autocad_remap_layers, then autocad_tidy_entities "
+        "(both show a dry run first), then autocad_check_standards to prove it."
     ),
 )
 
