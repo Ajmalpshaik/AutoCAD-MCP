@@ -129,6 +129,16 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-25 - The drafting rules ship inside Heron
+
+**Decided:** 2026-10-26, Ajmal: *"bring that drafting rules also"*, after asking whether anyone who
+downloads Heron gets the same neat drawings. **Status:** in force.
+The rules lived only in one chat. They are now in the server's instructions (sent to every AI on
+connect) and the `draw_detail` prompt, with [07](07-drafting-rules.md) as the readable copy. Lee Mac's
+programs are studied for ideas only: his licence allows private/organisation use and forbids
+redistribution, and this repository is public, so his code is never copied in; ideas are
+re-implemented and credited.
+
 ## D-24 - Labels are leaders in Ajmal's TLD style, or multileaders; parts are blocks
 
 **Decided:** 2026-10-26, on Ajmal's instructions after the roof pipe-support detail: labels must be
