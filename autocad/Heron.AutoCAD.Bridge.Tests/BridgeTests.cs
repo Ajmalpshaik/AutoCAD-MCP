@@ -505,11 +505,20 @@ public class RepeatClickFilterTests
     }
 
     [Fact]
+    public void A_slow_double_click_counts_once_too()
+    {
+        // Measured live on 2026-10-26: 856 ms between the two clicks.
+        var filter = new RepeatClickFilter();
+        Assert.True(filter.Accept("Admin", T0));
+        Assert.False(filter.Accept("Admin", T0.AddMilliseconds(856)));
+    }
+
+    [Fact]
     public void A_later_click_counts_again()
     {
         var filter = new RepeatClickFilter();
         filter.Accept("Changes", T0);
-        Assert.True(filter.Accept("Changes", T0.AddMilliseconds(1200)));
+        Assert.True(filter.Accept("Changes", T0.AddMilliseconds(2000)));
     }
 
     [Fact]
