@@ -133,7 +133,7 @@ def _with_heron_state(result: str, message: str | None) -> str:
     return json.dumps(payload, indent=2, default=str)
 
 
-async def guarded(tool: str, work: Callable[[], Awaitable[str]]) -> str:
+async def guarded(tool: str, work: Callable[[], Awaitable[Any]]) -> Any:
     """Run one tool call through the gate. Returns the tool's text result."""
     global _last_drawing
     async with _lock:
@@ -177,14 +177,15 @@ async def guarded(tool: str, work: Callable[[], Awaitable[str]]) -> str:
             return f"Error: {refusal}"
 
         result = await work()
-        ok = not result.startswith("Error:")
-        outcome = "done" if ok else ("unknown" if "Outcome unknown" in result else "failed")
+        text = result if isinstance(result, str) else ""
+        ok = not text.startswith("Error:")
+        outcome = "done" if ok else ("unknown" if "Outcome unknown" in text else "failed")
 
         if tool == STATUS_TOOL and ok:
             result = _with_heron_state(result, refusal)
 
         if ok and job and job.bridge and risk is Risk.CHANGE:
-            answer = job.bridge.ask_keep(job.id, job.title, _handles(result))
+            answer = job.bridge.ask_keep(job.id, job.title, _handles(text))
             if answer == "discard":
                 await _discard()
                 result, outcome = DISCARDED, "discarded"

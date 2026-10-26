@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Annotated, Any
+import tempfile
+from collections.abc import Sequence
+from typing import Annotated, Any, Literal
 
 import pythoncom
+import win32com.client
+from mcp.server.mcpserver import Image
 from pydantic import Field
 
 from ..acad.units import unit_name
@@ -183,6 +187,69 @@ def _plot_pdf(doc: Any, target: str, paper_size: str | None) -> dict[str, Any]:
             f"were: {'; '.join(unrestored)}. Check them in AutoCAD (PAGESETUP "
             "for the layout, SETVAR for BACKGROUNDPLOT)."
         )
+    return result
+
+
+PNG_PLOTTER = "PublishToWeb PNG.pc3"
+# AcPlotType values for the preview areas.
+_PREVIEW_AREAS = {"view": 0, "extents": AC_EXTENTS, "window": 4}
+_PIXEL_MEDIA = re.compile(r"\(([\d.]+)_x_([\d.]+)_Pixels\)")
+
+
+def _point2d(value: Sequence[float], name: str) -> Any:
+    if len(value) < 2:
+        raise AutocadError(f"{name} needs [x, y], got {list(value)}.")
+    return win32com.client.VARIANT(
+        pythoncom.VT_ARRAY | pythoncom.VT_R8, (float(value[0]), float(value[1]))
+    )
+
+
+def _plot_png(
+    doc: Any,
+    target: str,
+    area: str,
+    corner1: Sequence[float] | None,
+    corner2: Sequence[float] | None,
+    width_px: int,
+) -> dict[str, Any]:
+    """Plot the active layout to a PNG through AutoCAD's own PNG plotter.
+
+    Same order as _plot_pdf (plotter on the layout first, PlotToFile with the
+    path alone) and the same restore, so a preview never changes the page setup.
+    """
+    layout = doc.ActiveLayout
+    plot = doc.Plot
+    background = doc.GetVariable("BACKGROUNDPLOT")
+    quiet = plot.QuietErrorMode
+    snapshot = _snapshot_page_setup(doc, layout)
+    size = None
+    try:
+        layout.ConfigName = PNG_PLOTTER
+        layout.RefreshPlotDeviceInfo()
+        sizes = []
+        for name in tuple(layout.GetCanonicalMediaNames()):
+            found = _PIXEL_MEDIA.search(name)
+            if found:
+                sizes.append((abs(float(found.group(1)) - width_px), name))
+        if sizes:
+            size = min(sizes)[1]
+            layout.CanonicalMediaName = size
+        if area == "window":
+            layout.SetWindowToPlot(_point2d(corner1, "corner1"), _point2d(corner2, "corner2"))
+        layout.PlotType = _PREVIEW_AREAS[area]
+        layout.UseStandardScale = True
+        layout.StandardScale = AC_SCALE_TO_FIT
+        layout.CenterPlot = True
+        doc.SetVariable("BACKGROUNDPLOT", 0)
+        plot.QuietErrorMode = True
+        plot.PlotToFile(target)
+    finally:
+        unrestored = _restore_plot_state(doc, layout, snapshot, background, quiet)
+    result: dict[str, Any] = {"area": area, "layout": str(layout.Name)}
+    if size:
+        result["size"] = size.replace("_", " ")
+    if unrestored:
+        result["warning"] = "Could not put back: " + "; ".join(unrestored)
     return result
 
 
@@ -847,3 +914,62 @@ async def autocad_set_variable(
         }
 
     return dumps(await run(work))
+
+
+@mcp.tool(
+    name="autocad_preview",
+    # An image is content, not structured data: without this the SDK tries
+    # to serialise it as JSON and the call fails.
+    structured_output=False,
+    **tool_meta("Preview Drawing as Image", read_only=True, idempotent=True),
+)
+@tool_errors
+async def autocad_preview(
+    area: Annotated[
+        Literal["extents", "view", "window"],
+        Field(description="What to show: the whole drawing, the current view, or a window."),
+    ] = "extents",
+    corner1: Annotated[
+        list[float] | None, Field(description="Window corner [x, y] (area='window').")
+    ] = None,
+    corner2: Annotated[
+        list[float] | None, Field(description="Opposite window corner [x, y].")
+    ] = None,
+    width_px: Annotated[
+        int, Field(ge=320, le=4000, description="Wanted image width in pixels.")
+    ] = 1600,
+) -> list | str:
+    """See the drawing: plot it to a PNG and return the picture.
+
+    Use after drawing something, to check it looks right before reporting it
+    done. Plots through AutoCAD's own PNG plotter, so it shows what a plot
+    would show; the page setup is put back afterwards and nothing is drawn.
+
+    Returns:
+        The PNG image, then JSON: {"area", "layout", "size"}.
+    """
+    if area == "window" and (not corner1 or not corner2):
+        raise AutocadError("area='window' needs both corner1 and corner2 as [x, y].")
+
+    folder = tempfile.mkdtemp(prefix="heron-preview-")
+    target = os.path.join(folder, "preview.png")
+
+    def work() -> dict[str, Any]:
+        return _plot_png(get_doc(), target, area, corner1, corner2, width_px)
+
+    try:
+        info = await run(work)
+        if not os.path.isfile(target) or os.path.getsize(target) == 0:
+            raise AutocadError(
+                f"AutoCAD did not write the preview. Check that '{PNG_PLOTTER}' "
+                "is listed in AutoCAD's PLOTTERMANAGER folder."
+            )
+        with open(target, "rb") as fh:
+            data = fh.read()
+    finally:
+        try:
+            os.remove(target)
+            os.rmdir(folder)
+        except OSError:
+            pass
+    return [Image(data=data, format="png"), dumps(info)]
