@@ -16,6 +16,8 @@ def register_all() -> None:
         blocks,
         document,
         draw,
+        drawing_tools,
+        geometry_tools,
         labels,
         layers,
         modify,
@@ -23,6 +25,7 @@ def register_all() -> None:
         resources,
         standards,
         takeoff,
+        text_tools,
     )
 
 

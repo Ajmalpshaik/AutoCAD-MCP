@@ -417,6 +417,10 @@ async def autocad_offset_entities(
             )
         ),
     ],
+    both_sides: Annotated[
+        bool,
+        Field(description="Offset to both sides at once, e.g. a duct or pipe's two edges from its centreline."),
+    ] = False,
 ) -> str:
     """Create parallel copies of lines, polylines, arcs and circles.
 
@@ -449,8 +453,9 @@ async def autocad_offset_entities(
                 try:
                     # Offset returns an array of results: a closed shape can
                     # yield more than one curve.
-                    for result in source.Offset(float(distance)):
-                        new_handles.append(str(result.Handle))
+                    for d in (float(distance), -float(distance)) if both_sides else (float(distance),):
+                        for result in source.Offset(d):
+                            new_handles.append(str(result.Handle))
                 except BaseException as exc:  # noqa: BLE001
                     failed.append(
                         {

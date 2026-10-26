@@ -33,16 +33,31 @@ async def scratch():
 
     def open_scratch():
         app = get_app()
-        held["original"] = app.ActiveDocument if app.Documents.Count else None
+        if "scratch_name" in held:  # a retry: drop the drawing the failed attempt made
+            for i in range(app.Documents.Count):
+                if str(app.Documents.Item(i).Name) == held["scratch_name"]:
+                    app.Documents.Item(i).Close(False)
+                    break
+        held.setdefault("original", str(app.ActiveDocument.Name) if app.Documents.Count else None)
         doc = app.Documents.Add()
+        held["scratch_name"] = str(doc.Name)
         doc.ModelSpace.AddLine(apoint(0, 0), apoint(4200, 2970))
         doc.ModelSpace.AddCircle(apoint(2100, 1485), 500)
         held["doc"] = doc
 
     def close_scratch():
-        held["doc"].Close(False)
+        # Closing a drawing can drop AutoCAD's proxies for the others, so the
+        # original is found again by name rather than through a kept object.
+        app = get_app()
+        name = held["scratch_name"]
+        for i in range(app.Documents.Count):
+            if str(app.Documents.Item(i).Name) == name:
+                app.Documents.Item(i).Close(False)
+                break
         if held["original"] is not None:
-            held["original"].Activate()
+            for i in range(app.Documents.Count):
+                if str(app.Documents.Item(i).Name) == held["original"]:
+                    app.Documents.Item(i).Activate()
 
     await run(open_scratch)
     yield held["doc"]

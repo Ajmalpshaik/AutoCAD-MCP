@@ -95,6 +95,9 @@ async def autocad_add_label(
         Literal["left", "right"],
         Field(description="'left': position is the text's top-left (default). 'right': its top-right, for a label column left of the detail."),
     ] = "left",
+    mask: Annotated[
+        bool, Field(description="Background mask behind the text, so it reads over hatching and lines.")
+    ] = False,
     layer: Annotated[str | None, LAYER_OPT] = None,
     color: Annotated[str | StrictInt | None, COLOR_OPT] = None,
 ) -> str:
@@ -134,6 +137,8 @@ async def autocad_add_label(
 
             label = space.AddMText(point(position, "position"), float(width), text)
             label.Height = float(height)
+            if mask:
+                label.BackgroundFill = True
             if text_align == "right":
                 label.AttachmentPoint = AC_ATTACH_TOP_RIGHT
                 label.InsertionPoint = point(position, "position")

@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from ..acad import geometry
 from ..acad.entities import read_attributes
 from ..acad.selection import discard_selection_set, iter_selection, select_filtered
 from ..acad.tables import describe_layer
@@ -30,6 +31,7 @@ KNOWN_RULES = {
     "forbid_entities_on_layer_0",
     "require_bylayer_color",
     "require_bylayer_linetype",
+    "forbid_overlapping_dimensions",
     "max_findings",
 }
 _SYSTEM_LAYERS = {"0", "defpoints"}
@@ -44,6 +46,7 @@ def check(layers: list[dict], entities: list[dict], rules: dict) -> dict[str, An
         layers: {name: {"color": int, "linetype": str}} - must exist with these.
         forbid_entities_on_layer_0: no geometry on layer 0.
         require_bylayer_color / require_bylayer_linetype: no overrides.
+        forbid_overlapping_dimensions: no two dimensions on top of each other (Lee Mac's Dimension Overlap idea).
         max_findings: cap the list (default 200); the summary still counts all.
     """
     findings: list[dict[str, Any]] = []
@@ -75,6 +78,12 @@ def check(layers: list[dict], entities: list[dict], rules: dict) -> dict[str, An
             findings.append({**base, "rule": "bylayer_color", "detail": f"colour {entity.get('color')} instead of ByLayer"})
         if rules.get("require_bylayer_linetype") and str(entity.get("linetype", "")).lower() != "bylayer":
             findings.append({**base, "rule": "bylayer_linetype", "detail": f"linetype {entity.get('linetype')} instead of ByLayer"})
+
+    if rules.get("forbid_overlapping_dimensions"):
+        boxes = {e["handle"]: tuple(e["box"]) for e in entities if "Dimension" in str(e.get("type")) and e.get("box")}
+        for a, b in geometry.overlapping(boxes):
+            findings.append({"handle": a, "other": b, "type": "dimension", "rule": "dimension_overlap",
+                             "detail": f"overlaps dimension {b}"})
 
     summary: dict[str, int] = {}
     for finding in findings:
@@ -132,7 +141,8 @@ async def autocad_check_standards(
         dict | None,
         Field(description=(
             "Rules: layer_name_pattern (regex), layers {name: {color, linetype}}, "
-            "forbid_entities_on_layer_0, require_bylayer_color, require_bylayer_linetype, max_findings."
+            "forbid_entities_on_layer_0, require_bylayer_color, require_bylayer_linetype, "
+            "forbid_overlapping_dimensions, max_findings."
         )),
     ] = None,
     rules_path: Annotated[str | None, Field(description="Or a JSON file holding the same rules.")] = None,
@@ -148,7 +158,8 @@ async def autocad_check_standards(
     """
     wanted = _load_rules(rules, rules_path)
     needs_entities = any(
-        wanted.get(key) for key in ("forbid_entities_on_layer_0", "require_bylayer_color", "require_bylayer_linetype")
+        wanted.get(key) for key in ("forbid_entities_on_layer_0", "require_bylayer_color", "require_bylayer_linetype",
+                                    "forbid_overlapping_dimensions")
     )
 
     def work() -> dict[str, Any]:
@@ -163,13 +174,20 @@ async def autocad_check_standards(
                     if len(entities) >= max_entities:
                         capped = True
                         break
-                    entities.append({
+                    row = {
                         "handle": str(entity.Handle),
                         "type": str(entity.ObjectName),
                         "layer": str(entity.Layer),
                         "color": int(entity.Color),
                         "linetype": str(entity.Linetype),
-                    })
+                    }
+                    if "Dimension" in row["type"] and wanted.get("forbid_overlapping_dimensions"):
+                        try:
+                            lo, hi = entity.GetBoundingBox()
+                            row["box"] = (lo[0], lo[1], hi[0], hi[1])
+                        except BaseException:  # noqa: BLE001
+                            pass
+                    entities.append(row)
             finally:
                 discard_selection_set(doc)
         report = check(layers, entities, wanted)

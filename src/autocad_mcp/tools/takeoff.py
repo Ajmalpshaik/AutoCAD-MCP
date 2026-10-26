@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from ..acad.curves import curve_length
 from ..acad.entities import resolve_handle
 from ..acad.selection import discard_selection_set, iter_selection, select_filtered
 from ..core.connection import get_doc, require_idle, run
@@ -88,12 +89,44 @@ def coerce_value(current: Any, new: Any, allowed: list | None = None) -> Any:
 
 
 def _length(entity: Any) -> float | None:
-    for attr in ("Length", "ArcLength", "Circumference"):
+    return curve_length(entity)
+
+
+def expand_nested(refs: list[dict], children: dict[str, list[tuple[str, str]]], limit: int = 20) -> list[dict]:
+    """Top-level refs plus every block nested inside them, once per placed copy.
+
+    children: block name -> [(nested block name, layer)] as defined. A block
+    that contains itself stops at 'limit' levels instead of looping forever.
+    """
+    out = list(refs)
+
+    def walk(name: str, depth: int) -> None:
+        if depth >= limit:
+            return
+        for child, layer in children.get(name, []):
+            out.append({"block": child, "layer": layer, "visibility": None, "properties": {}, "nested": True})
+            walk(child, depth + 1)
+
+    for ref in refs:
+        walk(ref["block"], 1)
+    return out
+
+
+def _children(doc: Any) -> dict[str, list[tuple[str, str]]]:
+    out: dict[str, list[tuple[str, str]]] = {}
+    for i in range(doc.Blocks.Count):
+        block = doc.Blocks.Item(i)
         try:
-            return float(getattr(entity, attr))
-        except BaseException:  # noqa: BLE001 - this type has no such property
+            if block.IsLayout or block.IsXRef:
+                continue
+            name = str(block.Name)
+            for j in range(int(block.Count)):
+                item = block.Item(j)
+                if str(item.ObjectName) == "AcDbBlockReference":
+                    out.setdefault(name, []).append((str(getattr(item, "EffectiveName", None) or item.Name), str(item.Layer)))
+        except BaseException:  # noqa: BLE001
             continue
-    return None
+    return out
 
 
 _ALWAYS_CLOSED = {"AcDbCircle", "AcDbRegion"}
@@ -150,6 +183,7 @@ async def autocad_count_blocks(
         "name; name_layer; name_visibility (dynamic block visibility state); "
         "name_properties (dynamic property values such as size)."
     ))] = "name",
+    include_nested: Annotated[bool, Field(description="Also count blocks inside blocks (e.g. fixtures inside a room block).")] = False,
 ) -> str:
     """Count block references for a quantity take-off: fittings, valves, devices.
 
@@ -171,11 +205,13 @@ async def autocad_count_blocks(
                     row = _describe_ref(ref)
                 except BaseException:  # noqa: BLE001 - not a block reference after all
                     continue
-                if block_name and not fnmatch.fnmatch(row["block"].lower(), block_name.lower()):
-                    continue
                 refs.append(row)
         finally:
             discard_selection_set(doc)
+        if include_nested:  # walk every top-level block: a DESK can sit inside a ROOM
+            refs = expand_nested(refs, _children(doc))
+        if block_name:
+            refs = [r for r in refs if fnmatch.fnmatch(r["block"].lower(), block_name.lower())]
         return refs
 
     return dumps(count_blocks(await run(work), group_by))
@@ -191,7 +227,7 @@ async def autocad_total_length(
     """Total length (and area of closed shapes) for a run take-off: pipe, duct, cable.
 
     Lengths are in drawing units (check autocad_status). Splines and ellipses
-    have no length over COM; they are counted as 'unmeasured'.
+    are measured from their definition.
 
     Returns:
         JSON: {"total_length", "total_area", "rows": [{layer|type, count, length, area, unmeasured}]}
