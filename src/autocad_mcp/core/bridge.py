@@ -1,0 +1,242 @@
+"""The Python end of the Heron bridge to the plug-in inside AutoCAD.
+
+The plug-in (autocad/Heron.AutoCAD.Bridge) owns whether AutoCAD is connected
+and which padlocks are open. This module finds the plug-in serving the AutoCAD
+we are attached to, and asks it before and after every tool call:
+
+- The plug-in writes an address file per AutoCAD process when the user presses
+  Heron, and deletes it on disconnect. No file means not connected.
+- Each request is one JSON line over a current-user named pipe, carrying the
+  session token from that file, and gets one JSON line back.
+
+Every refusal ends with NOTHING_SENT, and that sentence is true: refusals are
+raised before any COM work starts.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import socket
+import uuid
+from pathlib import Path
+from typing import Any
+
+import pywintypes
+import win32api
+import win32con
+import win32event
+import win32file
+import win32pipe
+import win32process
+
+from .errors import AutocadError
+
+PROTOCOL_VERSION = 1
+NOTHING_SENT = "Nothing was sent to AutoCAD."
+NOT_CONNECTED = (
+    "AutoCAD is not connected to Heron. Press the Heron button on the Heron tab "
+    "in AutoCAD (or type HERON). " + NOTHING_SENT
+)
+
+# One server process serves one chat, so one id per process is one per chat.
+CONVERSATION = uuid.uuid4().hex
+CLIENT = os.environ.get("HERON_CLIENT_ID") or socket.gethostname()
+
+CALL_TIMEOUT = 5.0
+KEEP_TIMEOUT = 600.0
+
+
+class BridgeRefused(AutocadError):
+    """The plug-in said no, or could not be asked. Nothing reached AutoCAD."""
+
+
+def bridge_enabled() -> bool:
+    """False only when a developer switched the bridge off (HERON_AUTOCAD_BRIDGE=off)."""
+    return os.environ.get("HERON_AUTOCAD_BRIDGE", "on").strip().lower() not in {
+        "off",
+        "0",
+        "false",
+        "no",
+    }
+
+
+def bridges_dir() -> Path:
+    return Path(os.environ.get("LOCALAPPDATA", "")) / "Heron" / "autocad" / "bridges"
+
+
+def acad_pid(app: Any) -> int:
+    """The process id behind a COM AutoCAD.Application, from its main window."""
+    _, pid = win32process.GetWindowThreadProcessId(int(app.HWND))
+    return pid
+
+
+def _alive(pid: int) -> bool:
+    try:
+        handle = win32api.OpenProcess(win32con.PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    except pywintypes.error:
+        return False
+    try:
+        return win32process.GetExitCodeProcess(handle) == 259  # STILL_ACTIVE
+    finally:
+        win32api.CloseHandle(handle)
+
+
+def _ensure_sentence(message: str) -> str:
+    message = (message or "Heron in AutoCAD refused the request.").strip()
+    return message if message.endswith(NOTHING_SENT) else f"{message} {NOTHING_SENT}"
+
+
+class Bridge:
+    """The plug-in of one AutoCAD process."""
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+
+    def find(self) -> dict | None:
+        """The address file, or None when this AutoCAD is not connected.
+
+        A file whose process is gone is left over from a crash: it is deleted,
+        so the next AutoCAD to reuse nothing of it starts clean.
+        """
+        path = bridges_dir() / f"{self.pid}.json"
+        if not path.is_file():
+            return None
+        if not _alive(self.pid):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            return None
+        try:
+            address = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        return address if address.get("pipeName") and address.get("token") else None
+
+    def call(self, op: str, timeout: float = CALL_TIMEOUT, **fields: Any) -> dict:
+        address = self.find()
+        if address is None:
+            raise BridgeRefused(NOT_CONNECTED)
+        request = {
+            "op": op,
+            "token": address["token"],
+            "client": CLIENT,
+            "conversation": CONVERSATION,
+            "protocolVersion": PROTOCOL_VERSION,
+            **fields,
+        }
+        try:
+            return _exchange(address["pipeName"], request, timeout)
+        except TimeoutError:
+            raise BridgeRefused(
+                f"Heron in AutoCAD did not answer within {timeout:.0f} s. AutoCAD may "
+                "be busy: press Esc in AutoCAD and try again. " + NOTHING_SENT
+            ) from None
+        except (pywintypes.error, OSError, ValueError) as exc:
+            raise BridgeRefused(
+                "Could not reach Heron in AutoCAD. Press the Heron button to "
+                f"connect again. (details: {exc}) " + NOTHING_SENT
+            ) from exc
+
+    def begin(
+        self, tool: str, risk: str, summary: str, drawing: str, timeout: float = CALL_TIMEOUT
+    ) -> str:
+        """Ask to start a job; returns its id or raises BridgeRefused."""
+        job = uuid.uuid4().hex[:12]
+        reply = self.call(
+            "begin",
+            timeout=timeout,
+            job=job,
+            tool=tool,
+            risk=risk,
+            summary=summary,
+            drawing=drawing,
+        )
+        if not reply.get("ok"):
+            raise BridgeRefused(_ensure_sentence(str(reply.get("message", ""))))
+        return job
+
+    def end(self, job: str, ok: bool, outcome: str, summary: str, ms: int) -> None:
+        """Tell the plug-in the job finished. Never raises: the work is already done."""
+        try:
+            self.call("end", job=job, ok=ok, outcome=outcome, summary=summary, ms=ms)
+        except AutocadError:
+            pass
+
+    def ask_keep(self, job: str, summary: str, handles: list[str]) -> str:
+        """keep | discard | keep_rest. Anything but a clear answer is discard."""
+        try:
+            reply = self.call(
+                "ask_keep", timeout=KEEP_TIMEOUT, job=job, summary=summary, handles=handles
+            )
+        except AutocadError:
+            return "discard"
+        answer = reply.get("answer")
+        return answer if answer in {"keep", "discard", "keep_rest"} else "discard"
+
+
+def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:
+    """Send one JSON line, read one JSON line, all within ``timeout`` seconds."""
+    path = rf"\\.\pipe\{pipe_name}"
+    ms = max(1, int(timeout * 1000))
+    try:
+        handle = win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0,
+            None,
+            win32file.OPEN_EXISTING,
+            win32file.FILE_FLAG_OVERLAPPED,
+            None,
+        )
+    except pywintypes.error as exc:
+        if exc.winerror != 231:  # ERROR_PIPE_BUSY
+            raise
+        win32pipe.WaitNamedPipe(path, ms)
+        handle = win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0,
+            None,
+            win32file.OPEN_EXISTING,
+            win32file.FILE_FLAG_OVERLAPPED,
+            None,
+        )
+    event = win32event.CreateEvent(None, True, False, None)
+    try:
+        _overlapped_write(handle, event, (json.dumps(request) + "\n").encode("utf-8"), ms)
+        data = b""
+        while not data.endswith(b"\n"):
+            data += _overlapped_read(handle, event, ms)
+        return json.loads(data.decode("utf-8"))
+    finally:
+        win32api.CloseHandle(event)
+        win32file.CloseHandle(handle)
+
+
+def _wait(handle: Any, overlapped: Any, ms: int) -> int:
+    if win32event.WaitForSingleObject(overlapped.hEvent, ms) == win32event.WAIT_TIMEOUT:
+        win32file.CancelIo(handle)
+        raise TimeoutError
+    return win32file.GetOverlappedResult(handle, overlapped, False)
+
+
+def _overlapped_write(handle: Any, event: Any, payload: bytes, ms: int) -> None:
+    overlapped = pywintypes.OVERLAPPED()
+    overlapped.hEvent = event
+    win32event.ResetEvent(event)
+    win32file.WriteFile(handle, payload, overlapped)
+    _wait(handle, overlapped, ms)
+
+
+def _overlapped_read(handle: Any, event: Any, ms: int) -> bytes:
+    overlapped = pywintypes.OVERLAPPED()
+    overlapped.hEvent = event
+    win32event.ResetEvent(event)
+    buffer = win32file.AllocateReadBuffer(65536)
+    win32file.ReadFile(handle, buffer, overlapped)
+    count = _wait(handle, overlapped, ms)
+    if count == 0:
+        raise OSError("Heron in AutoCAD closed the connection")
+    return bytes(buffer[:count])
