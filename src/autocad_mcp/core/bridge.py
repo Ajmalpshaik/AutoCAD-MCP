@@ -40,7 +40,7 @@ NOT_CONNECTED = (
 )
 
 # One server process serves one chat, so one id per process is one per chat.
-CONVERSATION = uuid.uuid4().hex
+CONVERSATION = os.environ.get("HERON_CONVERSATION_ID") or uuid.uuid4().hex
 CLIENT = os.environ.get("HERON_CLIENT_ID") or socket.gethostname()
 
 CALL_TIMEOUT = 5.0

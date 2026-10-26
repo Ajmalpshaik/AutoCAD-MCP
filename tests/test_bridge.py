@@ -170,3 +170,16 @@ def test_bridge_can_be_switched_off(monkeypatch):
     assert bridge.bridge_enabled() is False
     monkeypatch.delenv("HERON_AUTOCAD_BRIDGE")
     assert bridge.bridge_enabled() is True
+
+
+def test_conversation_id_can_be_fixed(monkeypatch):
+    # Scripts that start one server per call (generators, live checks) can
+    # say they are one chat, so the one-chat hold does not lock them out.
+    import importlib
+
+    monkeypatch.setenv("HERON_CONVERSATION_ID", "live-checks")
+    try:
+        assert importlib.reload(bridge).CONVERSATION == "live-checks"
+    finally:
+        monkeypatch.delenv("HERON_CONVERSATION_ID")
+        importlib.reload(bridge)
