@@ -50,6 +50,14 @@ The group headings below give the level.
 The arrow is sized from DIMSCALE (a leader made over COM ignores the override). Dimensions made by
 `autocad_add_dimension` get DIMSCALE the same way.
 
+## Blocks from parts (Change)
+
+`autocad_make_block` turns drawn objects into a named block and puts one insert in their place
+(`keep_originals=true` only defines it). Use it for every separate part (fitting, elbow, clamp, plate,
+anchor); pipes and runs can stay as lines. More copies: `autocad_insert_block`; mirrored copies:
+`autocad_mirror_entities` on the insert. Labels: `text_align="right"` hangs a label from its
+top-right corner, for a tidy column left of a detail.
+
 ## Bulk drawing (Change)
 
 `autocad_batch_draw` sends one AutoLISP script that creates many entities inside AutoCAD. Use it for

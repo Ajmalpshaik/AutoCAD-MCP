@@ -4,6 +4,7 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- New `autocad_make_block`: parts become named blocks in place (D-24). Labels can hang right-aligned.
 - New `autocad_add_label`: MTEXT + LEADER in Ajmal's TLD style (L or angled), or a MULTILEADER;
   arrows and dimensions now take DIMSCALE (D-24).
 
