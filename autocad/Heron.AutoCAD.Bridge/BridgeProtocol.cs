@@ -109,8 +109,18 @@ namespace Heron.AutoCAD.Bridge
         {
             if (!RiskNames.TryParse(Str(root, "risk"), out var risk)) return Refuse("Level", Texts.UnknownRisk);
             if (!_hold.TryTake(conversation, _clock())) return Refuse("InUse", Texts.InUse);
-            var refusal = Permissions.Refusal(risk, _config());
+            var config = _config();
+            var refusal = Permissions.Refusal(risk, config);
             if (refusal != null) return Refuse(refusal.RefusedBy, refusal.Message);
+
+            // Told up front, so the server puts an UNDO mark down only for a
+            // job that will be asked about, and asks only then.
+            bool askToKeep;
+            lock (_grantGate)
+            {
+                var granted = _grantConversation == conversation && _clock() - _grantLast < KeepGrantIdle;
+                askToKeep = config.AskBeforeKeeping && !granted;
+            }
 
             var job = new JobInfo
             {
@@ -130,7 +140,7 @@ namespace Heron.AutoCAD.Bridge
                 // The banner is something to see, not a gate: a drawing glitch
                 // must not stop a job the padlocks allowed.
             }
-            return Ok(null);
+            return Ok(w => w.WriteBoolean("askToKeep", askToKeep));
         }
 
         private string End(JsonElement root, string conversation)

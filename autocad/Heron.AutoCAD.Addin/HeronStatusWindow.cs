@@ -30,7 +30,7 @@ namespace Heron.AutoCAD.Addin
                     break;
                 case HeronBridgeState.NotConnected:
                     body.Children.Add(HeronUi.Text("Not connected", 18, FontWeights.SemiBold));
-                    body.Children.Add(HeronUi.Text("This AutoCAD is private. No chat can see it or reach it until you connect."));
+                    body.Children.Add(HeronUi.Text("This AutoCAD is private. No chat can read your drawings or change them until you connect."));
                     break;
                 default:
                     body.Children.Add(HeronUi.Text("Heron did not start", 18, FontWeights.SemiBold));

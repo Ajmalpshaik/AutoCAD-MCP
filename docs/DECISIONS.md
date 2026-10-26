@@ -129,9 +129,22 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-18 - Discard goes back to an UNDO mark, and only on a clear answer
+
+**Decided:** 2026-10-26, after the final review. **Status:** in force. Supersedes the "UNDO 1" design.
+`UNDO 1` undid the plug-in's own zoom, missed layers a batch made, fired on delete previews that wrote
+nothing, and fired when the pipe broke. Now: the plug-in says at `begin` whether it will ask; only then
+the server puts `UNDO _Mark` down before the work; it asks only when the call really wrote (a write
+counter in `core/connection.py`); Discard is `UNDO _Back`, then the created handles must be gone; a
+failed question keeps the change and says so; UNDO off (UNDOCTL) means "cannot discard", said plainly.
+The Keep box closes itself as Discard after 9 minutes, before the server's 10, and a question the
+plug-in gave up on can never pop up later (`OneShotWork`).
+
 ## D-17 - Status always answers; resources go through the gate
 
 **Decided:** 2026-10-26. **Status:** in force.
-`autocad_status` runs even when AutoCAD is not connected, and adds `"heron": {connected, message}`,
-so a chat can always tell the modeller how to connect. MCP resources call the matching gated tools,
+`autocad_status` always answers with `"heron": {connected, message}`, so a chat can always tell the
+modeller how to connect. While AutoCAD is not connected it returns only that block, never the
+drawing's name, path or contents (changed after the final review); under `--no-bridge` it says
+Heron is off. MCP resources call the matching gated tools,
 so a resource read is refused and audited exactly like a tool call.

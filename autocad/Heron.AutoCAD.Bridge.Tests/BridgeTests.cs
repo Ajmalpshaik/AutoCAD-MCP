@@ -316,7 +316,7 @@ public class ServerTests : IDisposable
         Assert.True(server.IsRunning);
         var address = JsonDocument.Parse(File.ReadAllText(server.AddressPath)).RootElement;
         Assert.Equal(server.PipeName, address.GetProperty("pipeName").GetString());
-        Assert.Equal(Environment.ProcessId, address.GetProperty("pid").GetInt32());
+        Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().Id, address.GetProperty("pid").GetInt32());
         Assert.Equal(1, address.GetProperty("protocolVersion").GetInt32());
         var token = address.GetProperty("token").GetString();
 
@@ -399,7 +399,7 @@ public class CrossLanguageTests : IDisposable
                 UseShellExecute = false,
             };
             start.Environment["LOCALAPPDATA"] = _home;
-            start.Environment["HERON_TEST_PID"] = Environment.ProcessId.ToString();
+            start.Environment["HERON_TEST_PID"] = System.Diagnostics.Process.GetCurrentProcess().Id.ToString();
             using var process = System.Diagnostics.Process.Start(start)!;
             var stdout = process.StandardOutput.ReadToEnd();
             var stderr = process.StandardError.ReadToEnd();
@@ -417,5 +417,74 @@ public class CrossLanguageTests : IDisposable
         {
             server.Stop();
         }
+    }
+}
+
+public class AskToKeepFlagTests
+{
+    private const string Token = "tok";
+    private readonly FakeHost _host = new();
+    private readonly HeronConfig _config = new() { WriteEnabled = true };
+    private readonly BridgeProtocol _protocol;
+
+    public AskToKeepFlagTests() =>
+        _protocol = new BridgeProtocol(_host, () => _config, Token, new HeronHold(), () => DateTime.UtcNow);
+
+    private JsonElement Send(object request) => JsonDocument.Parse(_protocol.Handle(JsonSerializer.Serialize(request))).RootElement;
+
+    private bool BeginAsks() => Send(new
+    {
+        op = "begin", token = Token, conversation = "chat-a", job = "j", tool = "autocad_draw_line",
+        risk = "change", summary = "Draw Line", drawing = "a.dwg",
+    }).GetProperty("askToKeep").GetBoolean();
+
+    [Fact]
+    public void Begin_says_no_when_Ask_to_Keep_is_off() => Assert.False(BeginAsks());
+
+    [Fact]
+    public void Begin_says_yes_when_Ask_to_Keep_is_on()
+    {
+        _config.AskBeforeKeeping = true;
+        Assert.True(BeginAsks());
+    }
+
+    [Fact]
+    public void Begin_says_no_while_keep_the_rest_holds()
+    {
+        _config.AskBeforeKeeping = true;
+        _host.Answer = "keep_rest";
+        Send(new { op = "ask_keep", token = Token, conversation = "chat-a", job = "j", summary = "s", handles = new[] { "2A" } });
+        Assert.False(BeginAsks());
+    }
+}
+
+public class OneShotWorkTests
+{
+    [Fact]
+    public void Work_that_runs_in_time_gives_its_result()
+    {
+        var work = new OneShotWork<string>(() => "keep");
+        new Thread(work.Run).Start();
+        Assert.True(work.Wait(TimeSpan.FromSeconds(5), out var answer));
+        Assert.Equal("keep", answer);
+    }
+
+    [Fact]
+    public void Work_abandoned_before_it_starts_never_runs()
+    {
+        var ran = false;
+        var work = new OneShotWork<string>(() => { ran = true; return "keep"; });
+        Assert.False(work.Wait(TimeSpan.FromMilliseconds(50), out _));
+        work.Run(); // the main thread gets to it late
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public void Work_that_throws_is_not_a_result()
+    {
+        var work = new OneShotWork<string>(() => throw new InvalidOperationException("box failed"));
+        work.Run();
+        Assert.False(work.Wait(TimeSpan.FromSeconds(1), out _));
+        Assert.IsType<InvalidOperationException>(work.Error);
     }
 }

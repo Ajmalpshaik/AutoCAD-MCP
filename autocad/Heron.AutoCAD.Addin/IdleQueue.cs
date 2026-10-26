@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
-using System.Threading;
+using System.Windows.Threading;
+using Heron.AutoCAD.Bridge;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace Heron.AutoCAD.Addin
@@ -8,21 +9,24 @@ namespace Heron.AutoCAD.Addin
     /// <summary>
     /// Gets work from a pipe thread onto AutoCAD's main thread.
     ///
-    /// The AutoCAD API may only be touched from the main thread. The pipe
-    /// threads queue work here, and AutoCAD's Idle event drains the queue,
-    /// which only fires when AutoCAD is waiting for the user: never in the
-    /// middle of a command. Work that changes anything locks the document
-    /// itself.
+    /// The AutoCAD API may only be touched from the main thread. Pipe threads
+    /// queue work here, and AutoCAD's Idle event drains the queue; Idle only
+    /// fires when AutoCAD waits for the user, never in the middle of a command.
+    /// Idle fires when the message queue goes empty, so every Post also posts
+    /// an empty message to the main thread: without it, queued work could wait
+    /// for the next mouse move.
     /// </summary>
     internal static class IdleQueue
     {
         private static readonly ConcurrentQueue<Action> Work = new ConcurrentQueue<Action>();
+        private static Dispatcher? _main;
         private static bool _hooked;
 
         /// <summary>Call once, on the main thread.</summary>
         public static void Hook()
         {
             if (_hooked) return;
+            _main = Dispatcher.CurrentDispatcher;
             AcApp.Idle += OnIdle;
             _hooked = true;
         }
@@ -34,33 +38,35 @@ namespace Heron.AutoCAD.Addin
             _hooked = false;
         }
 
-        public static void Post(Action action) => Work.Enqueue(action);
+        public static void Post(Action action)
+        {
+            Work.Enqueue(action);
+            Wake();
+        }
 
-        /// <summary>Run on the main thread and wait for the result, up to <paramref name="timeout"/>.</summary>
+        /// <summary>
+        /// Run on the main thread and wait up to <paramref name="timeout"/>. Work
+        /// not started by then is abandoned and never runs later.
+        /// </summary>
         public static bool TryInvoke<T>(Func<T> func, TimeSpan timeout, out T result)
         {
-            var done = new ManualResetEventSlim(false);
-            var value = default(T)!;
-            Exception? error = null;
-            Work.Enqueue(() =>
+            var work = new OneShotWork<T>(func);
+            Post(work.Run);
+            var ok = work.Wait(timeout, out result);
+            if (work.Error != null) HeronLog.Error("Main-thread work failed", work.Error);
+            return ok;
+        }
+
+        private static void Wake()
+        {
+            try
             {
-                try
-                {
-                    value = func();
-                }
-                catch (Exception ex)
-                {
-                    error = ex;
-                }
-                finally
-                {
-                    done.Set();
-                }
-            });
-            var finished = done.Wait(timeout);
-            result = value;
-            if (error != null) HeronLog.Error("Main-thread work failed", error);
-            return finished && error == null;
+                _main?.BeginInvoke(DispatcherPriority.Background, new Action(() => { }));
+            }
+            catch (Exception ex)
+            {
+                HeronLog.Error("Wake the main thread", ex);
+            }
         }
 
         private static void OnIdle(object? sender, EventArgs e)
@@ -77,6 +83,7 @@ namespace Heron.AutoCAD.Addin
                     HeronLog.Error("Idle work failed", ex);
                 }
             }
+            if (!Work.IsEmpty) Wake();
         }
     }
 }

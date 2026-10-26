@@ -17,8 +17,9 @@ red and open = on**.
 | **Admin** | Allows any command, AutoLISP, system variables, purge, audit (needs Changes) | `HERONADMIN` |
 | **Ask to Keep** | After each change, ask Keep or Discard. Shows **Keep: rest of job** while a "keep the rest" answer holds | `HERONASKTOKEEP` |
 
-- AutoCAD starts **disconnected** every time (unless `bridge.autoConnect` is set). A session nobody
-  connected is invisible to every chat.
+- AutoCAD starts **disconnected** every time (unless `bridge.autoConnect` is set). Until you
+  connect, a chat can learn only that AutoCAD is running and not connected: `autocad_status` returns
+  no drawing name, path or contents, and every other tool is refused.
 - **Turning a padlock on asks first; turning it off never asks.** Ask to Keep is the other way round:
   switching the question *off* is what asks.
 - Reading and viewing (status, lists, measure, preview, zoom, switch drawing) need no padlock, only
@@ -31,7 +32,7 @@ red and open = on**.
 | State | Headline | Says | Buttons |
 |---|---|---|---|
 | Connected | **Connected** | A chat can reach this AutoCAD session. Nothing in your drawings changes unless Changes is on. | Close (default), Disconnect |
-| Not connected | **Not connected** | This AutoCAD is private. No chat can see it or reach it until you connect. | Connect this session, Close |
+| Not connected | **Not connected** | This AutoCAD is private. No chat can read your drawings or change them until you connect. | Connect this session, Close |
 | Did not start | **Heron did not start** | the error | Close, Open log folder |
 
 Below: one card per padlock (amber ON, grey OFF), then pipe, address file, process, AutoCAD, add-in
@@ -55,18 +56,26 @@ Switch it off with `"ui.activityBanner": false` in the config file.
 
 ## 4. Keep or Discard
 
-With Ask to Keep on, after every successful change Heron selects and zooms to what it made (up to
-500 objects), then asks **"Keep what Heron just did?"**:
+With Ask to Keep on, the plug-in says so when the job begins, and the server puts an **UNDO mark**
+down before the work. After a call that really changed something (a delete *preview* is not asked
+about), Heron selects and zooms to what it made (up to 500 objects), then asks
+**"Keep what Heron just did?"**:
 
 - **Keep it** - it stays as one undo step.
-- **Discard it** - one Undo puts the drawing back. The chat is told `Discarded: nothing was kept.`
+- **Discard it** - UNDO back to the mark puts the drawing (and the view) back. Heron then checks the
+  new objects are really gone before telling the chat `Discarded: nothing was kept.`; if they are
+  not, or UNDO is off in the drawing (UNDOCTL), it says so instead.
 - **Keep, and keep the rest of this job without asking** - no more questions until 10 quiet minutes.
 
-Closing the box, pressing Esc, or no answer within 10 minutes all mean **discard**.
+Closing the box, pressing Esc, or no answer within 9 minutes (the box closes itself) all mean
+**discard**. If the plug-in cannot be asked at all (the pipe broke), the change is **kept** and the
+chat is told so: nothing is ever undone on a guess.
 
 ## 5. One chat at a time
 
-A second chat is refused with *"This AutoCAD is in use by another chat. Nothing was sent to
+"Chat" here means one server connection: in Claude Code each chat starts its own server, so it is
+one chat; Claude Desktop and the HTTP transport serve several chats from one server, which then count
+as one. A second one is refused with *"This AutoCAD is in use by another chat. Nothing was sent to
 AutoCAD."* The hold frees itself after 3 quiet minutes, or when you disconnect.
 
 ## 6. How the server and the plug-in talk (protocol 1)
@@ -81,16 +90,18 @@ AutoCAD."* The hold frees itself after 3 quiet minutes, or when you disconnect.
 
 For each tool call the server ([`core/gate.py`](../src/autocad_mcp/core/gate.py)):
 
-1. finds the AutoCAD process behind COM (from its main window) and reads that AutoCAD's address file;
+1. looks up the AutoCAD process behind COM (from its main window) and reads that AutoCAD's address file;
 2. refuses a change if the active drawing is not the one Heron last looked at;
-3. sends `begin {tool, risk, summary, drawing}`: the plug-in checks token, hold and padlock, and
-   shows the banner, or refuses naming the padlock;
+3. sends `begin {tool, risk, summary, drawing}`: the plug-in checks token, hold and padlock, shows
+   the banner and answers whether it will ask Keep or Discard (`askToKeep`), or refuses naming the
+   padlock;
 4. runs the tool over COM, as one undo group;
-5. after a change, sends `ask_keep` (the plug-in answers `keep` at once if Ask to Keep is off);
+5. if `begin` said it will ask and the call wrote something, sends `ask_keep`; on Discard, UNDO back to the mark put down before step 4;
 6. sends `end`, and writes the audit line.
 
-Every refusal ends with **"Nothing was sent to AutoCAD."** and it is true: refusals happen before
-any COM work.
+Every refusal ends with **"Nothing was sent to AutoCAD."**: refusals happen before anything in the
+drawing is read or changed. The one thing Heron does first is look up which AutoCAD and which
+drawing is active (for the guard and the audit line).
 
 ## 7. Files on disk
 

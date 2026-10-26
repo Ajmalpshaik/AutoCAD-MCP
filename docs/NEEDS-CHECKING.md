@@ -22,6 +22,10 @@ folder.
 | A7 | Click **Changes** again | Off with no question | NOT RUN |
 | A8 | Ask to Keep on, Changes on, draw a circle, click **Discard it** | Circle selected and zoomed before the box; after Discard it is gone; chat says `Discarded: nothing was kept.` | NOT RUN |
 | A9 | Same, click **Keep, and keep the rest...**, then draw twice more | No more boxes; ribbon reads **Keep: rest of job** (within 15 s) | NOT RUN |
+| A8b | Ask to Keep on: draw, Keep; then draw again and Discard | Only the second drawing goes; the first stays; the view returns to where it was | NOT RUN |
+| A8c | Ask to Keep on: `autocad_batch_draw` with a new layer, Discard | Objects and the new layer both gone | NOT RUN |
+| A8d | Ask to Keep on: delete with `confirm=false` (preview) | No Keep box; nothing undone | NOT RUN |
+| A8e | Ask to Keep on: draw, then leave the mouse still | The Keep box appears at once, without moving the mouse | NOT RUN |
 | A10 | Open a second drawing in the same AutoCAD, make it active, ask to draw | Refused: active drawing changed from A to B; after "check status" the draw works | NOT RUN |
 | A11 | "Export to PDF" with Publish off, then on | Off: refused naming Publish. On: PDF written | NOT RUN |
 | A12 | "Run the LISP (+ 1 2)" with Admin off, then on | Off: refused naming Admin. On: 3 | NOT RUN |
@@ -39,7 +43,9 @@ Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026. **NO MACHINE.**
 
 ## Group C - AutoCAD 2021 to 2024 (.NET Framework 4.8 build)
 
-Rows C1-C19 = A1-A19 on each of 2021, 2022, 2023, 2024. **NO MACHINE.**
+Rows C1-C19 = A1-A19 on each of 2021, 2022, 2023, 2024. **NO MACHINE.** Look first at C1 and C3:
+the .NET Framework build loads System.Text.Json and its helpers from the bundle folder (an
+AssemblyResolve fallback), so a missing-DLL error would show there, in the add-in log.
 
 ## Server items not provable offline
 

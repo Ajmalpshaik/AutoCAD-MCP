@@ -25,6 +25,31 @@ namespace Heron.AutoCAD.Addin
 
         internal static HeronConfig LoadConfig() => HeronConfig.Load(HeronConfig.DefaultPath);
 
+        static HeronApplication()
+        {
+            // AutoCAD 2021-2024 run .NET Framework, where acad.exe carries no
+            // binding redirects for System.Text.Json's helpers (System.Memory,
+            // Unsafe ...). Resolve any of our own DLLs from this folder by name,
+            // whatever version was asked for.
+            AppDomain.CurrentDomain.AssemblyResolve += ResolveFromOwnFolder;
+        }
+
+        private static System.Reflection.Assembly? ResolveFromOwnFolder(object? sender, ResolveEventArgs args)
+        {
+            try
+            {
+                var name = new System.Reflection.AssemblyName(args.Name).Name;
+                var folder = System.IO.Path.GetDirectoryName(typeof(HeronApplication).Assembly.Location);
+                if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(folder)) return null;
+                var path = System.IO.Path.Combine(folder, name + ".dll");
+                return System.IO.File.Exists(path) ? System.Reflection.Assembly.LoadFrom(path) : null;
+            }
+            catch (System.Exception)
+            {
+                return null;
+            }
+        }
+
         public void Initialize()
         {
             try

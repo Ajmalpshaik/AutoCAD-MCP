@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
@@ -13,6 +14,12 @@ namespace Heron.AutoCAD.Addin
     {
         public const string Title = "Heron - keep this change?";
         public const string Headline = "Keep what Heron just did?";
+
+        /// <summary>
+        /// The box closes itself as Discard after this, shorter than the server's
+        /// own wait, so the answer always reaches the chat that asked.
+        /// </summary>
+        public static readonly TimeSpan Deadline = TimeSpan.FromMinutes(9);
 
         /// <summary>Main thread only. Returns keep | discard | keep_rest.</summary>
         public static string Ask(string summary, int count)
@@ -38,6 +45,10 @@ namespace Heron.AutoCAD.Addin
             body.Children.Add(discard);
             body.Children.Add(rest);
             window.Content = body;
+            var deadline = new System.Windows.Threading.DispatcherTimer { Interval = Deadline };
+            deadline.Tick += (s, e) => { deadline.Stop(); answer = "discard"; window.Close(); };
+            window.Loaded += (s, e) => deadline.Start();
+            window.Closed += (s, e) => deadline.Stop();
             AcApp.ShowModalWindow(AcApp.MainWindow.Handle, window, false);
             return answer;
         }

@@ -14,7 +14,9 @@ namespace Heron.AutoCAD.Addin
     internal sealed class AcadJobHost : IJobHost
     {
         private const int MostToHighlight = 500;
-        private static readonly TimeSpan KeepWait = TimeSpan.FromMinutes(10);
+        // Longer than the box's own deadline (it closes as Discard first), shorter
+        // than the server's wait, so a question can never outlive its chat.
+        private static readonly TimeSpan KeepWait = HeronKeepQuestion.Deadline + TimeSpan.FromSeconds(30);
         private readonly HeronActivityBanner _banner;
         private readonly Func<HeronConfig> _config;
 
