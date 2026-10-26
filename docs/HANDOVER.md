@@ -23,7 +23,7 @@
 
 ## Next, in order
 
-1. Remaining 2027 rows: A8e, A15 (two AutoCADs), A16 (two chats), A19 (CCTV generator), A18 Enter.
+1. Remaining 2027 rows: A15 (two AutoCADs at once), A9 ribbon label, A8e confirmation.
 2. Run the remaining 2027 rows (A8e, A15, A16, A19, A20); restart AutoCAD first so the
    double-click fix (D-20) is loaded. Live checks are driven with one server for several calls
    (`HERON_CONVERSATION_ID` keeps one chat id across scripts).
