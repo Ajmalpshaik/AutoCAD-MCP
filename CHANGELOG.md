@@ -4,6 +4,8 @@ Newest first. Dates are when the change was made.
 
 ## 2026-10-26 - Repository and documentation
 
+- Made the repository public ([D-10](docs/DECISIONS.md)).
+
 - Put the project under git and pushed it to a private GitHub repository, `Ajmalpshaik/AutoCAD-MCP`.
 - Re-arranged the folders into parts, the way Heron AI is laid out ([D-05](docs/DECISIONS.md)):
   `drawings/source/` -> `generators/`, the AHU outputs -> `drawings/AHU/`, `scripts/` -> `tools/`,

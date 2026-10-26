@@ -66,3 +66,13 @@ for reference; never build on it.
 **Decided:** 2026-10-26. **Status:** in force.
 `Ajmalpshaik/AutoCAD-MCP`, private. DWG, PDF and PNG outputs are committed (about 10 MB) so the
 packages are kept with the code that made them. AutoCAD `.bak` / `.dwl` files and the `.venv` are not.
+Visibility superseded by [D-10](#d-10---repository-made-public).
+
+## D-10 - Repository made public
+
+**Decided:** 2026-10-26, on Ajmal's instruction "make it public". **Status:** in force. Supersedes the
+*private* part of D-09.
+Checked before switching: no keys, passwords or e-mail addresses in the files or history; the CCTV
+package uses a sample client; the pole-enclosure sheet's client, location and consultant are still
+`TBC`. **When those TBCs are filled with a real client's details, think before committing them here:
+the repository is public.**

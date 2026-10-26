@@ -1,7 +1,8 @@
 # AutoCAD MCP
 
-> **Private repository.** This is Ajmal's working copy of the AutoCAD MCP server and the drawing
-> packages made with it. It is not published and not ready for anyone else to install.
+> **Public, but still a work in progress.** This is Ajmal's working copy of the AutoCAD MCP server
+> and the drawing packages made with it. You are welcome to read it, try it and share ideas through
+> an Issue, but expect things to change.
 
 **An MCP server that lets Claude drive the AutoCAD already open on your machine.**
 

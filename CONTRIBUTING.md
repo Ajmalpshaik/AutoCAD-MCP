@@ -1,7 +1,7 @@
 # Contributing
 
-This is a private, single-owner repository. These are the house rules for any change, by a person or
-an AI agent.
+This is a public, single-owner repository. Ideas and corrections are welcome through an Issue. These
+are the house rules for any change, by a person or an AI agent.
 
 ## Before you change anything
 

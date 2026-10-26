@@ -30,4 +30,5 @@ it, rotate it, and tell the owner.
 
 ## Reporting a problem
 
-Private repository: tell the owner directly, or open a private issue on the repository.
+Do **not** open a public issue for a security problem. Use GitHub's private vulnerability reporting
+(the repository's **Security** tab -> **Report a vulnerability**), or contact the owner directly.
