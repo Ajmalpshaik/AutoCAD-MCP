@@ -40,14 +40,25 @@ namespace Heron.AutoCAD.Addin
             keep.Click += (s, e) => { answer = "keep"; window.Close(); };
             discard.Click += (s, e) => { answer = "discard"; window.Close(); };
             rest.Click += (s, e) => { answer = "keep_rest"; window.Close(); };
+            // The keyboard works too (live, 2026-10-26: only the mouse did):
+            // Enter keeps, Esc discards, arrows and Tab move between choices.
+            keep.IsDefault = true;
             discard.IsCancel = true;
+            System.Windows.Input.KeyboardNavigation.SetDirectionalNavigation(body, System.Windows.Input.KeyboardNavigationMode.Cycle);
             body.Children.Add(keep);
             body.Children.Add(discard);
             body.Children.Add(rest);
             window.Content = body;
             var deadline = new System.Windows.Threading.DispatcherTimer { Interval = Deadline };
             deadline.Tick += (s, e) => { deadline.Stop(); answer = "discard"; window.Close(); };
-            window.Loaded += (s, e) => deadline.Start();
+            window.Loaded += (s, e) =>
+            {
+                deadline.Start();
+                // AutoCAD keeps the keyboard unless the box takes it.
+                window.Activate();
+                keep.Focus();
+                System.Windows.Input.Keyboard.Focus(keep);
+            };
             window.Closed += (s, e) => deadline.Stop();
             AcApp.ShowModalWindow(AcApp.MainWindow.Handle, window, false);
             return answer;
