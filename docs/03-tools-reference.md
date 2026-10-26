@@ -37,6 +37,27 @@ The group headings below give the level.
 `autocad_draw_arc`, `autocad_draw_ellipse`, `autocad_draw_point`, `autocad_add_text`,
 `autocad_add_mtext`, `autocad_add_dimension`, `autocad_insert_block`, `autocad_add_hatch`
 
+## Labels (Change)
+
+`autocad_add_label` puts a label on something: MTEXT plus a leader with an arrow. Use it for every label.
+
+| Option | Meaning |
+|---|---|
+| `kind="leader"` (default) | Ajmal's TLD style (TextLeader_V4.lsp): MTEXT and a LEADER on the text's layer, ending under the text between line 1 and line 2, full width + `extension` x text height each side |
+| `shape="L"` / `"angled"` | Square leg from the arrow, or straight to the near end of the text. Use `angled` for a column of labels |
+| `kind="mleader"` | One MULTILEADER with the text as its content |
+
+The arrow is sized from DIMSCALE (a leader made over COM ignores the override). Dimensions made by
+`autocad_add_dimension` get DIMSCALE the same way.
+
+## Blocks from parts (Change)
+
+`autocad_make_block` turns drawn objects into a named block and puts one insert in their place
+(`keep_originals=true` only defines it). Use it for every separate part (fitting, elbow, clamp, plate,
+anchor); pipes and runs can stay as lines. More copies: `autocad_insert_block`; mirrored copies:
+`autocad_mirror_entities` on the insert. Labels: `text_align="right"` hangs a label from its
+top-right corner, for a tidy column left of a detail.
+
 ## Bulk drawing (Change)
 
 `autocad_batch_draw` sends one AutoLISP script that creates many entities inside AutoCAD. Use it for
@@ -82,6 +103,31 @@ nothing.
 
 `autocad_send_command` refuses commands known to open a modal dialog and names the command-line
 alternative, because a dialog blocks COM until a person closes it.
+
+## Take-off, text and placement (from the [Lee Mac study](08-lee-mac-study.md); our own code)
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_count_blocks` | Read | Count blocks by real name (dynamic too); group by name, layer, visibility or properties; `include_nested` |
+| `autocad_total_length` | Read | Total length per layer or type, area of closed shapes; splines and ellipses measured |
+| `autocad_get_dynamic_properties` | Read | A dynamic block's properties: value, allowed choices, read-only |
+| `autocad_count_text` | Read | Count text / tag values (`source`, `tag`, `pattern`), optional `sum_numeric` |
+| `autocad_polyline_info` | Read | Vertices, segments (arcs: centre, radius, sweep), total, area, centroid |
+| `autocad_select_connected` | Read | A whole run joined end to end: handles, total length, open ends |
+| `autocad_list_layouts` | Read | Layouts in tab order with plotter, paper, object count |
+| `autocad_set_dynamic_properties` | Change | Set visibility, size, distance, flip; typed and checked; failures listed |
+| `autocad_set_attributes` | Change | Attributes from `values`, `rows` or `csv_path`, matched by `key` (a tag or `layout`); `dry_run` |
+| `autocad_number_tags` | Change | Prefix + padded number + suffix on blocks (`tag`), texts or new text; sort rows / columns / path |
+| `autocad_text_clean` | Change | Strip MText formatting codes; `dry_run` |
+| `autocad_find_replace_text` | Change | Find / replace (plain or regex) in text, mtext, attributes, mleaders, dim overrides, tables; `dry_run` |
+| `autocad_align_text` | Change | Line up (left, right, centre, top, bottom, middle) or space evenly; the first object stays put |
+| `autocad_add_field_label` | Change | Live Length / Area field (sum of several) in new text or an attribute; `factor` for m / m2 |
+| `autocad_label_segment_lengths` | Change | Length at each segment's middle; `split_at_layer` splits at crossings |
+| `autocad_place_along` | Change | Blocks along a run by `spacing` (equal ends) or `count`; `align` turns them to the run |
+| `autocad_place_from_csv` | Change | Blocks at x, y (rotation, block) from a CSV; other columns fill attributes |
+| `autocad_break_at_blocks` | Change | Cut lines / straight polylines through block extents + `gap` |
+| `autocad_import_from_drawing` | Change | Blocks, layers, linetypes, text / dim styles from a closed DWG; existing names skipped |
+| `autocad_manage_layouts` | Change | Order, renumber, rename layouts; copy paper-space objects to other layouts |
 
 ## Seeing and checking (Read)
 

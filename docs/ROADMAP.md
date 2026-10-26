@@ -21,8 +21,19 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   centre it, landscape when the drawing is wide.
 - [ ] **Choose which AutoCAD** when several are open (like Heron's `revit_use_session`): today the server always takes the one COM hands it, usually the first started (A15).
 - [ ] Remaining live rows: A9 ribbon label, A8e confirmation.
+- [x] `autocad_list_blocks` listed blank names and lost changed dynamic copies (`*U` names): now
+  counted by real name, blank names skipped, `dynamic` flag added (A28).
+- [x] `autocad_insert_block` with a forward-slash .dwg path failed "Key not found": paths are now
+  normalised to backslashes (A28).
+- [x] "Object invoked has disconnected" (RPC_E_DISCONNECTED) is now treated as a dead pointer:
+  re-dispatch and retry. The live export test no longer fails in the full suite.
 
 ## Server
+
+- [x] Dynamic blocks: read and set properties (`autocad_get/set_dynamic_properties`). Authoring
+  parameters and actions has no API; it stays a Block Editor job.
+- [x] The Lee Mac ideas: all built ([08](08-lee-mac-study.md)).
+- [ ] `autocad_break_at_blocks` for polylines with arcs, through the plug-in's curve splitting.
 
 - [ ] `autocad_batch_draw`: hatch, mtext and dimension operations.
 - [ ] Draw an attribute schedule as an AutoCAD table (a CHANGE tool beside `autocad_extract_attributes`).

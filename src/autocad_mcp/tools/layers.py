@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 from pydantic import Field, StrictInt
 
-from ..acad.selection import discard_selection_set, select_filtered
+from ..acad.selection import discard_selection_set, iter_selection, select_filtered
 from ..acad.tables import describe_layer, ensure_layer, ensure_linetype, validate_name
 from ..core.connection import get_doc, run
 from ..core.errors import AutocadError, com_message
@@ -471,6 +471,27 @@ async def autocad_delete_layer(
     return dumps(await run(work))
 
 
+def _count_by_effective_name(doc: Any) -> dict[str, int]:
+    """Placed references per block, by real name.
+
+    A dynamic block's changed copies are renamed *U.. by AutoCAD, so a
+    selection filtered on the block's name misses them; EffectiveName does not.
+    One pass over every insert, instead of one selection per definition.
+    """
+    counts: dict[str, int] = {}
+    sel = select_filtered(doc, "block", name="MCP_BLOCK_COUNT")
+    try:
+        for ref in iter_selection(sel):
+            try:
+                name = str(getattr(ref, "EffectiveName", None) or ref.Name).lower()
+            except BaseException:  # noqa: BLE001 - not a block reference after all
+                continue
+            counts[name] = counts.get(name, 0) + 1
+    finally:
+        discard_selection_set(doc, "MCP_BLOCK_COUNT")
+    return counts
+
+
 @mcp.tool(
     name="autocad_list_blocks",
     **tool_meta("List Block Definitions", read_only=True, idempotent=True),
@@ -509,6 +530,7 @@ async def autocad_list_blocks(
              "entity_count": int,           # entities in the definition
              "instances": int,              # times placed in the drawing
              "is_xref": bool,
+             "dynamic": bool,               # a dynamic block
              "attribute_tags": [str],
              "path": str}]}                 # xrefs only
 
@@ -519,11 +541,13 @@ async def autocad_list_blocks(
 
     def work() -> dict[str, Any]:
         doc = get_doc()
+        instances = _count_by_effective_name(doc) if include_counts else {}
         blocks = []
         for i in range(doc.Blocks.Count):
             block = doc.Blocks.Item(i)
             name = str(block.Name)
-            if name.startswith("*"):
+            # Blank names come in with some library drawings; nothing can insert them.
+            if not name.strip() or name.startswith("*"):
                 continue
             try:
                 if bool(block.IsLayout):
@@ -542,6 +566,10 @@ async def autocad_list_blocks(
                     info["path"] = str(block.Path)
             except BaseException:  # noqa: BLE001
                 info["is_xref"] = False
+            try:
+                info["dynamic"] = bool(block.IsDynamicBlock)
+            except BaseException:  # noqa: BLE001
+                info["dynamic"] = False
 
             # Attribute definitions inside the block tell the caller which tags
             # autocad_insert_block can fill in.
@@ -557,13 +585,7 @@ async def autocad_list_blocks(
                 info["attribute_tags"] = tags
 
             if include_counts:
-                sel = select_filtered(
-                    doc, "block", None, name, None, name="MCP_BLOCK_COUNT"
-                )
-                try:
-                    info["instances"] = int(sel.Count)
-                finally:
-                    discard_selection_set(doc, "MCP_BLOCK_COUNT")
+                info["instances"] = instances.get(name.lower(), 0)
                 if not include_unused and info["instances"] == 0:
                     continue
 

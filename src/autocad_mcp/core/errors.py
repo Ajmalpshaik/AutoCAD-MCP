@@ -33,6 +33,13 @@ RETRYABLE_HRESULTS = {
 }
 
 
+# HRESULTs meaning the pointer itself is dead: AutoCAD dropped the proxy (seen
+# while a drawing opens). The cure is a fresh dispatch, same as StaleDispatchError.
+DEAD_POINTER_HRESULTS = {
+    -2147417848,  # 0x80010108 RPC_E_DISCONNECTED
+}
+
+
 class AutocadError(Exception):
     """An AutoCAD operation that could not be completed.
 
@@ -89,6 +96,8 @@ def is_dispatch_failure(exc: BaseException) -> bool:
     by re-dispatching and trying again.
     """
     if isinstance(exc, StaleDispatchError):
+        return True
+    if hresult_of(exc) in DEAD_POINTER_HRESULTS:
         return True
     if isinstance(exc, AttributeError):
         message = str(exc).strip()

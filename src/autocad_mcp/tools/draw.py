@@ -845,6 +845,15 @@ async def autocad_add_dimension(
 
             if text_override:
                 entity.TextOverride = text_override
+            # A dimension made over COM ignores the DIMSCALE override, so its
+            # text and arrows come out at plain style size (tiny in a 1:10 mm
+            # detail, seen live 2026-10-26). Give it the drawing's DIMSCALE.
+            try:
+                scale = float(doc.GetVariable("DIMSCALE") or 0.0)
+                if scale > 0:
+                    entity.ScaleFactor = scale
+            except Exception:  # noqa: BLE001 - keep the dimension at its style size
+                pass
             notes = apply_properties(doc, entity, layer, None, None)
 
         info = describe(entity)
@@ -861,6 +870,18 @@ async def autocad_add_dimension(
 # ---------------------------------------------------------------------------
 # Blocks and hatching
 # ---------------------------------------------------------------------------
+
+
+def dwg_path(raw: str) -> str:
+    """A .dwg path as AutoCAD's InsertBlock accepts it.
+
+    InsertBlock answers "Key not found" to forward slashes (measured on
+    AutoCAD 2027), so the path is normalised to backslashes.
+    """
+    resolved = os.path.normpath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
+    if not os.path.isfile(resolved):
+        raise AutocadError(f"No .dwg file exists at '{resolved}'.")
+    return resolved
 
 
 @mcp.tool(
@@ -932,10 +953,7 @@ async def autocad_insert_block(
 
         name = block_name.strip().strip('"')
         if name.lower().endswith(".dwg"):
-            resolved = os.path.expandvars(os.path.expanduser(name))
-            if not os.path.isfile(resolved):
-                raise AutocadError(f"No .dwg file exists at '{resolved}'.")
-            name = resolved
+            name = dwg_path(name)
         else:
             try:
                 doc.Blocks.Item(name)

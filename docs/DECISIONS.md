@@ -129,6 +129,36 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-26 - Lee Mac's ideas are rebuilt as Heron tools; his code never enters the repository
+
+**Decided:** 2026-10-26, Ajmal: *"study lee-mac.com word by word ... make it part of this mcp"*.
+**Status:** in force.
+His terms need written consent to redistribute and forbid commercial use, which this public MIT
+repository cannot promise, so no Lee Mac code is copied, translated or bundled. Each idea is written
+fresh from the AutoCAD ActiveX reference, tested without AutoCAD, and credited in
+[08](08-lee-mac-study.md). First four: count blocks, total length, dynamic block get and set; the rest followed the same
+day (every idea on the list, plus add-ons), with the shared geometry in `acad/geometry.py`.
+
+## D-25 - The drafting rules ship inside Heron
+
+**Decided:** 2026-10-26, Ajmal: *"bring that drafting rules also"*, after asking whether anyone who
+downloads Heron gets the same neat drawings. **Status:** in force.
+The rules lived only in one chat. They are now in the server's instructions (sent to every AI on
+connect) and the `draw_detail` prompt, with [07](07-drafting-rules.md) as the readable copy. Lee Mac's
+programs are studied for ideas only: his licence allows private/organisation use and forbids
+redistribution, and this repository is public, so his code is never copied in; ideas are
+re-implemented and credited.
+
+## D-24 - Labels are leaders in Ajmal's TLD style, or multileaders; parts are blocks
+
+**Decided:** 2026-10-26, on Ajmal's instructions after the roof pipe-support detail: labels must be
+real leaders ("L shaped, and angled if needed ... multileader also, both options"), following his
+`TextLeader_V4.lsp`; and *"elbows and everything should be blocks ... otherwise the manual drawing
+person cannot do anything"*. **Status:** in force.
+`autocad_add_label` makes MTEXT + LEADER (TLD geometry, `shape` L or angled) or one MLEADER. Leaders and
+dimensions made over COM get the drawing's DIMSCALE, which COM does not apply. A "make block from
+objects" tool comes next, so details are built from named blocks instead of loose lines.
+
 ## D-23 - The generator scripts are removed
 
 **Decided:** 2026-10-26, on Ajmal's instruction: *"Remove all generators, including the folder."*

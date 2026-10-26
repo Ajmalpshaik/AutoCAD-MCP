@@ -54,3 +54,32 @@ def draw_from_spec(spec: str) -> str:
         "look at the picture before you tell me it is done. If Changes is off, tell me to turn it "
         "on with the Changes padlock on the Heron tab."
     )
+
+
+@mcp.prompt(name="draw_detail", description="Draw a construction or installation detail the way a senior draftsman would.")
+def draw_detail(subject: str, scale: str = "1:10") -> str:
+    return (
+        f"Draw a detail of: {subject}. Drawing scale {scale}.\n\n"
+        "Work like a senior draftsman, in this order:\n"
+        "1. Call autocad_status: confirm the drawing and its units. Draw in the open drawing "
+        "unless asked for a new one. Set DIMSCALE and LTSCALE to the scale factor.\n"
+        "2. Plan the sheet first: elevation (or section) as the main view, plan directly under "
+        "it on the same centre line, notes to the right aligned with the top, labels in one "
+        "column beside the main view, dimensions on the other side.\n"
+        "3. Layers per discipline (structure, steel, piping, waterproofing, annotation, "
+        "dimensions, hidden, centre lines).\n"
+        "4. Draw each part, then turn it into a named block with autocad_make_block "
+        "(e.g. 'BASE PLATE 250x250x12'). Insert repeats with autocad_insert_block, opposite "
+        "hands with autocad_mirror_entities. Runs (pipe, duct, membrane) stay lines.\n"
+        "5. Hatch concrete, grout and insulation; existing structure may stay loose.\n"
+        "6. Labels with autocad_add_label in the user's TLD style (shape 'angled' in a column, "
+        "'L' for a single label): one tidy column, evenly spaced, same top-to-bottom order as "
+        "the parts, short leaders, no crossings. text_align='right' for a column on the left.\n"
+        "7. Dimensions: grouped, aligned, whole numbers (text_override for a rounded or "
+        "described value such as '974 TO PIPE C/L').\n"
+        "8. Titles: underlined view title, smaller 'SCALE " + scale + "' line under it.\n"
+        "9. Notes: numbered, plain, under an underlined heading.\n"
+        "10. Call autocad_preview and look as a senior draftsman: overlaps, crossings, text on "
+        "lines, crowded spots, unbalanced layout. Fix them, then preview again before reporting.\n"
+        "Never draw parts as loose lines. Never fake a leader with a line and a text."
+    )
