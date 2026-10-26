@@ -7,10 +7,61 @@ connected to Heron, and it is audited the same way.
 
 from __future__ import annotations
 
-from ..core.registry import mcp
+import re
+
+from ..core.registry import dumps, mcp
+from ..core.risk import RISK, Risk
 from . import document, layers
 
 _JSON = "application/json"
+
+# What each padlock means, in the words the ribbon uses.
+_PADLOCK = {
+    Risk.READ: "none - reads the drawing",
+    Risk.VIEW: "none - changes only what is on screen",
+    Risk.CHANGE: "Changes",
+    Risk.PUBLISH: "Changes + Publish",
+    Risk.ADMIN: "Changes + Admin",
+}
+
+# The first line of a tool's docstring, and its "Use when" bullets.
+_USE_WHEN = re.compile(r"^\s*- (Use when|Don't use when):\s*(.*)$")
+
+
+def _summary(description: str) -> str:
+    """The tool's one-line summary: the first line of its docstring."""
+    for line in description.splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
+def _use_when(description: str) -> list[str]:
+    """The Examples bullets, each joined back into one line.
+
+    A bullet wraps over several source lines, and the SDK hands the docstring
+    back dedented, so a continuation is any line indented deeper than the
+    bullet that owns it. Rejoining them means the index reads as sentences
+    rather than as a column of half-finished ones.
+    """
+    found: list[str] = []
+    depth = 0
+    for line in description.splitlines():
+        indent = len(line) - len(line.lstrip())
+        match = _USE_WHEN.match(line)
+        if match:
+            found.append(f"{match.group(1)}: {match.group(2)}".rstrip())
+            depth = indent
+            continue
+        if not found:
+            continue
+        if not line.strip():
+            continue
+        if indent > depth:
+            found[-1] = f"{found[-1]} {line.strip()}"
+        else:
+            break  # a new section started; the examples are finished
+    return found
 
 
 @mcp.resource("autocad://drawing/status", name="drawing_status", description="Connection, active drawing, units.", mime_type=_JSON)
@@ -31,6 +82,48 @@ async def drawing_blocks() -> str:
 @mcp.resource("autocad://drawing/styles", name="drawing_styles", description="Text styles, dimension styles, linetypes.", mime_type=_JSON)
 async def drawing_styles() -> str:
     return await layers.autocad_list_styles()
+
+
+@mcp.resource("autocad://tools", name="tool_index", description="Every tool, grouped by the padlock it needs, with when to use it. Needs no AutoCAD.", mime_type=_JSON)
+async def tool_index() -> str:
+    """The whole toolbox in one place, so the right tool is quick to find.
+
+    101 tools is more than anyone holds in their head. This lists every one
+    with its padlock, its one-line summary and its "Use when" lines, grouped
+    by padlock so what a job needs is obvious before it is tried.
+
+    It is built from the live registry, so it cannot go stale: a tool added,
+    renamed or re-levelled shows up here with no second edit.
+
+    Unlike the other resources it touches no drawing, so it is **not gated**:
+    it answers before AutoCAD is open and before Heron is pressed.
+    """
+    groups: dict[str, list[dict[str, object]]] = {}
+    for tool in await mcp.list_tools():
+        level = RISK.get(tool.name, Risk.ADMIN)
+        description = tool.description or ""
+        groups.setdefault(level.value, []).append({
+            "tool": tool.name,
+            "title": tool.title or "",
+            "summary": _summary(description),
+            "use_when": _use_when(description),
+        })
+    order = [r.value for r in (Risk.READ, Risk.VIEW, Risk.CHANGE, Risk.PUBLISH, Risk.ADMIN)]
+    return dumps({
+        "count": sum(len(v) for v in groups.values()),
+        "padlocks": {
+            level: {
+                "needs": _PADLOCK[Risk(level)],
+                "count": len(groups.get(level, [])),
+                "tools": sorted(groups.get(level, []), key=lambda row: str(row["tool"])),
+            }
+            for level in order
+        },
+        "note": (
+            "A tool's padlock is a property of the tool, not of the request, so nothing you "
+            "write can raise or lower it. Turn a padlock on from the Heron tab in AutoCAD."
+        ),
+    })
 
 
 @mcp.prompt(name="check_standards", description="Check the open drawing against a layer standard and show the result.")

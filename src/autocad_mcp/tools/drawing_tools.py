@@ -94,6 +94,11 @@ async def autocad_import_from_drawing(
 
     Returns:
         JSON: {"imported": [...], "skipped_existing": [...], "not_found": [...]}
+
+    Examples:
+        - Use when: "bring the title block and the layer standard in from our
+          template" -> the blocks, layers and styles, not the geometry.
+        - Use when: starting a drawing that must match an existing set.
     """
     patterns = names or ["*"]
 
@@ -143,6 +148,12 @@ async def autocad_list_layouts() -> str:
 
     Returns:
         JSON: {"count", "layouts": [{name, tab_order, objects, plotter, paper}]}
+
+    Examples:
+        - Use when: "what sheets are in this drawing" -> tab order, paper
+          size, plotter, how much is on each.
+        - Use when: before a sheet-set job, to see which sheets are set up
+          wrong.
     """
 
     def work() -> dict[str, Any]:
@@ -181,6 +192,11 @@ async def autocad_manage_layouts(
 
     Returns:
         JSON: {"renamed": {old: new}, "order": [...], "copied": {layout: [handles]}}
+
+    Examples:
+        - Use when: "put the sheets in order and renumber them" across a
+          package.
+        - Use when: "copy this north arrow onto every sheet".
     """
 
     def work() -> dict[str, Any]:

@@ -246,8 +246,16 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 | `autocad://drawing/layers` | `autocad_list_layers` |
 | `autocad://drawing/blocks` | `autocad_list_blocks` |
 | `autocad://drawing/styles` | `autocad_list_styles` |
+| `autocad://tools` | **the toolbox index** — not a drawing read, so it needs no AutoCAD |
 
-They call the gated tools, so they are refused the same way while AutoCAD is not connected.
+The four drawing resources call the gated tools, so they are refused the same way while AutoCAD is
+not connected.
+
+`autocad://tools` is the one that is not about the drawing: every tool grouped by the padlock it
+needs, with its one-line summary and its **`Use when`** lines. It is built from the live registry,
+so it cannot drift from the code, and it answers before Heron is pressed. Each tool's own
+`Use when:` / `Don't use when:` bullets name the better tool when there is one — which is how 101
+tools stay findable. A tool without them fails `tests/test_tool_index.py`.
 
 A prompt is a whole job written out in the right order, so the AI does not have to work out which
 of the tools to reach for or what to check afterwards. Pick one in your client and fill in its

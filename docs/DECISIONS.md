@@ -129,6 +129,34 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-32 - A tool is not a fragment, but it carries the same five padlocks
+
+**Decided:** 2026-10-26, on Ajmal's question: "these tools, it is same like
+fragments in Heron AI - am I right?". **Status:** in force.
+
+Checked, not assumed. `archive/revit_encl/heron_send.py` sends Heron AI's
+fragments as five operations - `run_fragment_read`, `run_fragment_show`,
+`run_fragment_write`, `run_fragment_publish`, `run_fragment_admin`. This
+server's `core/risk.py` carries exactly those five: **READ / VIEW / CHANGE /
+PUBLISH / ADMIN**, where VIEW is Heron's `show`. Same five, same order, same
+meaning. So the padlock idea is shared, and it should stay shared: if Heron
+adds a level, this repo follows.
+
+**The unit of work is not the same.** A Heron fragment is C# **source sent in
+at run time**: `heron_send.py` reads a `.cs` file and passes `source`, `needs`,
+`values` and `apply`, and Revit compiles and runs it. A tool here is a fixed
+function already compiled into the server, with a Pydantic schema, a level and
+tests. Nothing new can be sent in - except `autocad_run_lisp`, which is
+precisely why that one is ADMIN.
+
+**Which is why findability is the work, not more tools.** A fragment is written
+for the job, so it is always exactly right and never has to be found. A fixed
+set of 101 has the opposite problem: the right tool exists and nobody can see
+it. So every tool carries `Use when:` bullets in a draftsman's own words, with
+`Don't use when:` naming the better tool, and `autocad://tools` lists the lot
+grouped by padlock, built from the live registry so it cannot go stale.
+`tests/test_tool_index.py` makes it a rule rather than a habit.
+
 ## D-31 - Looking at a model in 3D is a View tool
 
 **Decided:** 2026-10-26. **Status:** in force.

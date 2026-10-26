@@ -215,6 +215,12 @@ async def autocad_set_attributes(
 
     Returns:
         JSON: {"changed": n, "changes": [{handle, block, layout, tag, old, new}], "unknown_tags", "unmatched_rows"}
+
+    Examples:
+        - Use when: "fill the title block on every sheet with this drawing
+          number and date".
+        - Don't use when: you are placing the title block for the first time -
+          autocad_place_title_block fills it as it goes.
     """
     if csv_path:
         rows = (rows or []) + _read_rows(csv_path)
@@ -265,6 +271,11 @@ async def autocad_number_tags(
 
     Returns:
         JSON: {"numbered": n, "assigned": [{handle, number}]}
+
+    Examples:
+        - Use when: "number these cameras CAM-001 upwards, left to right".
+        - Use when: a schedule needs tags that match the drawing: number them
+          here first, then autocad_extract_attributes for the table.
     """
     if not handles and not positions:
         raise AutocadError("Give 'handles' (existing blocks or texts) or 'positions' (new text).")
@@ -334,6 +345,11 @@ async def autocad_count_text(
 
     Returns:
         JSON: {"total", "distinct", "counts": {value: n}, "sum"?}
+
+    Examples:
+        - Use when: "how many DN50 on this drawing" -> the tag values counted
+          and grouped.
+        - Don't use when: you are counting symbols - autocad_count_blocks.
     """
     regex = re.compile(pattern, re.IGNORECASE) if pattern else None
 
@@ -378,6 +394,11 @@ async def autocad_text_clean(
 
     Returns:
         JSON: {"cleaned": n, "items": [{handle, before, after}]}
+
+    Examples:
+        - Use when: text pasted from Word or Excel keeps its own font, colour
+          or height and ignores the drawing's style.
+        - Use when: an import's notes plot the wrong size for no clear reason.
     """
     if not handles and not layer:
         raise AutocadError("Give 'handles', or a 'layer' to clean every MText on it.")
@@ -431,6 +452,12 @@ async def autocad_find_replace_text(
 
     Returns:
         JSON: {"replaced": n, "hits": [{handle, kind, where, before, after}]}
+
+    Examples:
+        - Use when: "change every REV A to REV B across the whole sheet set",
+          including attributes and dimension overrides.
+        - Use when: a client renames a room or a system and it appears in
+          thirty places.
     """
     wanted = set(kinds or ["text", "mtext", "attribute", "mleader", "dimension", "table"])
     try:
@@ -499,6 +526,11 @@ async def autocad_align_text(
 
     Returns:
         JSON: {"moved": n, "moves": {handle: [dx, dy]}}
+
+    Examples:
+        - Use when: "tidy that column of labels so they line up left" and the
+          leaders stop crossing.
+        - Use when: "space these notes evenly" -> the even-spacing mode.
     """
 
     def work() -> dict[str, Any]:

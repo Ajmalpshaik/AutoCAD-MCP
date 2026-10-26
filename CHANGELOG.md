@@ -2,6 +2,50 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.5.0 - 2026-10-26 - 101 tools you can actually find
+
+No new tools. A toolbox nobody can search is worse than a small one, and 47
+of the 101 did not say what they were for.
+
+- **Every tool now says when to use it.** All 101 carry an `Examples:`
+  section whose bullets are in the words a draftsman would use - *"how many
+  metres of DN50 pipe on this layer"*, *"this detail came in at 1:10, make it
+  full size"* - and a **`Don't use when:`** naming the better tool where there
+  is one (`autocad_count_text` points at `autocad_count_blocks`;
+  `autocad_set_variable` points at `autocad_drawing_setup`, which needs only
+  the Changes padlock; `autocad_delete_layer` points at freezing instead).
+  47 were written for this release; one that was prose became a bullet so the
+  index can read it.
+- **New resource `autocad://tools`.** The whole toolbox in one place, grouped
+  by the padlock it needs, each with its summary and its `Use when` lines. It
+  is built from the live registry, so it cannot drift from the code - a tool
+  added, renamed or re-levelled appears with no second edit. It touches no
+  drawing, so unlike the other four resources it is **not gated**: it answers
+  before AutoCAD is open and before Heron is pressed.
+- **The server tells connecting AIs to read it**, and to prefer the tool that
+  does the whole job in one call - `autocad_batch_draw` over many single
+  draws, `autocad_make_shape` over building a standard shape by hand,
+  `autocad_dimension_run` over one dimension at a time, `autocad_sequence`
+  for a settled list of steps. One call is one undo step for the user.
+- **A rule, not a habit.** `tests/test_tool_index.py` fails if any tool lacks
+  a `Use when` line, if the index cannot read it, if a wrapped bullet is cut
+  off mid-sentence, or if a tool is filed under the wrong padlock. AGENTS.md
+  carries it as a Never. 514 new tests; 1627 offline.
+
+### Same five levels as Heron AI's fragments
+
+Checked against `archive/revit_encl/heron_send.py`: Heron AI sends fragments
+as `run_fragment_read` / `show` / `write` / `publish` / `admin`. This server's
+`core/risk.py` carries exactly those five - READ / VIEW / CHANGE / PUBLISH /
+ADMIN, with VIEW being Heron's `show`. The gate is the same idea.
+
+What differs is the unit. A Heron fragment is C# **source sent in at run
+time** and compiled by Revit. A tool here is a fixed function already in the
+server, with a schema, a level and tests - nothing new can be sent in except
+through `autocad_run_lisp`, which is why that one is Admin. So the padlocks
+behave the same, and the index above is what makes the fixed set as easy to
+reach for as writing a fragment.
+
 ## 1.4.0 - 2026-10-26 - The live checks run themselves, and four job prompts
 
 No new tools; still 101. This is the step from "built" and "tested offline"

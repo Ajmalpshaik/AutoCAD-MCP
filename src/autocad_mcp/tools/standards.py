@@ -150,11 +150,16 @@ async def autocad_check_standards(
 ) -> str:
     """Check the drawing's layers and objects against layer standards.
 
-    Use when asked whether a drawing follows a layer standard, before issuing
-    it, or after a batch of drawing to catch objects on the wrong layer.
-
     Returns:
         JSON: {"checked", "passed", "summary" {rule: count}, "findings" [...], "truncated"}
+
+    Examples:
+        - Use when: "does this drawing follow our layer standard" - before
+          issuing it, with the findings worst first.
+        - Use when: after a batch of drawing, to catch objects left on the
+          wrong layer.
+        - Don't use when: you want it put right rather than reported -
+          autocad_remap_layers and autocad_tidy_entities do that.
     """
     wanted = _load_rules(rules, rules_path)
     needs_entities = any(
@@ -212,6 +217,11 @@ async def autocad_extract_attributes(
 
     Use for "make a camera schedule", "list all equipment tags", or to check
     tag values. Rows: block, handle, layer, insertion point, attributes.
+
+    Examples:
+        - Use when: "give me the camera schedule from the drawing" -> rows of
+          tag values you can hand to autocad_add_table.
+        - Use when: checking an import: it shows which tags are empty.
     """
 
     def work() -> list[dict[str, Any]]:

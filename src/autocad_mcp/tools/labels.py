@@ -111,6 +111,12 @@ async def autocad_add_label(
 
     Returns:
         JSON: {"created": true, "kind", "handle" (text or mleader), "handles", "points"}
+
+    Examples:
+        - Use when: "point a label at that bracket saying 100x100x10 ANGLE".
+        - Don't use when: one note serves several parts - one
+          autocad_add_multileader with three arrows reads better than three
+          labels.
     """
     aci = to_aci(color)
 

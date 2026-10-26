@@ -22,7 +22,7 @@ from .errors import AutocadError, com_message
 mcp = MCPServer(
     "autocad_mcp",
     title="Heron AI for AutoCAD",
-    version="1.4.0",
+    version="1.5.0",
     instructions=(
         "Controls the AutoCAD instance running on this machine through its COM "
         "Automation interface. Changes appear live in the user's open drawing.\n\n"
@@ -37,6 +37,19 @@ mcp = MCPServer(
         "advice — the geometry lands somewhere nobody meant.\n\n"
         "Entities are identified by their drawing 'handle', which every creation "
         "and query tool returns and every modify tool accepts.\n\n"
+        "FINDING THE RIGHT TOOL. There are over a hundred. Read the resource "
+        "autocad://tools: every tool grouped by the padlock it needs, with a "
+        "one-line summary and 'Use when' lines in the words a draftsman would "
+        "use. It needs no AutoCAD, so read it before anything is connected. "
+        "Each tool's own 'Use when' and \"Don't use when\" lines name the "
+        "better tool when there is one — follow them rather than forcing the "
+        "first tool that looks close.\n\n"
+        "Prefer the tool that does the whole job in one call: "
+        "autocad_batch_draw over many single draws, autocad_make_shape over "
+        "building a standard shape by hand, autocad_dimension_run over "
+        "one dimension at a time, autocad_sequence to run a settled list of "
+        "steps together (AutoLISP's progn). One call is one undo step for the "
+        "user, which matters more than it looks.\n\n"
         "If a tool reports AutoCAD is busy or mid-command, the user needs to "
         "press Esc in AutoCAD — no retry will clear it.\n\n"
         "This is Heron AI for AutoCAD. Nothing reaches AutoCAD until the user "

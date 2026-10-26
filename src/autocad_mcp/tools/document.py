@@ -418,6 +418,11 @@ async def autocad_list_drawings() -> str:
     Returns:
         str: JSON: {"count": int, "drawings": [{"index": int, "name": str,
              "path": str, "saved": bool, "active": bool}]}
+
+    Examples:
+        - Use when: "which drawings are open" before switching between them.
+        - Use when: a change was refused because the active drawing is not the
+          one you meant.
     """
 
     def work() -> dict[str, Any]:
@@ -528,6 +533,12 @@ async def autocad_open_drawing(
     Error Handling:
         - Returns a path error naming the resolved path if the file does not
           exist, before AutoCAD is contacted at all.
+
+    Examples:
+        - Use when: "open the architectural background" so you can reference
+          or copy from it.
+        - Don't use when: you only want its blocks or layers -
+          autocad_import_from_drawing leaves the file closed.
     """
     resolved = _expand(path)
     if not os.path.isfile(resolved):
@@ -580,6 +591,12 @@ async def autocad_save_drawing(
     Error Handling:
         - A never-saved drawing with no path given returns an error asking for
           one, rather than triggering AutoCAD's blocking Save As dialog.
+
+    Examples:
+        - Use when: the work is finished and checked. It needs the Publish
+          padlock, because it writes a file.
+        - Don't use when: you are mid-job - leave it unsaved so one Ctrl+Z
+          still gets you out.
     """
 
     def work() -> dict[str, Any]:
@@ -639,6 +656,11 @@ async def autocad_switch_drawing(
 
     Error Handling:
         - Lists the drawings that are actually open if the name does not match.
+
+    Examples:
+        - Use when: you have the wrong drawing active. Call autocad_status
+          afterwards: the gate checks the units of the drawing it is about to
+          change.
     """
 
     def work() -> dict[str, Any]:
@@ -900,6 +922,11 @@ async def autocad_zoom(
 
     Returns:
         str: JSON: {"zoomed": str}
+
+    Examples:
+        - Use when: "show me that corner" before a preview, so the picture is
+          of the right thing.
+        - Use when: zooming to a saved view or an object's extents.
     """
 
     def work() -> dict[str, Any]:
@@ -949,6 +976,12 @@ async def autocad_get_variable(
 
     Returns:
         str: JSON: {"name": str, "value": str | float | int | list[float]}
+
+    Examples:
+        - Use when: "what is DIMSCALE set to" - or checking that a setting
+          really landed.
+        - Don't use when: you want the usual drawing settings - autocad_status
+          and autocad_drawing_setup report them together.
     """
 
     def work() -> dict[str, Any]:
@@ -1001,6 +1034,12 @@ async def autocad_set_variable(
     Error Handling:
         - Returns a type error rather than a COM failure when a numeric
           variable is given non-numeric text.
+
+    Examples:
+        - Use when: a variable is needed that autocad_drawing_setup does not
+          cover. It needs the Admin padlock, because it can set anything.
+        - Don't use when: autocad_drawing_setup can do it - that needs only
+          Changes, and it works from a fixed list.
     """
 
     def work() -> dict[str, Any]:
@@ -1077,6 +1116,11 @@ async def autocad_preview(
 
     Returns:
         The PNG image, then JSON: {"area", "layout", "size"}.
+
+    Examples:
+        - Use when: you have drawn something and want to see it before saying
+          it is done. Drafting rule: look at the picture, then fix it.
+        - Use when: checking crossings, overlaps, text on lines, crowding.
     """
     if area == "window" and (not corner1 or not corner2):
         raise AutocadError("area='window' needs both corner1 and corner2 as [x, y].")
