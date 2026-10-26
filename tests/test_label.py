@@ -178,3 +178,12 @@ def test_dimensions_take_dimscale_like_labels(monkeypatch):
     monkeypatch.setattr(draw, "created_payload", lambda e, notes, **kw: {"created": True, "handle": e.Handle, **kw})
     asyncio.run(draw.autocad_add_dimension(dimension_type="horizontal", point1=[0, 0], point2=[400, 0], text_position=[200, -50]))
     assert dim.ScaleFactor == 10.0
+
+
+def test_right_aligned_text_hangs_from_its_top_right_corner(doc):
+    # A label column left of a detail lines up on its right edge, near the parts.
+    asyncio.run(labels.autocad_add_label(
+        text="BASE PLATE", arrow=[-125, 346], position=[-400, 420], height=25, text_align="right"))
+    text = doc.ModelSpace.made[0]
+    assert text.AttachmentPoint == 3          # acAttachmentPointTopRight
+    assert getattr(text, "InsertionPoint", None) is not None

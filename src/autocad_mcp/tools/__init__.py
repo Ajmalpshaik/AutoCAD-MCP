@@ -13,6 +13,7 @@ def register_all() -> None:
     from . import (  # noqa: F401
         advanced,
         batch,
+        blocks,
         document,
         draw,
         labels,

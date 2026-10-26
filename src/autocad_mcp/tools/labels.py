@@ -30,6 +30,7 @@ from ._shared import COLOR_OPT, LAYER_OPT, point
 
 AC_LINE_WITH_ARROW = 2  # AcLeaderType: 0 line, 1 spline, 2 line + arrow, 3 spline + arrow
 AC_MTEXT_CONTENT = 2  # AcMLeaderContentType
+AC_ATTACH_TOP_RIGHT = 3  # AcAttachmentPoint
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,10 @@ async def autocad_add_label(
         float, Field(ge=0, le=10, description="How far the line runs past the text each side, x text height (TLD: 0.5).")
     ] = 0.5,
     width: Annotated[float, Field(ge=0, description="MTEXT wrap width; 0 = no wrapping.")] = 0.0,
+    text_align: Annotated[
+        Literal["left", "right"],
+        Field(description="'left': position is the text's top-left (default). 'right': its top-right, for a label column left of the detail."),
+    ] = "left",
     layer: Annotated[str | None, LAYER_OPT] = None,
     color: Annotated[str | StrictInt | None, COLOR_OPT] = None,
 ) -> str:
@@ -129,6 +134,9 @@ async def autocad_add_label(
 
             label = space.AddMText(point(position, "position"), float(width), text)
             label.Height = float(height)
+            if text_align == "right":
+                label.AttachmentPoint = AC_ATTACH_TOP_RIGHT
+                label.InsertionPoint = point(position, "position")
             notes = apply_properties(doc, label, layer, aci, None)
             low, high = label.GetBoundingBox()
             frame = Frame(
