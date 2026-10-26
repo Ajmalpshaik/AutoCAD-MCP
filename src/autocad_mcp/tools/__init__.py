@@ -18,6 +18,8 @@ def register_all() -> None:
         layers,
         modify,
         query,
+        resources,
+        standards,
     )
 
 

@@ -17,9 +17,13 @@ ways around it are used here:
 * **Large results** — have the LISP write to a temp file and read the file from
   Python. Unlimited, and it survives batches of any size. Used here.
 
-Sending the script itself has the same size problem: ``SendCommand`` is not
-reliable with very long strings across AutoCAD versions. So the script is
-written to a ``.lsp`` file and pulled in with a single ``(load ...)``.
+Sending the script has a size problem too: ``SendCommand`` is not reliable with
+long strings (expressions near 3,600 characters fail silently). The batch used
+to be written to a ``.lsp`` file and pulled in with ``(load ...)``, but AutoCAD's
+SECURELOAD then asks "Unsigned Executable File" for every batch, because the
+file sits in %TEMP% (live check A21, 2026-10-26). So the batch is now sent as a
+series of short expressions (``build_chunks``), each under CHUNK_LIMIT
+characters. Nothing is loaded from a file, so SECURELOAD never applies.
 """
 
 from __future__ import annotations
@@ -46,6 +50,10 @@ FAILURE_MARKER = "FAIL"
 # no faster (2.5s), and entmakex was slower still, so in-LISP capture stays
 # the default and this marker covers the opt-out.
 SUCCESS_MARKER = "OK"
+
+# Longest expression sent in one SendCommand. Expressions near 3,600 characters
+# fail silently; chunks under about 700 were used for the whole CCTV package.
+CHUNK_LIMIT = 600
 
 
 def lisp_string(value: str) -> str:
@@ -108,105 +116,115 @@ def entmake(pairs: Sequence[str], capture_handle: bool = True) -> str:
     every outcome is what lets a partially-failing batch report honestly
     instead of guessing from a count.
     """
-    body = " ".join(pairs)
+    return _entmake_expr(f"(list {' '.join(pairs)})", capture_handle)
+
+
+def _entmake_expr(entity_list: str, capture_handle: bool) -> str:
     on_success = (
         f"(write-line (cdr (assoc {DXF_HANDLE} (entget (entlast)))) f)"
         if capture_handle
         else f"(write-line {lisp_string(SUCCESS_MARKER)} f)"
     )
     return (
-        f"(if (entmake (list {body}))"
+        f"(if (entmake {entity_list})"
         f" {on_success}"
         f" (write-line {lisp_string(FAILURE_MARKER)} f))"
     )
 
 
-def build_script(statements: Sequence[str], output_path: str) -> str:
-    """Assemble the full .lsp file for one batch.
+# Defined once per batch. Runs one piece of the batch with the output file as
+# ``f``; an error is caught, written to the file as "ERROR ..." and the file is
+# closed, so every later piece skips (*heron-f* is nil) and Python reports it.
+_HELPER = (
+    "(progn (defun heron-run (fn / e) (if *heron-f* (progn"
+    " (setq e (vl-catch-all-apply fn (list *heron-f*)))"
+    " (if (vl-catch-all-error-p e) (progn"
+    ' (write-line (strcat "ERROR " (vl-catch-all-error-message e)) *heron-f*)'
+    " (close *heron-f*) (setq *heron-f* nil))))) (princ)) (princ))"
+)
 
-    Follows the AJ-Tools AutoLISP house pattern: ``acdoc`` / ``startundo`` /
-    ``endundo`` helpers, ``*error*`` declared local to the command, system
-    variables saved before use and restored on both the normal and the error
-    path, and the whole batch inside one undo group so the user reverses it
-    with a single Ctrl+Z.
+# Closes however many undo groups are open: a single vla-EndUndoMark can leave
+# a nested group open and quietly break the user's next Ctrl+Z.
+_END_UNDO = "(while (= 8 (logand 8 (getvar 'undoctl))) (vla-endundomark *heron-doc*))"
 
-    ``endundo`` loops on the UNDOCTL bit rather than calling
-    ``vla-EndUndoMark`` once: a single call leaves a *nested* undo group open,
-    which quietly breaks the user's next Ctrl+Z. The loop closes however many
-    are actually open.
 
-    ``*error*`` also writes the failure into the output file before closing it,
-    which is how Python distinguishes "the script died" from "the script never
-    ran" — without it a LISP error would leave the file open, the undo group
-    unclosed, and AutoCAD sitting at an error prompt refusing further COM calls.
+def build_chunks(
+    entities: Sequence[Sequence[str]],
+    capture_handle: bool,
+    output_path: str,
+    limit: int = CHUNK_LIMIT,
+) -> list[str]:
+    """The whole batch as short LISP expressions, sent one SendCommand each.
+
+    1. define ``heron-run`` (catches errors, see _HELPER);
+    2. open the output file and start ONE undo group for the whole batch;
+    3. the entmakes, as many per expression as fit under ``limit``. An entity
+       too long for one expression is built up in ``*heron-p*`` piece by piece;
+    4. close the undo group and write DONE.
+
+    Every operation writes one line (handle or marker) to the output file,
+    which ``parse_output`` reads, exactly as the old single-file script did.
     """
-    lines = [
-        ";; ------------------------------------------------------------------",
-        ";; autocad-mcp - generated batch script",
-        ";; Creates entities via entmake and writes one result line each to a",
-        ";; temp file, which the MCP server reads back. Regenerated per call,",
-        ";; deleted afterwards - safe to delete if found lying around.",
-        ";; ------------------------------------------------------------------",
-        "(vl-load-com)",
-        "",
-        ";; Returns the VLA Active Document Object",
-        "(defun acdoc nil",
-        "    (eval (list 'defun 'acdoc 'nil (vla-get-activedocument"
-        " (vlax-get-acad-object))))",
-        "    (acdoc)",
-        ")",
-        "",
-        ";; Closes an Undo Group.",
-        "(defun endundo ( doc )",
-        "    (while (= 8 (logand 8 (getvar 'undoctl)))",
-        "        (vla-endundomark doc)",
-        "    )",
-        ")",
-        "",
-        ";; Opens an Undo Group.",
-        "(defun startundo ( doc )",
-        "    (endundo doc)",
-        "    (vla-startundomark doc)",
-        ")",
-        "",
-        "(defun c:MCPBATCH ( / *error* f oldcmdecho )",
-        "    (defun *error* ( msg )",
-        "        (if f",
-        "            (progn",
-        "                (write-line (strcat \"ERROR \" (if msg msg \"unknown\")) f)",
-        "                (close f)",
-        "                (setq f nil)",
-        "            )",
-        "        )",
-        "        (if oldcmdecho (setvar 'cmdecho oldcmdecho))",
-        "        (endundo (acdoc))",
-        "        (if (and msg (not (wcmatch (strcase msg t)"
-        " \"*break,*cancel*,*exit*\")))",
-        "            (princ (strcat \"\\nError: \" msg))",
-        "        )",
-        "        (princ)",
-        "    )",
-        "    (setq oldcmdecho (getvar 'cmdecho))",
-        "    (setvar 'cmdecho 0)",
-        f"    (setq f (open {lisp_path(output_path)} \"w\"))",
-        "    (startundo (acdoc))",
-    ]
-    lines.extend(f"    {statement}" for statement in statements)
-    lines.extend(
-        [
-            "    (endundo (acdoc))",
-            "    (write-line \"DONE\" f)",
-            "    (close f)",
-            "    (setq f nil)",
-            "    (setvar 'cmdecho oldcmdecho)",
-            "    (princ)",
-            ")",
-            "",
-            "(c:MCPBATCH)",
-            "(princ)",
-        ]
+    start = (
+        "(progn (vl-load-com)"
+        " (setq *heron-doc* (vla-get-activedocument (vlax-get-acad-object)))"
+        f" {_END_UNDO} (vla-startundomark *heron-doc*)"
+        f' (setq *heron-f* (open {lisp_path(output_path)} "w")) (princ))'
     )
-    return "\n".join(lines)
+    finish = (
+        f"(progn {_END_UNDO}"
+        ' (if *heron-f* (progn (write-line "DONE" *heron-f*) (close *heron-f*)))'
+        " (setq *heron-f* nil *heron-doc* nil *heron-p* nil) (princ))"
+    )
+    chunks = [_HELPER, start]
+
+    def wrap(statements: list[str]) -> str:
+        return f"(heron-run (function (lambda (f) {' '.join(statements)})))"
+
+    pending: list[str] = []
+    for index, pairs in enumerate(entities):
+        statement = _entmake_expr(f"(list {' '.join(pairs)})", capture_handle)
+        if len(wrap(pending + [statement])) <= limit:
+            pending.append(statement)
+            continue
+        if pending:
+            chunks.append(wrap(pending))
+            pending = []
+        if len(wrap([statement])) <= limit:
+            pending.append(statement)
+            continue
+        chunks.extend(_built_up(index, list(pairs), capture_handle, limit))
+    if pending:
+        chunks.append(wrap(pending))
+    chunks.append(finish)
+    return chunks
+
+
+def _built_up(index: int, pairs: list[str], capture_handle: bool, limit: int) -> list[str]:
+    """One entity too long for a single expression, assembled in *heron-p*."""
+    # (princ) at the end: the command line prints whatever comes back, and a
+    # bare setq would print the whole growing list.
+    opener = "(progn (setq *heron-p* (list {})) (princ))"
+    adder = "(progn (setq *heron-p* (append *heron-p* (list {}))) (princ))"
+    chunks: list[str] = []
+    group: list[str] = []
+    for pair in pairs:
+        if len(adder.format(pair)) > limit:
+            raise AutocadError(
+                f"Operation {index} holds a single value too long to send to AutoCAD "
+                f"(over {limit} characters, usually a very long text). Shorten it, or "
+                "use autocad_add_text / autocad_add_mtext for it."
+            )
+        template = adder if chunks else opener
+        if len(template.format(" ".join(group + [pair]))) <= limit:
+            group.append(pair)
+            continue
+        chunks.append(template.format(" ".join(group)))
+        group = [pair]
+    template = adder if chunks else opener
+    chunks.append(template.format(" ".join(group)))
+    chunks.append(f"(heron-run (function (lambda (f) {_entmake_expr('*heron-p*', capture_handle)})))")
+    return chunks
 
 
 def parse_output(text: str, expected: int) -> dict[str, Any]:

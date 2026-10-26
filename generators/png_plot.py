@@ -31,7 +31,7 @@ async def plot(s, name, media, window=None, style="monochrome.ctb"):
 
 async def main():
     jobs = json.loads(sys.argv[1])
-    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[])) as (r, w):
+    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[], env=dict(os.environ))) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
             for j in jobs:

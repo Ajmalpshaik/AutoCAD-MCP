@@ -1,6 +1,6 @@
 [project]
 name = "autocad-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "MCP server connecting Claude to a running AutoCAD via COM automation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: Editors :: Vector-Based",
 ]
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp>=2.0",
     "pywin32>=306; sys_platform == 'win32'",
 ]
 

@@ -33,7 +33,7 @@ async def main() -> int:
         return 1
 
     print(f"launching {SERVER}\n")
-    params = StdioServerParameters(command=SERVER, args=[])
+    params = StdioServerParameters(command=SERVER, args=[], env=dict(os.environ))
 
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

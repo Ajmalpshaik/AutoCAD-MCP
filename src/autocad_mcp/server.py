@@ -12,7 +12,9 @@ Or over HTTP, for a client on another machine on the same network:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from typing import Any
 
 from . import __version__
 from .core.registry import mcp
@@ -53,13 +55,52 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the registered tools and exit, without contacting AutoCAD.",
     )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Offer only the tools that read or view a drawing; nothing can change it.",
+    )
+    parser.add_argument(
+        "--no-bridge",
+        action="store_true",
+        help=(
+            "Developer use only: do not ask the Heron plug-in in AutoCAD before "
+            "each call. Padlocks, banner and Keep or Discard are then skipped."
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"autocad-mcp {__version__}")
     return parser
 
 
+def apply_read_only(server: Any) -> list[str]:
+    """Remove every tool that can change a drawing or write a file.
+
+    Only READ and VIEW tools stay, so the AI is never offered the rest.
+    """
+    import asyncio
+
+    from .core.risk import Risk, risk_of
+
+    removed = []
+    for tool in asyncio.run(server.list_tools()):
+        if risk_of(tool.name) not in (Risk.READ, Risk.VIEW):
+            server.remove_tool(tool.name)
+            removed.append(tool.name)
+    return removed
+
+
+def apply_options(args: argparse.Namespace) -> None:
+    """Turn command-line switches into the settings the server reads."""
+    if args.no_bridge:
+        os.environ["HERON_AUTOCAD_BRIDGE"] = "off"
+
+
 def main() -> int:
     args = build_parser().parse_args()
+    apply_options(args)
     register_all()
+    if args.read_only:
+        apply_read_only(mcp)
 
     if args.list_tools:
         import asyncio

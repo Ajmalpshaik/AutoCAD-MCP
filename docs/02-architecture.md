@@ -19,6 +19,13 @@ Claude  --stdio/http-->  MCP server (Python)
                     AutoCAD  -->  your open drawing
 ```
 
+## The Heron gate
+
+Every tool call passes through `core/gate.py` before any COM work: look at which AutoCAD and which
+drawing; refuse a change to a different drawing than last time; ask the plug-in `begin` (connection,
+one chat at a time, padlock for the tool's level from `core/risk.py`); run; after a change, `ask_keep`;
+`end`; write the audit line. The plug-in side and the protocol: [06](06-heron-plugin.md).
+
 ## Layers of the code
 
 ```
@@ -38,7 +45,11 @@ tool, so the AutoCAD logic can be tested and reused without MCP.
 | `core/connection.py` | The worker thread, the retry on "busy", app and document access |
 | `core/variants.py` | SAFEARRAY / VARIANT marshalling of points and arrays |
 | `core/errors.py` | Turning COM errors into messages that say what to do |
-| `core/registry.py` | The shared FastMCP instance and undo grouping |
+| `core/registry.py` | The shared FastMCP instance, undo grouping, the error wrapper that calls the gate |
+| `core/gate.py` | The Heron gate: order of checks, Keep or Discard, audit |
+| `core/bridge.py` | Finds this AutoCAD's plug-in pipe and talks to it |
+| `core/risk.py` | The level of every tool |
+| `core/audit.py` | One JSON line per call |
 | `acad/entities.py` | Entity serialisation, handle lookup |
 | `acad/selection.py` | DXF filters and selection sets |
 | `acad/tables.py` | Layers, linetypes, applying common properties |
@@ -61,7 +72,8 @@ lives in Python, and each language does the job it wins:
 
 AutoCAD's COM interface has no "evaluate and return" call; `SendCommand` is fire-and-forget. Small
 results come back through the `USERS1` system variable (`autocad_run_lisp`); large ones are written
-to a temp file by the LISP and read by Python (`autocad_batch_draw`).
+to a temp file by the LISP and read by Python (`autocad_batch_draw`). The batch itself is sent as short
+expressions, never loaded from a file, so AutoCAD's SECURELOAD never asks ([D-21](DECISIONS.md)).
 
 Measured on AutoCAD 2020, 200 lines:
 

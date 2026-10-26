@@ -55,3 +55,24 @@ them with `python -m py_compile`, never `import`. ([ROADMAP](ROADMAP.md) has add
 A `.venv` built under another Windows user or folder will not start. Rebuild it:
 `python -m venv .venv` then `.venv\Scripts\python.exe -m pip install -e ".[dev]"`, and check the
 path in `.mcp.json`, `.codex/config.toml` and the Claude Desktop config.
+
+## 11. The plug-in is not proven live yet
+
+Everything in `autocad/` builds and its bridge passes offline tests, but no row of
+[NEEDS-CHECKING](NEEDS-CHECKING.md) has run in a real AutoCAD. Treat ribbon, banner and Keep or
+Discard as unproven until group A passes.
+
+## 12. Live scripts and generators now need Heron connected
+
+With the plug-in installed, `tools/smoke_test.py`, `tests/test_live.py` and every generator go
+through the gate like Claude does: press **Heron** and turn on **Changes** (and **Publish** for PDF
+plots) first, or start the server with `--no-bridge` for developer runs.
+
+## 13. COM is still open to other programs
+
+The padlocks stop Heron; they do not stop another program that drives AutoCAD over COM.
+
+## 14. Escape hatches can still be re-run when busy
+
+`send_command` and `run_lisp` paths that manage their own undo do not mark "write started", so a busy
+retry could repeat them ([D-15](DECISIONS.md)).

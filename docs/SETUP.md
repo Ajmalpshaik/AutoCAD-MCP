@@ -78,6 +78,22 @@ If this fails but step 3 passed, the problem is the AutoCAD connection. See
 
 ---
 
+## 4b. Install the Heron plug-in
+
+Heron AI for AutoCAD needs its plug-in inside AutoCAD; without it every tool says AutoCAD is not
+connected. Build it (needs the .NET SDK), close AutoCAD, install, start AutoCAD:
+
+```bash
+.venv\Scripts\python.exe tools/build_plugin.py
+```
+
+```bash
+.venv\Scripts\python.exe tools/install_plugin.py
+```
+
+The **Heron** tab appears on the ribbon. Press **Heron** to connect; turn on **Changes** when you want
+Heron to draw. What every button does: [06](06-heron-plugin.md).
+
 ## 5. Connect Claude
 
 ### Claude Code

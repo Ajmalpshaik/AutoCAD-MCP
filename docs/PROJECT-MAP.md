@@ -9,31 +9,35 @@ which source wins when two disagree. For *which document covers what*, use [READ
 
 ```mermaid
 flowchart TD
-    U(["<b>You</b><br/><i>draw a 5000 x 3000 rectangle</i>"])
+    U(["<b>The modeller</b><br/><i>draw a 5000 x 3000 rectangle</i>"])
     C["<b>Claude</b> (Code or Desktop)<br/>decides which tool to call"]
-    S["<b>src/autocad_mcp/tools/</b><br/>the 50 MCP tools, input checks"]
-    A["<b>src/autocad_mcp/acad/</b><br/>entities, selections, layers, AutoLISP"]
-    K["<b>src/autocad_mcp/core/</b><br/>one COM worker thread, retry, undo group"]
-    AC["<b>AutoCAD</b> (COM Automation)"]
-    D(["<b>Your open drawing</b><br/>one tool call = one undo step"])
-    G["<b>generators/</b><br/>scripts that call the same tools<br/>over MCP stdio"]
+    T["<b>src/autocad_mcp/tools/</b><br/>the autocad_* tools"]
+    G["<b>core/gate.py</b><br/>level, wrong-drawing guard, audit"]
+    B["<b>core/bridge.py</b><br/>finds this AutoCAD's pipe"]
+    P["<b>autocad/Heron.AutoCAD.Bridge</b><br/>token, hold, padlocks"]
+    H["<b>autocad/Heron.AutoCAD.Addin</b><br/>banner, command line, Keep or Discard"]
+    K["<b>core/connection.py</b><br/>one COM worker thread"]
+    D(["<b>The open drawing</b><br/>one call = one undo step"])
 
-    U --> C -->|"MCP (stdio)"| S --> A --> K -->|"pywin32 COM"| AC --> D
-    G -->|"MCP (stdio)"| S
+    U --> C -->|"MCP (stdio)"| T --> G
+    G -->|"begin / end / ask_keep"| B -->|"named pipe, this user only"| P --> H
+    G -->|"allowed"| K -->|"pywin32 COM"| D
 ```
 
 ## B. Folders
 
 | Folder | Owns | Start a change at |
 |---|---|---|
-| [`src/autocad_mcp/`](../src/autocad_mcp/README.md) | The server | `tools/<subject>.py` for a tool, `server.py` for the command line |
-| [`generators/`](../generators/README.md) | Drawing-package scripts | The package's `*_run.py` runner |
-| `drawings/` ([04](04-drawing-generators.md#where-the-output-goes)) | Generated DWG / PDF / PNG, **local only, not in git** | Never edit by hand; re-run the generator |
-| [`tools/`](../tools/README.md) | Smoke test, protocol check | |
-| [`tests/`](../tests/README.md) | Offline and live tests | `test_offline.py` |
+| [`src/autocad_mcp/`](../src/autocad_mcp/README.md) | The MCP server | `tools/<subject>.py` for a tool; `core/gate.py` for the gate |
+| [`autocad/`](../autocad/README.md) | The plug-in (C#) | `Heron.AutoCAD.Bridge` for rules, `Heron.AutoCAD.Addin` for what is seen |
+| [`generators/`](../generators/README.md) | Drawing-package scripts | The package's `*_run.py` |
+| `drawings/` ([04](04-drawing-generators.md#where-the-output-goes)) | Generated DWG / PDF / PNG, **local only, not in git** | Re-run the generator |
+| [`tools/`](../tools/README.md) | Build, install, smoke test, structure check | |
+| [`tests/`](../tests/README.md) | Python tests | `test_gate.py`, `test_bridge.py` |
 | [`docs/`](README.md) | All documentation | This file |
 | [`examples/`](../examples/README.md) | Claude Desktop config | |
-| [`archive/`](../archive/README.md) | Stopped experiments, kept for reference | Do not build on it |
+| [`archive/`](../archive/README.md) | Stopped experiments | Do not build on it |
+| `dist/` | The built `HeronAutoCAD.bundle`, **not in git** | `tools/build_plugin.py` |
 | `.github/` | CI, issue and pull-request templates | `workflows/ci.yml` |
 
 ## C. Entry points
@@ -42,12 +46,12 @@ flowchart TD
 |---|---|
 | Run the server (stdio, as Claude does) | `.venv\Scripts\autocad-mcp.exe` |
 | List tools without AutoCAD | `.venv\Scripts\autocad-mcp.exe --list-tools` |
-| Server over HTTP | `.venv\Scripts\autocad-mcp.exe --transport http --port 8000` |
+| Only reading tools | `.venv\Scripts\autocad-mcp.exe --read-only` |
+| Build the plug-in bundle | `.venv\Scripts\python.exe tools/build_plugin.py` |
+| Install / remove it (AutoCAD closed) | `.venv\Scripts\python.exe tools/install_plugin.py [--uninstall]` |
+| Repository rules | `.venv\Scripts\python.exe tools/check_structure.py` |
 | Live smoke test | `.venv\Scripts\python.exe tools/smoke_test.py` |
-| MCP handshake check | `.venv\Scripts\python.exe tools/protocol_check.py` |
-| Offline tests | `.venv\Scripts\python.exe -m pytest -m "not live"` |
-| CCTV package | `python generators/cctv_run.py ...` ([04](04-drawing-generators.md)) |
-| AHU package | `python generators/ahu_run.py` / `sheet_run.py` ([04](04-drawing-generators.md)) |
+| Offline tests | `.venv\Scripts\python.exe -m pytest -m "not live"` and `dotnet test autocad/Heron.AutoCAD.Bridge.Tests` |
 
 ## D. Configuration files
 
@@ -56,16 +60,18 @@ flowchart TD
 | [`.mcp.json`](../.mcp.json) | Claude Code: registers the `autocad` server when opened in this folder |
 | [`.codex/config.toml`](../.codex/config.toml) | Codex: the same server |
 | [`examples/claude_desktop_config.json`](../examples/claude_desktop_config.json) | Claude Desktop |
-| [`pyproject.toml`](../pyproject.toml) | Package, dependencies, pytest and ruff settings |
+| [`pyproject.toml`](../pyproject.toml) | Package, dependencies, pytest and ruff |
+| [`autocad/Directory.Build.props`](../autocad/Directory.Build.props) | Version and shared C# settings |
 | [`generators/paths.py`](../generators/paths.py) | Every folder a generator writes to |
+| `%APPDATA%\Heron\autocad\heron-autocad.config` | The padlocks (written by the plug-in) |
 
-All three MCP configs hold the absolute path of `.venv\Scripts\autocad-mcp.exe`. If the repository
+The three MCP configs hold the absolute path of `.venv\Scripts\autocad-mcp.exe`; if the repository
 moves, change all three.
 
 ## E. Which source wins
 
 1. **The code and the tool output.** `--list-tools` beats any table in these docs.
-2. **The tests.** A passing test pins behaviour; a doc that disagrees is wrong.
+2. **The tests**, and for anything live, a PASS row in [NEEDS-CHECKING](NEEDS-CHECKING.md).
 3. [DECISIONS.md](DECISIONS.md) for *why*.
 4. The numbered docs.
 5. [HANDOVER.md](HANDOVER.md) last: it is a work note.

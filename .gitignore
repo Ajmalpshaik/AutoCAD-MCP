@@ -28,3 +28,15 @@ tmp/
 
 # Generated drawings stay on this PC only; re-run generators/ to make them (docs/DECISIONS.md D-11)
 drawings/
+
+# Plan-execution scratch
+.superpowers/
+
+# .NET build output
+bin/
+obj/
+*.user
+.vs/
+
+# Built plug-in bundle
+dist/

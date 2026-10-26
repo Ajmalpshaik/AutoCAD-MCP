@@ -41,6 +41,21 @@ class AutocadError(Exception):
     """
 
 
+class OutcomeUnknown(AutocadError):
+    """AutoCAD went busy after a write had started, so part of it may exist.
+
+    Retrying would risk drawing the same thing twice, so the work is not
+    re-run: the agent is told to look before it tries again.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Outcome unknown: AutoCAD went busy part-way through, so part of this "
+            "may already be drawn (one Ctrl+Z reverses it). Read the drawing back "
+            "before retrying."
+        )
+
+
 class StaleDispatchError(Exception):
     """The cached COM pointer stopped answering; retry with a fresh one.
 

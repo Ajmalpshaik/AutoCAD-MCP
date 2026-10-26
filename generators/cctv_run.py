@@ -204,7 +204,7 @@ def sheet_list(args):
 
 async def main(argv):
     cmd, rest = argv[0], argv[1:]
-    params = StdioServerParameters(command=SERVER, args=[])
+    params = StdioServerParameters(command=SERVER, args=[], env=dict(os.environ))
     async with stdio_client(params) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()

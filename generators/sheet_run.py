@@ -7,6 +7,7 @@ Usage: python sheet_run.py MODULE [clear XMIN XMAX] [draw]
 import asyncio
 import importlib
 import json
+import os
 import sys
 
 from mcp import ClientSession, StdioServerParameters
@@ -27,7 +28,7 @@ def clear_expr(xa, xb):
 async def main(argv):
     mod = importlib.import_module(argv[0])
     rest = argv[1:]
-    params = StdioServerParameters(command=ahu_run.SERVER, args=[])
+    params = StdioServerParameters(command=ahu_run.SERVER, args=[], env=dict(os.environ))
     async with stdio_client(params) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()

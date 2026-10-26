@@ -5,6 +5,32 @@ page covers the ones with a cause that is not obvious from the message.
 
 ---
 
+## "AutoCAD is not connected to Heron"
+
+Press **Heron** on the Heron tab (or type `HERON`). No Heron tab at all: the plug-in is not installed
+or did not load; run `tools/install_plugin.py` with AutoCAD closed, then check
+`%LOCALAPPDATA%\Heron\autocad\logs\` for the add-in log.
+
+## "Changes is off" / "Publish is off" / "Admin is off"
+
+The padlock named in the message is closed. Click it on the Heron tab (or type the command the
+message names) and answer Yes. This is the guard working, not an error.
+
+## "This AutoCAD is in use by another chat"
+
+Another Claude session holds this AutoCAD. Finish there, wait 3 quiet minutes, or press Heron twice
+(disconnect, connect) to free it.
+
+## "The active drawing changed from ... to ..."
+
+You switched drawings since Heron last looked. Ask Claude to check the status (or switch to the
+drawing you mean); then the change goes through.
+
+## "Outcome unknown"
+
+AutoCAD went busy half-way through a change. Part of it may be drawn: look, press Ctrl+Z once if you
+want it gone, then ask again.
+
 ## "No running AutoCAD instance was found"
 
 In order of likelihood:

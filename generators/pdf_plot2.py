@@ -16,7 +16,7 @@ SHEETS = [(f"AHU-01_M-AHU-{n:03d}_{name}", (x, -11000), (x + 25230, 6820)) for n
     (11, "TAB_Balancing", 253100))]
 
 async def main():
-    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[])) as (r, w):
+    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[], env=dict(os.environ))) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
             st = json.loads(await ahu_run.call(s, "autocad_status", {}, quiet=True))
