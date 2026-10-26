@@ -20,11 +20,9 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from ..acad.lisp import (
-    build_script,
+    build_chunks,
     dotted,
-    entmake,
     lisp_number,
-    lisp_path,
     lisp_point,
     lisp_string,
     parse_output,
@@ -283,7 +281,7 @@ async def autocad_batch_draw(
     """
     # Validate and generate everything up front: a batch that cannot be fully
     # built should not half-draw itself.
-    statements: list[str] = []
+    entities: list[list[str]] = []
     layers_needed: set[str] = set()
 
     for index, op in enumerate(operations):
@@ -302,14 +300,15 @@ async def autocad_batch_draw(
                 "autocad_insert_block, autocad_add_dimension or "
                 "autocad_add_hatch tools."
             )
-        statements.append(entmake(BUILDERS[kind](op, index), return_handles))
+        entities.append(BUILDERS[kind](op, index))
         if op.get("layer"):
             layers_needed.add(str(op["layer"]).strip())
 
     token = uuid.uuid4().hex[:12]
-    temp_dir = tempfile.gettempdir()
-    script_path = os.path.join(temp_dir, f"mcp_batch_{token}.lsp")
-    output_path = os.path.join(temp_dir, f"mcp_batch_{token}.txt")
+    output_path = os.path.join(tempfile.gettempdir(), f"mcp_batch_{token}.txt")
+    # Built before anything is sent, so an operation too long to send fails
+    # with its index and nothing half-drawn.
+    chunks = build_chunks(entities, return_handles, output_path)
 
     def work() -> dict[str, Any]:
         doc = get_doc()
@@ -326,13 +325,11 @@ async def autocad_batch_draw(
             if was_created:
                 created_layers.append(layer_name)
 
-        with open(script_path, "w", encoding="utf-8") as handle:
-            handle.write(build_script(statements, output_path))
-
         started = time.monotonic()
-        # Loading a file sidesteps SendCommand's unreliability with very long
-        # strings, so batch size is bounded by MAX_OPERATIONS alone.
-        doc.SendCommand(f"(load {lisp_path(script_path)})\n")
+        # Short expressions, never a loaded file: a .lsp loaded from %TEMP%
+        # makes AutoCAD's SECURELOAD ask about an unsigned executable.
+        for chunk in chunks:
+            doc.SendCommand(chunk + "\n")
 
         text = ""
         while time.monotonic() - started < OUTPUT_TIMEOUT:
@@ -346,15 +343,13 @@ async def autocad_batch_draw(
 
         if not text:
             raise AutocadError(
-                "The batch script produced no output within "
-                f"{OUTPUT_TIMEOUT:.0f}s. Check AutoCAD's command line (F2) — it "
-                "may be showing a prompt or a security warning about loading a "
-                "LISP file. If AutoCAD asks whether to load the file, set "
-                "SECURELOAD to 0 via autocad_set_variable, or add the temp "
-                "folder to its trusted paths."
+                "The batch produced no output within "
+                f"{OUTPUT_TIMEOUT:.0f}s. Check AutoCAD's command line (F2) for a "
+                "prompt or an error waiting there, press Esc, and read the drawing "
+                "back before retrying: part of the batch may already be drawn."
             )
 
-        result = parse_output(text, expected=len(statements))
+        result = parse_output(text, expected=len(entities))
         result["layers_created"] = created_layers
         result["elapsed_seconds"] = round(elapsed, 3)
         if elapsed > 0:
@@ -364,8 +359,7 @@ async def autocad_batch_draw(
     try:
         return dumps(await run(work))
     finally:
-        for path in (script_path, output_path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass

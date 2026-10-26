@@ -36,7 +36,7 @@ folder.
 | A17 | Switch workspace (WSCURRENT) | Heron tab comes back | **PASS** 2026-10-26, AutoCAD 2027 (26.0s): tab still there after a workspace switch |
 | A18 | Bridge Status in each state | Wording and buttons as in [06 §2](06-heron-plugin.md#2-bridge-status); Enter = Close | **PASS** 2026-10-26, AutoCAD 2027 (26.0s): Connected window wording, padlock cards and versions correct; Disconnect works. Enter = Close not tried |
 | A20 | Double-click a padlock | Acts once (the second click is ignored) | NOT RUN (built after the session, D-20) |
-| A21 | `autocad_batch_draw` with SECURELOAD on (default) | No security box | **FAIL** 2026-10-26, AutoCAD 2027 (26.0s): AutoCAD asks 'Unsigned Executable File' for the batch .lsp in %TEMP% (ROADMAP) |
+| A21 | `autocad_batch_draw` with SECURELOAD on (default) | No security box | **FAIL then PASS** 2026-10-26, AutoCAD 2027 (26.0s): the old .lsp in %TEMP% raised 'Unsigned Executable File'; after D-21, 40 circles + a 150-point polyline drew in 1.4 s with no box. Command history fills with the LISP text (ROADMAP) |
 | A19 | Run a CCTV generator sheet (`python generators/cctv_run.py png 102`) with Changes on | Draws and plots as before the folder move | NOT RUN |
 
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)

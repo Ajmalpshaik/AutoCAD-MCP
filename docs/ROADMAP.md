@@ -14,9 +14,9 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 ## Found in the first live checks (2026-10-26)
 
-- [ ] **`autocad_batch_draw` triggers AutoCAD's "Unsigned Executable File" warning** (SECURELOAD) because
-  it loads a temporary `.lsp` from `%TEMP%`. Send the LISP without a file, or have the plug-in run it;
-  never weaken the modeller's security settings ([NEEDS-CHECKING](NEEDS-CHECKING.md) A21).
+- [ ] `autocad_batch_draw` fills AutoCAD's command history with its LISP text (the security box itself
+  is fixed, D-21). Have the plug-in send the expressions with `SendStringToExecute(..., echoCommand: false)`,
+  allowed only while a Heron CHANGE job is running.
 - [ ] `autocad_preview`: the picture comes out portrait with the drawing at the left edge; fit and
   centre it, landscape when the drawing is wide.
 - [ ] Remaining live rows: A8e, A9 ribbon label, A15, A16, A18 Enter, A19, A20.

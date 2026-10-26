@@ -129,6 +129,16 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-21 - Batch drawing sends expressions; it never loads a file
+
+**Decided:** 2026-10-26, from live check A21. **Status:** in force.
+Loading the batch `.lsp` from `%TEMP%` made AutoCAD's SECURELOAD ask "Unsigned Executable File" on
+every batch. The batch is now sent as short expressions (under 600 characters each, `build_chunks`),
+like typed input, so no file is loaded. Rejected: adding `%TEMP%` to TRUSTEDPATHS or setting SECURELOAD
+to 0 (weakens the modeller's security), writing the file into the trusted plug-in folder (generated
+code in a trusted place), and reading the file back with `eval` (sidesteps the security check rather
+than respecting it). The old error text that advised setting SECURELOAD to 0 is gone.
+
 ## D-20 - A double-click on a ribbon switch counts once
 
 **Decided:** 2026-10-26, from the first live checks. **Status:** in force (built; live row A20 NOT RUN).

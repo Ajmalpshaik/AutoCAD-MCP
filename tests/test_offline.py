@@ -14,7 +14,6 @@ import pytest
 from autocad_mcp.acad.lisp import (
     FAILURE_MARKER,
     SUCCESS_MARKER,
-    build_script,
     dotted,
     entmake,
     lisp_number,
@@ -363,52 +362,9 @@ class TestToolSurface:
 class TestGeneratedLisp:
     """The batch tool generates AutoLISP as text, so nothing type-checks it.
 
-    These assert the AJ-Tools house pattern from the autocad-lisp skill:
-    acdoc/startundo/endundo helpers, a local *error* that restores state, and
-    the UNDOCTL loop rather than a single vla-EndUndoMark.
+    The batch's own structure (one undo group, the UNDOCTL close loop, errors
+    caught and recorded, never a loaded file) is tested in test_batch_chunks.py.
     """
-
-    @pytest.fixture
-    def script(self):
-        statement = entmake(
-            [dotted(0, lisp_string("POINT")), dotted(10, "(list 0.0 0.0 0.0)")]
-        )
-        return build_script([statement], r"C:\temp\out.txt")
-
-    def test_parens_balance(self, script):
-        assert script.count("(") == script.count(")")
-
-    def test_loads_activex_before_using_vla_functions(self, script):
-        assert script.index("(vl-load-com)") < script.index("vla-get-activedocument")
-
-    def test_uses_the_safe_undo_close_loop(self, script):
-        # A single vla-endundomark leaves a nested group open and quietly
-        # breaks the user's next Ctrl+Z. The house pattern loops on UNDOCTL.
-        assert "(while (= 8 (logand 8 (getvar 'undoctl)))" in script
-
-    def test_error_handler_is_local_to_the_command(self, script):
-        assert "( / *error* f oldcmdecho )" in script
-
-    def test_error_handler_stays_quiet_on_cancel(self, script):
-        assert '"*break,*cancel*,*exit*"' in script
-
-    def test_error_handler_guards_a_nil_message(self, script):
-        # (strcase nil) is a hard error in AutoLISP, so msg must be checked.
-        assert "(if (and msg (not (wcmatch" in script
-
-    def test_sysvar_saved_before_change_and_restored_both_paths(self, script):
-        assert "(setq oldcmdecho (getvar 'cmdecho))" in script
-        # once in *error*, once on the normal path
-        assert script.count("(setvar 'cmdecho oldcmdecho)") == 2
-
-    def test_error_handler_closes_the_output_file(self, script):
-        handler = script[script.index("(defun *error*") : script.index("(setq oldcmdecho")]
-        assert "(close f)" in handler
-        assert "ERROR " in handler
-
-    def test_batch_runs_inside_one_undo_group(self, script):
-        assert "(startundo (acdoc))" in script
-        assert "(endundo (acdoc))" in script
 
     def test_string_escaping(self):
         assert lisp_string('5" pipe') == '"5\\" pipe"'

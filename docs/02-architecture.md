@@ -72,7 +72,8 @@ lives in Python, and each language does the job it wins:
 
 AutoCAD's COM interface has no "evaluate and return" call; `SendCommand` is fire-and-forget. Small
 results come back through the `USERS1` system variable (`autocad_run_lisp`); large ones are written
-to a temp file by the LISP and read by Python (`autocad_batch_draw`).
+to a temp file by the LISP and read by Python (`autocad_batch_draw`). The batch itself is sent as short
+expressions, never loaded from a file, so AutoCAD's SECURELOAD never asks ([D-21](DECISIONS.md)).
 
 Measured on AutoCAD 2020, 200 lines:
 
