@@ -36,9 +36,14 @@ def register_rows() -> set[str]:
     return set(re.findall(r"^\|\s*([A-Z]\d+[a-z]?)\s*\|", REGISTER.read_text(encoding="utf-8"), re.M))
 
 
+# The groups the runner is responsible for. Group A is the plug-in in the
+# ribbon, which a person has to click; B and C need machines we do not have.
+RUNNER_GROUPS = "DEF"
+
+
 def live_rows() -> set[str]:
-    """The rows that can only be proved inside AutoCAD: groups D and E."""
-    return {row for row in register_rows() if row[0] in "DE"}
+    """The rows the runner must account for: groups D, E and F."""
+    return {row for row in register_rows() if row[0] in RUNNER_GROUPS}
 
 
 class TestTheRowsAreReal:

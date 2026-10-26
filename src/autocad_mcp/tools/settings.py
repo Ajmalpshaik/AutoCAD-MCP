@@ -436,6 +436,10 @@ async def autocad_drawing_setup(
         - Use when: starting a drawing — units='millimeters', scale='1:50',
           paper_text_height=2.5, osnaps=['endpoint','midpoint','intersection'].
         - Use when: dimensions come out tiny — the drawing scale was never set.
+          One scale sets DIMSCALE, LTSCALE, CANNOSCALE and the text height
+          together, so they cannot disagree.
+        - Use when: "set DIMSCALE and LTSCALE for 1:50" — scale='1:50' does
+          both, and needs only the Changes padlock.
         - Use when: dashed lines look solid — scale sets LTSCALE too.
         - Don't use when: you need a variable outside the drafting list; that
           is autocad_set_variable, which needs the Admin padlock.

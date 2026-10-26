@@ -223,12 +223,37 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 
 | Tool | Level | Purpose |
 |---|---|---|
-| `autocad_add_solid` | Change | box, wedge, cylinder, cone, sphere, torus — placed by the centre of its **base**, not its bounding box |
-| `autocad_extrude_profile` | Change | A closed 2D profile into a solid: extrude along Z (with taper) or revolve about an axis. The intermediate region is cleaned up |
+| `autocad_add_solid` | Change | box, wedge, cylinder, cone, sphere, torus, elliptical_cylinder, elliptical_cone — placed by the centre of its **base**, not its bounding box. Oval shapes take the **overall** sizes, not the half axes |
+| `autocad_extrude_profile` | Change | A closed 2D profile into a solid: extrude along Z (with taper), revolve about an axis, or **sweep along a path** — a duct, pipe or tray following a route. The intermediate region is cleaned up |
 | `autocad_solid_boolean` | Change | union / subtract / intersect. The others are **consumed**, as AutoCAD's own commands do; every handle is checked first |
 | `autocad_solid_properties` | Read | Volume, centroid, bounding box, moments — for a weight take-off |
 | `autocad_draw_3d_path` | Change | A pipe or cable route as one 3D polyline, or a helix |
+| `autocad_slice_solid` | Change | Cut solids with a plane — a real section through a model. The plane is given the way a drafter says it ("horizontally at 1500"); the three points AutoCAD wants are worked out here |
+| `autocad_check_interference` | Change | **Clash check.** Every solid in one set against every solid in another, with the overlap volume so the worst comes first. `create_solids` draws the overlaps. Needs Changes because AutoCAD builds the overlap as a real solid to measure it, even to report |
+| `autocad_transform_3d` | Change | move with Z, rotate about **any** axis, mirror in a plane, array up in levels. The flat tools only do XY and Z-axis rotation |
 | `autocad_set_3d_view` | View | A named direction (top, front, sw_iso …) and a visual style. Changes only what is on screen ([D-31](DECISIONS.md)) |
+
+`SectionSolid` is deliberately **not** here: no documented ActiveX signature for it could be
+found, and guessing one would risk the model ([D-33](DECISIONS.md)).
+
+## Materials and rendering (Change; listing is Read, rendering is Admin)
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_list_materials` | Read | The materials in this drawing, and how many objects use each. Run it first: only a material already in the drawing can be applied |
+| `autocad_apply_material` | Change | Apply one to objects or to a whole layer. Refuses an unknown name **and lists what the drawing does have** |
+| `autocad_render` | Admin | Renders the current view to an image, by driving `-render`. Admin, because that is the command line |
+
+Three limits worth knowing before you plan around them ([D-33](DECISIONS.md)):
+
+- **No library access.** Automation cannot reach Autodesk's material library, so a material has to
+  be brought into the drawing through the Materials Browser first.
+- **No density.** A material is appearance only. MASSPROP and `autocad_solid_properties` both work
+  as if density were 1, so a weight is volume times a density *you* state. Assigning "Steel" does
+  not make anything weigh.
+- **No render API.** There is no automation call for rendering at all; `-render` is the only route,
+  its prompts differ between releases, and script rendering has been reported to drop objects. For
+  a picture to look at use `autocad_preview`; for one on a sheet use `autocad_export`.
 
 ## Seeing and checking (Read)
 

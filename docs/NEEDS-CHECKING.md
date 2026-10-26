@@ -9,7 +9,7 @@
 `tools/install_plugin.py`), start AutoCAD, open a scratch drawing, and connect Claude Code in this
 folder.
 
-**Groups D and E run themselves.** With AutoCAD open and the Changes padlock on:
+**Groups D, E and F run themselves.** With AutoCAD open and the Changes padlock on:
 
 ```bash
 .venv\Scripts\python.exe tools/live_check.py --group all --write
@@ -17,8 +17,8 @@ folder.
 
 It works in a scratch drawing it makes itself, *measures* each row (a cone development's arcs
 against the girths they roll onto, a 1:100 viewport's CustomScale, a solid's base against z=0)
-and writes the answer and its evidence into the last column here. 46 of the 67 rows are
-measurable that way. The other 21 need an eye and are written **NOT RUN** with the reason;
+and writes the answer and its evidence into the last column here. Most of the 90 rows are
+measurable that way. The rest need an eye and are written **NOT RUN** with the reason;
 `--list` names them. A row the padlocks refuse is **NOT RUN** too, never PASS.
 
 ## Group A - AutoCAD 2027 (this PC)
@@ -152,6 +152,40 @@ marked.
 | E34 | `autocad_set_3d_view(direction="sw_iso", visual_style="hidden")` then `autocad_preview` | The model is shown from the south-west with hidden lines; **no padlock was needed** | NOT RUN |
 | E35 | `autocad_set_3d_view(direction="top", visual_style="2dwireframe")` | Back to plan and normal drafting | NOT RUN |
 | E36 | `autocad_batch_draw` with `bulges` on a polyline and `align` on a text | The arc is part of the polyline; the text is justified. These two are what every shape depends on | NOT RUN |
+
+## Group F - The rest of 3D: oval shapes, sweeps, slices, clashes, materials (AutoCAD 2027, this PC)
+
+`tools/live_check.py --group F` measures most of these. Every COM call named here is one this
+server has **never made**: `AddEllipticalCylinder`, `AddEllipticalCone`,
+`AddExtrudedSolidAlongPath`, `SliceSolid`, `CheckInterference`, `Rotate3D`, `Mirror3D`, and the
+`Material` property. Their signatures came from Autodesk's reference and community examples, not
+from a run. `SectionSolid` is deliberately **not** built: no documented signature could be found.
+
+| Row | Do | Pass looks like | Result |
+|---|---|---|---|
+| F1 | `autocad_add_solid(shape="elliptical_cylinder", length=400, width=200, height=2000)` | Bounding box measures 400 x 200 x 2000. **Length and width are overall sizes, not half axes** - if it comes out 800 x 400, drop the `/2.0` in `tools/solids.py` | NOT RUN |
+| F2 | The same with `shape="elliptical_cone"` | Base 400 x 200, coming to a point 2000 up | NOT RUN |
+| F3 | `elliptical_cylinder` with length and width equal | Refused, telling you to use `cylinder` with a radius | NOT RUN |
+| F4 | `autocad_extrude_profile(handles=[a 100 dia circle], path_handle=a 3000 long polyline)` | One solid following the route; volume about pi x 50^2 x 3000 | NOT RUN |
+| F5 | `autocad_slice_solid(plane="horizontal", through=[0,0,100], keep="both")` on a 200 high box | Two solids; their volumes add up to the original | NOT RUN |
+| F6 | The same with `keep="positive"` | One solid, half the volume; nothing else left behind | NOT RUN |
+| F7 | `autocad_slice_solid(plane="normal", normal=[1,1,0])` | Cut on the diagonal, the plane facing where you said | NOT RUN |
+| F8 | `autocad_slice_solid` on a line | Refused naming it as not a 3D solid; the line is untouched | NOT RUN |
+| F9 | `autocad_check_interference` on a duct through a beam | `clashes: 1`, and the overlap volume matches the overlap you can measure | NOT RUN |
+| F10 | The same on two solids that do not touch | `clear: true`, `clashes: 0` | NOT RUN |
+| F11 | `autocad_check_interference(create_solids=false)` | **The entity count is unchanged.** AutoCAD builds the overlap to measure it; this must clean it up | NOT RUN |
+| F12 | `autocad_check_interference(create_solids=true, layer="Z-CLASH")` | The overlaps are drawn on Z-CLASH and can be seen | NOT RUN |
+| F13 | `autocad_check_interference(handles=[3 solids])` with no `against` | 3 pairs checked, not 6 or 9 | NOT RUN |
+| F14 | `autocad_transform_3d(operation="move", displacement=[0,0,3500])` | Everything 3500 higher; bounding box min z up by 3500 | NOT RUN |
+| F15 | `autocad_transform_3d(operation="rotate", axis_direction=[1,0,0], angle=90)` | Tipped about the X axis, not about Z | NOT RUN |
+| F16 | `autocad_transform_3d(operation="mirror", plane_point=[0,0,2000], plane_normal=[0,0,1])` | A reflection above, original kept; `new_handles` has one entry | NOT RUN |
+| F17 | `autocad_transform_3d(operation="array", levels=5, level_spacing=3600)` | 4 new copies; the top one 14400 up | NOT RUN |
+| F18 | `autocad_list_materials` on a drawing with materials in it | Each name, and `in_use` counting the objects carrying it | NOT RUN |
+| F19 | `autocad_apply_material(material="NoSuchThing")` | Refused, **listing the materials the drawing does have**, and saying the library cannot be reached from automation | NOT RUN |
+| F20 | `autocad_apply_material(material="Steel", layer_filter=...)` then `autocad_set_3d_view(visual_style="realistic")` and `autocad_preview` | The solids look like steel in the picture | NOT RUN |
+| F21 | `autocad_apply_material` on a line with `solids_only=true` | Skipped and reported, not silently applied | NOT RUN |
+| F22 | `autocad_render` to a PNG, preset "Low", with Admin on | Either the file appears, or the result says the command line is waiting. **Rendering from a script is reported to drop objects - compare the image with a render done by hand before trusting it** | NOT RUN |
+| F23 | `autocad_sequence` with a step naming `autocad_render` | Refused: Admin is above the sequence ceiling | NOT RUN |
 
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)
 

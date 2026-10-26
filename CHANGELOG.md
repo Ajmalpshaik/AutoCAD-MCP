@@ -2,6 +2,92 @@
 
 Newest first. Dates are when the change was made.
 
+## 1.6.0 - 2026-10-26 - The rest of 3D, and findability proved
+
+Two things Ajmal asked for: finish the 3D side, and show that the tools can
+actually be found fast. 6 new tools, 107 in all. Detail:
+[docs/03](docs/03-tools-reference.md), [D-32 / D-33](docs/DECISIONS.md),
+[NEEDS-CHECKING group F](docs/NEEDS-CHECKING.md).
+
+### Findability: he was right to doubt it
+
+The index shipped in 1.5.0, but nobody had measured whether it works. Measured
+now, on 67 phrases a modeller would really say ("how many metres of DN50 pipe
+on this layer", "does the ductwork clash with the steel"):
+
+| | right tool first | in the top three |
+|---|---|---|
+| First attempt | 36 / 55 | 49 / 55 |
+| Now, over 107 tools | **55 / 67** | **67 / 67** |
+
+- **New resource `autocad://tools/find/{phrase}`.** Ask in plain words, get
+  the tool, its padlock and why it matched. Needs no AutoCAD.
+- **`acad/findtool.py`** scores on the tools' own words: a rare word (DIMSCALE,
+  flange) beats a common one (layer, set); a `Don't use when` mention counts
+  **against**; and a word we guessed from yours - a plural, a synonym - counts
+  less than one you typed. Both weights were picked by sweeping them against
+  the 67 phrases, not by taste, and the good region is wide rather than a
+  knife edge.
+- **It found real documentation gaps**, which is the point: `autocad_drawing_setup`
+  never said "DIMSCALE" out loud, so "set DIMSCALE and LTSCALE for 1:50" landed
+  on the Admin-level `autocad_set_variable` instead. Now fixed.
+- `tests/test_find_tool.py` keeps the 67 phrases as a floor, so a rename or a
+  reword that costs findability fails the build.
+
+### The rest of 3D
+
+- **Oval shapes.** `autocad_add_solid` gains `elliptical_cylinder` and
+  `elliptical_cone` - an oval duct, a tapered oval stack. They take the
+  **overall** sizes; the half-axis conversion is done here, because calling out
+  a 400 x 200 duct and getting 800 x 400 is the obvious trap.
+- **Sweep.** `autocad_extrude_profile` gains `path_handle`: run a section along
+  a route, which is how a duct, a pipe, a cable tray or a handrail is really
+  modelled.
+- **`autocad_slice_solid`.** Cut a solid with a plane - a real section through a
+  model. Given the way a drafter says it ("horizontally at 1500", "on the
+  diagonal"), with the three points AutoCAD wants worked out in pure Python and
+  tested without AutoCAD.
+- **`autocad_check_interference` - clash detection.** Every solid in one set
+  against every in another, with the overlap volume so the worst is dealt with
+  first, and `create_solids` to draw them. It is **Changes, not Read**, because
+  AutoCAD builds the overlap as a real solid to measure it; with the drawing off
+  each one is removed again, and row F11 exists to prove that.
+- **`autocad_transform_3d`.** Move with Z, rotate about any axis, mirror in a
+  plane, array up in levels. The flat modify tools only ever did XY and Z-axis
+  rotation.
+- **Materials.** `autocad_list_materials` and `autocad_apply_material`.
+- **`autocad_render`** drives `-render`, at Admin.
+
+### What 3D cannot do, said out loud (D-33)
+
+Researched before building, because a guessed COM signature can destroy a
+model. Three honest limits now documented in the tools themselves:
+
+- **`SectionSolid` is not built.** No parameter list for it exists in any
+  reference we could find. `autocad_slice_solid` covers sectioning instead.
+- **Materials cannot be created, and carry no density.** There is no automation
+  route into Autodesk's library, so an unknown name is refused *with the list of
+  what the drawing does have*. And a material is appearance only - MASSPROP
+  assumes density 1, so a weight is volume times a density you state.
+  Assigning "Steel" does not make anything weigh.
+- **Rendering has no automation call.** `-render` is the only route; its prompts
+  differ between releases, and script rendering has been reported to drop
+  objects. `autocad_render` says both in its own docstring. For a picture to
+  look at, `autocad_preview` is instant and needs no padlock.
+
+### Checking
+
+- **NEEDS-CHECKING group F**: 23 new rows, 90 live rows in all.
+  `tools/live_check.py --group F` measures 19 of them, including the ones that
+  would catch a real error: an oval duct measuring 400 x 200 and not 800 x 400;
+  a slice whose two halves add up to the original; a clash check that leaves
+  the entity count unchanged; a 1000 tall column that lies down to 100 when
+  tipped 90 degrees about X.
+- `tests/test_solids_3d.py`: the cutting-plane arithmetic for every named plane
+  and seven arbitrary normals, including the vertical case where the helper axis
+  has to dodge the normal. 38 tests.
+- 1812 offline tests.
+
 ## 1.5.0 - 2026-10-26 - 101 tools you can actually find
 
 No new tools. A toolbox nobody can search is worse than a small one, and 47

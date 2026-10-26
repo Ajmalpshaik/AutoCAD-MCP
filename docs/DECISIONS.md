@@ -129,6 +129,44 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-33 - What 3D can and cannot be automated, said out loud
+
+**Decided:** 2026-10-26, on Ajmal's instruction to cover "all kind of 3-D modelling inside
+AutoCAD... including material that for rendering". **Status:** in force.
+
+Researched before building, because guessing a COM signature wrong can destroy a model. What
+was confirmed and built: `AddEllipticalCone`, `AddEllipticalCylinder`,
+`AddExtrudedSolidAlongPath` (SWEEP), `SliceSolid`, `CheckInterference`, `Rotate3D`, `Mirror3D`,
+and the entity `Material` property.
+
+Three things are **not** built, and that is the decision:
+
+**`SectionSolid` is not built.** AutoCAD's own conceptual docs name it, but no parameter list for
+it could be found in any reference. A wrong signature here would mangle a solid, so
+`autocad_slice_solid` covers sectioning instead - cut it and look at the face.
+
+**Materials cannot be created.** Every entity has a string `Material` property and setting it
+works, but there is no automation route into Autodesk's material library. So `autocad_apply_material`
+applies what is already in the drawing and, when a name is not there, **lists what is** and says
+the Materials Browser is the way in. It does not pretend to create one.
+
+**A material carries no density**, so it cannot give anything a weight. MASSPROP and
+`autocad_solid_properties` both behave as if density were 1. The `model_part` prompt already
+multiplies volume by a density the AI must state out loud; assigning "Steel" changes how a solid
+looks and nothing else. Both tools say so, because the opposite assumption would put a wrong
+weight on a drawing.
+
+**Rendering has no automation call at all.** The only route is the `-render` command, so
+`autocad_render` drives that - which is why it is **ADMIN**, the only new tool that is. Its
+docstring carries the two real risks: the prompt wording differs between releases so the command
+can stall, and script rendering has been reported to drop objects that render correctly by hand.
+For a picture to look at, `autocad_preview` is instant and needs no padlock.
+
+**`autocad_check_interference` is CHANGE, not READ**, although it only reports. AutoCAD builds the
+overlap as a real solid in order to measure it. With `create_solids` off each one is removed again,
+but the drawing was written to, and by D-31 the level belongs to the tool rather than to the call
+it happens to make. Row F11 exists to prove the clean-up works.
+
 ## D-32 - A tool is not a fragment, but it carries the same five padlocks
 
 **Decided:** 2026-10-26, on Ajmal's question: "these tools, it is same like

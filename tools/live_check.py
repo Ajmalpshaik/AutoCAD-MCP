@@ -50,6 +50,7 @@ from autocad_mcp.tools import (  # noqa: E402
     draw,
     geometry_tools,
     layers,
+    materials,
     query,
     sequence,
     settings,
@@ -890,6 +891,302 @@ async def e36_bulges_and_text_alignment_round_trip(ctx: Context) -> str:
             f"centred text's box middle at x={mid_x:.2f}")
 
 
+
+# ---------------------------------------------------------------------------
+# Group F - the rest of 3D
+# ---------------------------------------------------------------------------
+
+
+async def f1_an_oval_duct_is_the_size_called_out(ctx: Context) -> str:
+    """The one that catches a half-axis mix-up: 400 x 200 must measure 400 x 200."""
+    made = parse(await solids.autocad_add_solid(
+        shape="elliptical_cylinder", base=[0, 70000, 0],
+        length=400, width=200, height=2000, layer="LC-3D",
+    ))
+    box = made["bounding_box"]
+    across_x = box["max"][0] - box["min"][0]
+    across_y = box["max"][1] - box["min"][1]
+    expect(near(across_x, 400.0, 1e-3), f"it measures {across_x} across X, not 400 (half-axis mix-up?)")
+    expect(near(across_y, 200.0, 1e-3), f"it measures {across_y} across Y, not 200")
+    expect(near(box["min"][2], 0.0, 1e-6), f"its base is at z={box['min'][2]}, not 0")
+    return f"{across_x:g} x {across_y:g} x {box['max'][2] - box['min'][2]:g}, base on z=0"
+
+
+async def f2_an_oval_cone_comes_out(ctx: Context) -> str:
+    made = parse(await solids.autocad_add_solid(
+        shape="elliptical_cone", base=[2000, 70000, 0],
+        length=400, width=200, height=600, layer="LC-3D",
+    ))
+    box = made["bounding_box"]
+    expect(near(box["max"][0] - box["min"][0], 400.0, 1e-3),
+           f"its base is {box['max'][0] - box['min'][0]} across X, not 400")
+    expect(made["volume"] and made["volume"] > 0, f"its volume is {made.get('volume')}")
+    return f"base 400 x 200, {box['max'][2] - box['min'][2]:g} high, volume {made['volume']:g}"
+
+
+async def f3_a_round_oval_is_refused(ctx: Context) -> str:
+    message = refusal(await solids.autocad_add_solid(
+        shape="elliptical_cylinder", base=[0, 0, 0], length=300, width=300, height=100
+    ))
+    expect("cylinder" in message, f"the refusal did not point at the simpler tool: {message[:120]}")
+    return "an oval with equal axes was refused and pointed at shape='cylinder'"
+
+
+async def f4_a_profile_sweeps_along_a_route(ctx: Context) -> str:
+    """AddExtrudedSolidAlongPath: never called from this server before today."""
+    route = parse(await batch.autocad_batch_draw(operations=[
+        {"type": "polyline", "points": [[0, 72000], [3000, 72000]], "layer": "LC-3D"},
+    ]))
+    profile = parse(await batch.autocad_batch_draw(operations=[
+        {"type": "circle", "center": [0, 72000], "radius": 50, "layer": "LC-3D"},
+    ]))
+    out = parse(await solids.autocad_extrude_profile(
+        handles=[profile["handles"][0]], path_handle=route["handles"][0], layer="LC-3D"
+    ))
+    expect(out["operation"] == "sweep", f"it reported {out['operation']}")
+    want = math.pi * 50 ** 2 * 3000
+    expect(out["volume"] and abs(out["volume"] - want) / want < 0.05,
+           f"the volume is {out.get('volume')}, but pi x 50^2 x 3000 is {want:.0f}")
+    return f"swept along a {out.get('swept_along')}; volume {out['volume']:g} (expected about {want:.0f})"
+
+
+async def f5_a_slice_splits_the_volume_in_two(ctx: Context) -> str:
+    """The honest test of a cut: the halves must add up to what you started with."""
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 74000, 0], length=1000, width=1000, height=200, layer="LC-3D"
+    ))
+    before = made["volume"]
+    out = parse(await solids.autocad_slice_solid(
+        handles=[made["handle"]], through=[0, 74000, 100], plane="horizontal",
+        keep="both", layer="LC-3D",
+    ))
+    row = out["results"][0]
+    kept, new = row.get("volume_after"), row.get("new_volume")
+    expect(new, f"keep='both' gave no second half: {row}")
+    expect(near(kept + new, before, 1.0),
+           f"the halves are {kept} + {new} = {kept + new}, but it was {before}")
+    expect(near(kept, before / 2.0, 1.0), f"the cut was not at the half height: {kept} of {before}")
+    return f"{before:g} became {kept:g} + {new:g} = {kept + new:g}, cut at mid height"
+
+
+async def f6_keeping_one_side_leaves_one_solid(ctx: Context) -> str:
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[2000, 74000, 0], length=1000, width=1000, height=200, layer="LC-3D"
+    ))
+    before = await entity_count()
+    out = parse(await solids.autocad_slice_solid(
+        handles=[made["handle"]], through=[2000, 74000, 100], plane="horizontal", keep="positive"
+    ))
+    after = await entity_count()
+    row = out["results"][0]
+    expect("new_handle" not in row, f"keep='positive' still made a second solid: {row}")
+    expect(after == before, f"the entity count went {before} -> {after}")
+    expect(row["volume_after"] < row["volume_before"],
+           f"the volume did not drop: {row['volume_before']} -> {row['volume_after']}")
+    return (f"one solid left, {row['volume_before']:g} -> {row['volume_after']:g}, "
+            f"entity count unchanged at {before}")
+
+
+async def f8_slicing_a_line_is_refused(ctx: Context) -> str:
+    line = parse(await draw.autocad_draw_line(start=[0, 76000], end=[1000, 76000], layer="LC-3D"))
+    message = refusal(await solids.autocad_slice_solid(
+        handles=[line["handle"]], through=[0, 76000, 0], plane="horizontal"
+    ))
+    expect("not a 3D solid" in message, f"refused for the wrong reason: {message[:140]}")
+    still = parse(await query.autocad_get_entity(handle=line["handle"]))
+    expect(still["type"] == "line", "the line did not survive")
+    return "a line was refused by name and left alone"
+
+
+async def f9_a_clash_is_found_and_measured(ctx: Context) -> str:
+    """CheckInterference: never called from this server before today."""
+    beam = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 78000, 0], length=4000, width=200, height=400, layer="LC-3D"
+    ))
+    duct = parse(await solids.autocad_add_solid(
+        shape="box", base=[2000, 78000, 100], length=300, width=2000, height=300, layer="LC-3D"
+    ))
+    out = parse(await solids.autocad_check_interference(
+        handles=[duct["handle"]], against=[beam["handle"]]
+    ))
+    expect(out["clashes"] == 1, f"it found {out['clashes']} clashes, not 1; skipped {out.get('skipped')}")
+    expect(not out["clear"], "it reported clear while the solids overlap")
+    found = out["found"][0]
+    # The overlap is 200 wide (the beam), 300 along, and 300 tall where they meet.
+    want = 200 * 300 * 300
+    expect(found.get("volume") and abs(found["volume"] - want) / want < 0.2,
+           f"the overlap is {found.get('volume')}, but it should be about {want}")
+    ctx.store["clash_solids"] = [beam["handle"], duct["handle"]]
+    return f"1 clash, overlap volume {found['volume']:g} (expected about {want})"
+
+
+async def f10_clear_means_clear(ctx: Context) -> str:
+    a = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 80000, 0], length=200, width=200, height=200, layer="LC-3D"
+    ))
+    b = parse(await solids.autocad_add_solid(
+        shape="box", base=[5000, 80000, 0], length=200, width=200, height=200, layer="LC-3D"
+    ))
+    out = parse(await solids.autocad_check_interference(
+        handles=[a["handle"]], against=[b["handle"]]
+    ))
+    expect(out["clear"] and out["clashes"] == 0, f"two solids 5 m apart reported {out['clashes']} clashes")
+    expect(out["checked_pairs"] == 1, f"it checked {out['checked_pairs']} pairs, not 1")
+    return "two solids 5 m apart: clear, 1 pair checked"
+
+
+async def f11_a_clash_check_leaves_nothing_behind(ctx: Context) -> str:
+    """AutoCAD builds the overlap to measure it. That must not stay in the drawing."""
+    pair = ctx.store.get("clash_solids")
+    expect(pair, "F9 did not leave a clashing pair")
+    before = await entity_count()
+    out = parse(await solids.autocad_check_interference(
+        handles=[pair[0]], against=[pair[1]], create_solids=False
+    ))
+    after = await entity_count()
+    expect(out["clashes"] == 1, f"it no longer finds the clash: {out}")
+    expect(after == before, f"it left {after - before} object(s) behind: {before} -> {after}")
+    expect(not out["solids_drawn"], "it reported drawing solids when it was asked not to")
+    return f"clash still found, entity count unchanged at {before}"
+
+
+async def f12_the_clash_can_be_drawn(ctx: Context) -> str:
+    pair = ctx.store.get("clash_solids")
+    expect(pair, "F9 did not leave a clashing pair")
+    out = parse(await solids.autocad_check_interference(
+        handles=[pair[0]], against=[pair[1]], create_solids=True, layer="LC-CLASH", color="red"
+    ))
+    expect(out["solids_drawn"], "it drew nothing")
+    handle = out["found"][0].get("handle")
+    expect(handle, f"no handle came back for the overlap: {out['found'][0]}")
+    got = parse(await query.autocad_get_entity(handle=handle))
+    expect(got["layer"] == "LC-CLASH", f"the clash solid is on layer {got['layer']}")
+    expect(got["type"] == "3dsolid", f"it came out as {got['type']}")
+    return f"the overlap was drawn on LC-CLASH as a {got['type']}"
+
+
+async def f13_checking_a_set_against_itself_pairs_once(ctx: Context) -> str:
+    handles = []
+    for i in range(3):
+        made = parse(await solids.autocad_add_solid(
+            shape="box", base=[i * 150, 82000, 0], length=200, width=200, height=200, layer="LC-3D"
+        ))
+        handles.append(made["handle"])
+    out = parse(await solids.autocad_check_interference(handles=handles))
+    expect(out["checked_pairs"] == 3, f"it checked {out['checked_pairs']} pairs; 3 solids make 3")
+    return f"3 solids against themselves = {out['checked_pairs']} pairs, each once"
+
+
+async def f14_a_3d_move_lifts_things(ctx: Context) -> str:
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 84000, 0], length=200, width=200, height=200, layer="LC-3D"
+    ))
+    out = parse(await solids.autocad_transform_3d(
+        handles=[made["handle"]], operation="move", displacement=[0, 0, 3500]
+    ))
+    expect(out["count"] == 1, f"it moved {out['count']}")
+    got = parse(await query.autocad_get_entity(handle=made["handle"]))
+    low = got["bounding_box"]["min"][2]
+    expect(near(low, 3500.0, 1e-3), f"its base is at z={low}, not 3500")
+    return f"lifted to z={low}"
+
+
+async def f15_a_3d_rotate_tips_about_the_x_axis(ctx: Context) -> str:
+    """Rotate3D: never called from this server before today."""
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 86000, 0], length=100, width=100, height=1000, layer="LC-3D"
+    ))
+    before = parse(await query.autocad_get_entity(handle=made["handle"]))["bounding_box"]
+    tall_before = before["max"][2] - before["min"][2]
+    out = parse(await solids.autocad_transform_3d(
+        handles=[made["handle"]], operation="rotate",
+        axis_point=[0, 86000, 0], axis_direction=[1, 0, 0], angle=90,
+    ))
+    expect(out["count"] == 1, f"it rotated {out['count']}; failed {out.get('failed')}")
+    after = parse(await query.autocad_get_entity(handle=made["handle"]))["bounding_box"]
+    tall_after = after["max"][2] - after["min"][2]
+    expect(near(tall_before, 1000.0, 1e-3), f"it started {tall_before} tall, not 1000")
+    expect(near(tall_after, 100.0, 1e-2),
+           f"after tipping 90 about X it is {tall_after} tall; a 1000 column should lie down to 100")
+    return f"a 1000 tall column tipped about X is now {tall_after:.2f} tall - it lay down"
+
+
+async def f16_a_3d_mirror_reflects_in_a_plane(ctx: Context) -> str:
+    """Mirror3D: never called from this server before today."""
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 88000, 0], length=200, width=200, height=200, layer="LC-3D"
+    ))
+    out = parse(await solids.autocad_transform_3d(
+        handles=[made["handle"]], operation="mirror",
+        plane_point=[0, 88000, 2000], plane_normal=[0, 0, 1], keep_original=True,
+    ))
+    new = (out.get("new_handles") or [None])[0]
+    expect(new, f"no reflection came back: {out}")
+    original = parse(await query.autocad_get_entity(handle=made["handle"]))["bounding_box"]
+    copy = parse(await query.autocad_get_entity(handle=new))["bounding_box"]
+    expect(near(original["min"][2], 0.0, 1e-3), "the original moved")
+    # Mirrored in z=2000: a base at 0 reflects to a top at 4000.
+    expect(near(copy["max"][2], 4000.0, 1e-2),
+           f"the reflection's top is at z={copy['max'][2]}, not 4000")
+    return f"original base still z=0; the reflection's top is z={copy['max'][2]:g}"
+
+
+async def f17_a_3d_array_stacks_floors(ctx: Context) -> str:
+    made = parse(await solids.autocad_add_solid(
+        shape="box", base=[0, 90000, 0], length=200, width=200, height=200, layer="LC-3D"
+    ))
+    out = parse(await solids.autocad_transform_3d(
+        handles=[made["handle"]], operation="array", levels=5, level_spacing=3600
+    ))
+    new = out.get("new_handles") or []
+    expect(len(new) == 4, f"it made {len(new)} copies; 5 levels means 4 new")
+    tops = []
+    for handle in new:
+        box = parse(await query.autocad_get_entity(handle=handle))["bounding_box"]
+        tops.append(box["min"][2])
+    tops.sort()
+    expect(near(tops[-1], 4 * 3600.0, 1e-2), f"the top one is at z={tops[-1]}, not {4 * 3600}")
+    return f"4 copies at z = {[round(v) for v in tops]}"
+
+
+async def f19_an_unknown_material_is_refused_with_the_real_list(ctx: Context) -> str:
+    """The refusal has to be useful: automation cannot reach Autodesk's library."""
+    listed = parse(await materials.autocad_list_materials())
+    message = refusal(await materials.autocad_apply_material(
+        material="LC-NoSuchMaterial", layer_filter="LC-3D"
+    ))
+    expect("no material called" in message.lower(), f"refused for the wrong reason: {message[:140]}")
+    expect("Materials Browser" in message,
+           f"the refusal did not say how to get one: {message[:200]}")
+    if listed["count"]:
+        first = listed["materials"][0]["name"]
+        expect(first in message, f"it did not list what the drawing has ({first}): {message[:200]}")
+    return (f"refused, named the Materials Browser, and listed the drawing's "
+            f"{listed['count']} material(s)")
+
+
+async def f21_a_material_skips_what_it_cannot_show(ctx: Context) -> str:
+    listed = parse(await materials.autocad_list_materials())
+    if not listed["count"]:
+        raise Refused("this drawing has no materials, so none can be applied")
+    name = listed["materials"][0]["name"]
+    line = parse(await draw.autocad_draw_line(start=[0, 92000], end=[100, 92000], layer="LC-MAT"))
+    message = refusal(await materials.autocad_apply_material(
+        material=name, handles=[line["handle"]], solids_only=True
+    ))
+    expect("not 3D solids" in message or "applied to nothing" in message,
+           f"refused for the wrong reason: {message[:140]}")
+    return f"'{name}' on a line was skipped and reported, not silently applied"
+
+
+async def f23_a_sequence_cannot_reach_the_renderer(ctx: Context) -> str:
+    message = refusal(await sequence.autocad_sequence(steps=[
+        {"tool": "autocad_render", "args": {"output_path": "C:/Temp/lc.png"}}
+    ]))
+    expect("admin" in message.lower(), f"refused for the wrong reason: {message[:140]}")
+    return "autocad_render is above the sequence ceiling, as Admin should be"
+
+
 # ---------------------------------------------------------------------------
 # The register
 # ---------------------------------------------------------------------------
@@ -953,6 +1250,26 @@ CHECKS: tuple[Check, ...] = (
     Check("E32", "E", "a helix comes out", e32_a_helix_comes_out),
     Check("E34", "E", "the 3D view and style take", e34_the_3d_view_and_style_take),
     Check("E36", "E", "bulges and text alignment round trip", e36_bulges_and_text_alignment_round_trip),
+    Check("F1", "F", "an oval duct is the size called out", f1_an_oval_duct_is_the_size_called_out),
+    Check("F2", "F", "an oval cone comes out", f2_an_oval_cone_comes_out),
+    Check("F3", "F", "a round oval is refused", f3_a_round_oval_is_refused),
+    Check("F4", "F", "a profile sweeps along a route", f4_a_profile_sweeps_along_a_route),
+    Check("F5", "F", "a slice splits the volume in two", f5_a_slice_splits_the_volume_in_two),
+    Check("F6", "F", "keeping one side leaves one solid", f6_keeping_one_side_leaves_one_solid),
+    Check("F8", "F", "slicing a line is refused", f8_slicing_a_line_is_refused),
+    Check("F9", "F", "a clash is found and measured", f9_a_clash_is_found_and_measured),
+    Check("F10", "F", "clear means clear", f10_clear_means_clear),
+    Check("F11", "F", "a clash check leaves nothing behind", f11_a_clash_check_leaves_nothing_behind),
+    Check("F12", "F", "the clash can be drawn", f12_the_clash_can_be_drawn),
+    Check("F13", "F", "checking a set against itself pairs once", f13_checking_a_set_against_itself_pairs_once),
+    Check("F14", "F", "a 3D move lifts things", f14_a_3d_move_lifts_things),
+    Check("F15", "F", "a 3D rotate tips about the X axis", f15_a_3d_rotate_tips_about_the_x_axis),
+    Check("F16", "F", "a 3D mirror reflects in a plane", f16_a_3d_mirror_reflects_in_a_plane),
+    Check("F17", "F", "a 3D array stacks floors", f17_a_3d_array_stacks_floors),
+    Check("F19", "F", "an unknown material is refused with the real list",
+          f19_an_unknown_material_is_refused_with_the_real_list),
+    Check("F21", "F", "a material skips what it cannot show", f21_a_material_skips_what_it_cannot_show),
+    Check("F23", "F", "a sequence cannot reach the renderer", f23_a_sequence_cannot_reach_the_renderer),
 )
 
 # Rows the register holds that only an eye can answer, said plainly rather than
@@ -979,6 +1296,10 @@ BY_EYE: dict[str, str] = {
     "E30": "two solids that do not touch, easiest placed by hand",
     "E33": "a route through a building needs a building",
     "E35": "going back to plan is clearest by eye",
+    "F7": "a diagonal cut is judged by looking at the face it leaves",
+    "F18": "needs a drawing with materials already in it, and a look at the counts",
+    "F20": "whether it looks like steel is a judgement, not a measurement",
+    "F22": "a render has to be looked at, and compared with one done by hand",
 }
 
 
@@ -1012,7 +1333,7 @@ async def close_scratch(name: str, restore: str | None) -> None:
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--group", default="all", help="D, E or all (default all)")
+    parser.add_argument("--group", default="all", help="D, E, F or all (default all)")
     parser.add_argument("--row", action="append", help="run only these rows, e.g. --row E4 --row D13")
     parser.add_argument("--list", action="store_true", help="list the rows and exit, without AutoCAD")
     parser.add_argument("--write", action="store_true", help="write the results into docs/NEEDS-CHECKING.md")

@@ -72,7 +72,10 @@ VISUAL_STYLES = (
     "shaded", "shaded with edges", "shades of gray", "sketchy", "x-ray",
 )
 
-Primitive = Literal["box", "wedge", "cylinder", "cone", "sphere", "torus"]
+Primitive = Literal[
+    "box", "wedge", "cylinder", "cone", "sphere", "torus",
+    "elliptical_cylinder", "elliptical_cone",
+]
 
 
 def _try(getter, default=None):
@@ -142,7 +145,9 @@ async def autocad_add_solid(
             description=(
                 "'box' and 'wedge' need length, width and height. 'cylinder' and 'cone' "
                 "need radius (or diameter) and height. 'sphere' needs radius. 'torus' "
-                "needs radius and tube_radius."
+                "needs radius and tube_radius. 'elliptical_cylinder' and "
+                "'elliptical_cone' are the oval ones — an oval duct or a tapered oval "
+                "stack — and take length, width and height as the OVERALL sizes."
             )
         ),
     ],
@@ -156,8 +161,8 @@ async def autocad_add_solid(
             )
         ),
     ],
-    length: Annotated[float | None, Field(default=None, gt=0, description="Box and wedge: size along X.")] = None,
-    width: Annotated[float | None, Field(default=None, gt=0, description="Box and wedge: size along Y.")] = None,
+    length: Annotated[float | None, Field(default=None, gt=0, description="Box and wedge: size along X. Elliptical shapes: the overall size across X.")] = None,
+    width: Annotated[float | None, Field(default=None, gt=0, description="Box and wedge: size along Y. Elliptical shapes: the overall size across Y.")] = None,
     height: Annotated[float | None, Field(default=None, gt=0, description="Box, wedge, cylinder and cone: size along Z.")] = None,
     radius: Annotated[float | None, Field(default=None, gt=0, description="Cylinder, cone, sphere: the radius. Torus: the radius of the ring itself.")] = None,
     diameter: Annotated[float | None, Field(default=None, gt=0, description="Instead of radius — how a pipe or a bollard is normally called out.")] = None,
@@ -176,7 +181,8 @@ async def autocad_add_solid(
     One undo step.
 
     Args:
-        shape (str): box, wedge, cylinder, cone, sphere or torus.
+        shape (str): box, wedge, cylinder, cone, sphere, torus,
+            elliptical_cylinder or elliptical_cone.
         base (list[float]): centre of the base ([x, y] or [x, y, z]).
         length / width / height (Optional[float]): as the shape needs.
         radius / diameter (Optional[float]): as the shape needs.
@@ -195,6 +201,9 @@ async def autocad_add_solid(
           shape='box'.
         - Use when: "a 300 diameter column 3000 high" — shape='cylinder',
           diameter=300, height=3000.
+        - Use when: "a 400 x 200 oval duct, 2 m long, standing up" —
+          shape='elliptical_cylinder', length=400, width=200, height=2000.
+          Length and width are the overall sizes, not the half axes.
         - Don't use when: the part is really a 2D section to be extruded —
           draw the profile and use autocad_extrude_profile, which gets the real
           shape rather than a box that is nearly it.
@@ -214,6 +223,8 @@ async def autocad_add_solid(
         "cone": ("radius", "height"),
         "sphere": ("radius",),
         "torus": ("radius", "tube_radius"),
+        "elliptical_cylinder": ("length", "width", "height"),
+        "elliptical_cone": ("length", "width", "height"),
     }
     have = {"length": length, "width": width, "height": height, "radius": r,
             "tube_radius": tube_radius}
@@ -222,6 +233,12 @@ async def autocad_add_solid(
         raise AutocadError(
             f"'{shape}' needs {', '.join(needs[shape])}; missing {', '.join(missing)}."
             + (" radius can be given as diameter instead." if "radius" in missing else "")
+        )
+    if shape.startswith("elliptical") and float(length) == float(width):
+        raise AutocadError(
+            f"'{shape}' with length and width both {float(length):g} is a plain "
+            f"{shape.split('_')[1]} — use shape='{shape.split('_')[1]}' with "
+            "radius instead, which is clearer to read."
         )
     if shape == "torus" and float(tube_radius) >= r:
         raise AutocadError(
@@ -320,6 +337,17 @@ async def autocad_extrude_profile(
         list[float] | None,
         Field(default=None, description="Revolve: which way the axis runs, e.g. [0,1,0] for the Y axis. Rotation follows the right-hand rule about it."),
     ] = None,
+    path_handle: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description=(
+                "Sweep: the handle of the curve to run the profile along — a polyline, "
+                "circle, arc, ellipse or spline. This is how a duct or a pipe follows a "
+                "route. Give this instead of height or revolve_angle."
+            ),
+        ),
+    ] = None,
     keep_profile: Annotated[
         bool,
         Field(default=True, description="Keep the original curves. They are kept by default, because they are usually the 2D section you still want on the drawing."),
@@ -328,11 +356,12 @@ async def autocad_extrude_profile(
     color: Annotated[str | StrictInt | None, COLOR_OPT] = None,
     coords: Annotated[str, COORDS_OPT] = "world",
 ) -> str:
-    """Turn a closed 2D profile into a solid: extrude it along Z, or revolve it about an axis.
+    """Turn a closed 2D profile into a solid: extrude it, revolve it, or sweep it along a path.
 
     This is how every real part gets modelled — draw the section flat, then
     give it depth. A flange is a profile revolved 360 degrees; a bracket is a
-    profile extruded; a footing is a profile extruded with a taper.
+    profile extruded; a footing is a profile extruded with a taper; a duct or
+    a cable tray following a route is a profile **swept along** that route.
 
     The curves are joined into a region first (AutoCAD's own step), the solid
     is made from it, and that intermediate region is then removed — it is
@@ -347,6 +376,7 @@ async def autocad_extrude_profile(
         taper (float): extrude taper angle, degrees.
         revolve_angle (Optional[float]): revolve this many degrees instead.
         axis_point / axis_direction (Optional[list[float]]): the axis to revolve about.
+        path_handle (Optional[str]): sweep: the route to run the profile along.
         keep_profile (bool): keep the original curves (default true).
         layer (Optional[str]): target layer, created if missing.
         color (Optional[str | int]): colour.
@@ -354,8 +384,8 @@ async def autocad_extrude_profile(
 
     Returns:
         str: JSON: {"created": true, "handle": str, "operation": "extrude" |
-             "revolve", "regions_found": int, "volume": float,
-             "bounding_box": {...}, "profile_kept": bool}
+             "revolve" | "sweep", "regions_found": int, "volume": float,
+             "bounding_box": {...}, "profile_kept": bool, "swept_along": str | null}
 
     Examples:
         - Use when: "extrude this outline 200 up" — handles the polyline,
@@ -363,6 +393,9 @@ async def autocad_extrude_profile(
         - Use when: "revolve this section round the Y axis to make the flange"
           — revolve_angle=360, axis_point and axis_direction.
         - Use when: "a tapered footing" — height plus taper.
+        - Use when: "run that duct section along the route I drew" —
+          path_handle=the route polyline. That is a sweep, and it is how a
+          duct, a pipe, a cable tray or a handrail follows a path.
         - Don't use when: a plain box or cylinder will do (autocad_add_solid).
 
     Error Handling:
@@ -373,10 +406,13 @@ async def autocad_extrude_profile(
         - More than one region from the curves is reported, with the count: that
           means the profile closed more than one loop, which is rarely meant.
     """
-    if (height is None) == (revolve_angle is None):
+    chosen = [name for name, value in (("height", height), ("revolve_angle", revolve_angle),
+                                      ("path_handle", path_handle)) if value is not None]
+    if len(chosen) != 1:
         raise AutocadError(
-            "Give 'height' to extrude, or 'revolve_angle' with an axis to revolve — one or "
-            "the other."
+            "Give exactly one of: 'height' to extrude straight up, 'revolve_angle' with an "
+            "axis to turn it, or 'path_handle' to sweep it along a route"
+            + (f" — got {', '.join(chosen)}." if chosen else " — got none.")
         )
     if height is not None and abs(float(height)) < 1e-9:
         raise AutocadError("A height of zero extrudes nothing.")
@@ -422,6 +458,10 @@ async def autocad_extrude_profile(
                 if height is not None:
                     solid = target.AddExtrudedSolid(region, float(height), rad(taper) or 0.0)
                     operation = "extrude"
+                elif path_handle is not None:
+                    path = resolve_handle(doc, path_handle)
+                    solid = target.AddExtrudedSolidAlongPath(region, path)
+                    operation = "sweep"
                 else:
                     solid = target.AddRevolvedSolid(
                         region,
@@ -458,6 +498,7 @@ async def autocad_extrude_profile(
             notes,
             operation=operation,
             regions_found=len(regions),
+            swept_along=short_type(resolve_handle(doc, path_handle)) if path_handle else None,
             volume=_try(lambda: round(float(solid.Volume), 6)),
             profile_kept=bool(keep_profile),
         )
@@ -946,5 +987,492 @@ async def autocad_set_3d_view(
         if not_set:
             result["not_set"] = not_set
         return result
+
+    return dumps(await run(work))
+
+
+# ---------------------------------------------------------------------------
+# Cutting and checking
+# ---------------------------------------------------------------------------
+
+
+def plane_from(
+    kind: str,
+    through: list[float],
+    normal: list[float] | None,
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    """Three points on a cutting plane, from a named plane or a normal.
+
+    AutoCAD's ``SliceSolid`` wants three points. Nobody thinks in three points:
+    a modeller says "cut it horizontally at this level" or "section it on the
+    centre line". This turns those into the three points, keeping the arithmetic
+    out of AutoCAD so it can be checked.
+    """
+    x, y, z = (float(through[0]), float(through[1]),
+               float(through[2]) if len(through) > 2 else 0.0)
+    if kind == "horizontal":  # cut at a level: the XY plane through the point
+        return (x, y, z), (x + 1.0, y, z), (x, y + 1.0, z)
+    if kind == "vertical_x":  # a plane containing the X axis: cuts front to back
+        return (x, y, z), (x + 1.0, y, z), (x, y, z + 1.0)
+    if kind == "vertical_y":  # a plane containing the Y axis: cuts left to right
+        return (x, y, z), (x, y + 1.0, z), (x, y, z + 1.0)
+    if kind == "normal":
+        if not normal or len(normal) < 3:
+            raise AutocadError("plane='normal' needs 'normal' as [x, y, z], the direction the plane faces.")
+        nx, ny, nz = (float(v) for v in normal[:3])
+        length = math.sqrt(nx * nx + ny * ny + nz * nz)
+        if length < 1e-12:
+            raise AutocadError("'normal' cannot be all zeros — it is the direction the plane faces.")
+        nx, ny, nz = nx / length, ny / length, nz / length
+        # Any vector not parallel to the normal gives a first in-plane axis.
+        other = (0.0, 0.0, 1.0) if abs(nz) < 0.9 else (1.0, 0.0, 0.0)
+        ux = ny * other[2] - nz * other[1]
+        uy = nz * other[0] - nx * other[2]
+        uz = nx * other[1] - ny * other[0]
+        scale = math.sqrt(ux * ux + uy * uy + uz * uz)
+        ux, uy, uz = ux / scale, uy / scale, uz / scale
+        # The second axis is perpendicular to both, so the three points span the plane.
+        vx = ny * uz - nz * uy
+        vy = nz * ux - nx * uz
+        vz = nx * uy - ny * ux
+        return (x, y, z), (x + ux, y + uy, z + uz), (x + vx, y + vy, z + vz)
+    raise AutocadError(f"Unknown plane '{kind}'. Use horizontal, vertical_x, vertical_y or normal.")
+
+
+@mcp.tool(name="autocad_slice_solid", **tool_meta("Slice A Solid"))
+@tool_errors
+async def autocad_slice_solid(
+    handles: Annotated[list[str], Field(min_length=1, description="The solids to cut. Each is cut by the same plane.")],
+    through: Annotated[list[float], Field(description="A point the cutting plane passes through, as [x, y] or [x, y, z]. For a horizontal cut this is the level.")],
+    plane: Annotated[
+        Literal["horizontal", "vertical_x", "vertical_y", "normal"],
+        Field(
+            default="horizontal",
+            description=(
+                "Which way the plane lies. 'horizontal' cuts at a level (the usual one for "
+                "a plan section). 'vertical_x' cuts front to back, 'vertical_y' left to "
+                "right. 'normal' lets you give any direction with 'normal'."
+            ),
+        ),
+    ] = "horizontal",
+    normal: Annotated[list[float] | None, Field(default=None, description="For plane='normal': the direction the plane faces, as [x, y, z].")] = None,
+    keep: Annotated[
+        Literal["both", "positive", "negative"],
+        Field(
+            default="both",
+            description=(
+                "Which side to keep. 'both' keeps the two halves as separate solids, which "
+                "is what you want to look inside something. 'positive' keeps the side the "
+                "plane's normal points to; 'negative' keeps the other."
+            ),
+        ),
+    ] = "both",
+    layer: Annotated[str | None, LAYER_OPT] = None,
+    coords: Annotated[str, COORDS_OPT] = "world",
+) -> str:
+    """Cut a solid with a plane — a real section through a model.
+
+    This is how a 3D model becomes a section drawing: slice it at the level or
+    on the line the section mark shows, then look at the cut face. Keeping both
+    halves lets you move one aside and see inside.
+
+    The plane is given the way a drafter says it — "horizontally at this level"
+    — and the three points AutoCAD actually wants are worked out here.
+
+    One undo step.
+
+    Args:
+        handles (list[str]): the solids to cut.
+        through (list[float]): a point on the cutting plane.
+        plane (str): horizontal, vertical_x, vertical_y or normal.
+        normal (Optional[list[float]]): the plane's direction, for plane='normal'.
+        keep (str): both, positive or negative.
+        layer (Optional[str]): layer for any new half.
+        coords (str): 'world' or 'ucs'.
+
+    Returns:
+        str: JSON: {"sliced": int, "plane": {"kind", "points"},
+             "results": [{"handle", "kept_handle", "new_handle", "volume_before",
+             "volume_after", "new_volume"}], "failed": [{"handle", "reason"}]}
+
+    Examples:
+        - Use when: "section that model at 1500 above floor level" —
+          plane='horizontal', through=[0, 0, 1500].
+        - Use when: "cut this fitting in half so I can see the bore" —
+          plane='vertical_y', keep='both'.
+        - Don't use when: you want a 2D section to dimension — slice it, then
+          look at the cut face with autocad_set_3d_view, or take the outline
+          off it. SectionSolid is not used here: its ActiveX signature is not
+          documented anywhere we could check, and guessing it would risk your
+          model.
+    """
+    points_spec = plane
+    with_normal = normal
+
+    def work() -> dict[str, Any]:
+        doc = get_doc()
+        require_idle(doc)
+        ucs = ucs_for(doc, coords)
+        if layer:
+            ensure_layer(doc, layer)
+        point = list(world_coords(through, ucs))
+        p1, p2, p3 = plane_from(points_spec, point, with_normal)
+
+        results: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        with undo_mark(doc):
+            for handle in handles:
+                entity = resolve_handle(doc, handle)
+                kind = short_type(entity)
+                if kind != "3dsolid":
+                    failed.append({"handle": handle, "reason": f"{kind} is not a 3D solid"})
+                    continue
+                before = _try(lambda e=entity: float(e.Volume))
+                try:
+                    # The fourth argument asks AutoCAD to keep both halves; it
+                    # hands back the new one when it does.
+                    made = entity.SliceSolid(apoint(*p1), apoint(*p2), apoint(*p3), keep == "both")
+                except BaseException as exc:  # noqa: BLE001
+                    failed.append({"handle": handle, "reason": com_message(exc)})
+                    continue
+                row: dict[str, Any] = {
+                    "handle": handle,
+                    "volume_before": round(before, 6) if before is not None else None,
+                    "volume_after": _try(lambda e=entity: round(float(e.Volume), 6)),
+                }
+                other = made[0] if isinstance(made, tuple) and made else made
+                if other is not None and keep == "both":
+                    if layer:
+                        _write(other, "Layer", layer.strip())
+                    row["new_handle"] = _try(lambda o=other: str(o.Handle))
+                    row["new_volume"] = _try(lambda o=other: round(float(o.Volume), 6))
+                results.append(row)
+
+        payload: dict[str, Any] = {
+            "sliced": len(results),
+            "plane": {"kind": points_spec, "points": [list(p1), list(p2), list(p3)]},
+            "keep": keep,
+            "results": results,
+        }
+        if failed:
+            payload["failed"] = failed
+        if not results:
+            raise AutocadError(
+                "Nothing was sliced. "
+                + "; ".join(f"{f['handle']}: {f['reason']}" for f in failed)
+            )
+        return payload
+
+    return dumps(await run(work))
+
+
+@mcp.tool(name="autocad_check_interference", **tool_meta("Check For Clashes"))
+@tool_errors
+async def autocad_check_interference(
+    handles: Annotated[list[str], Field(min_length=1, description="The first set of solids — say, the ductwork.")],
+    against: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description=(
+                "The second set — say, the structure. Every solid in the first set is "
+                "checked against every solid here. Leave it out to check the first set "
+                "against itself, which finds things clashing inside one trade."
+            ),
+        ),
+    ] = None,
+    create_solids: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Draw the overlap itself as a new solid, so you can see and measure how bad "
+                "each clash is. Off by default: on a big model it makes a lot of objects."
+            ),
+        ),
+    ] = False,
+    layer: Annotated[str | None, Field(default=None, description="Layer for the clash solids. Give one so they are easy to find and delete — e.g. 'Z-CLASH'.")] = None,
+    color: Annotated[str | StrictInt | None, COLOR_OPT] = None,
+    limit: Annotated[int, Field(default=200, ge=1, le=5000, description="Stop after this many clashes, so a bad model does not run for ever.")] = 200,
+) -> str:
+    """Find where solids run through each other — a clash check.
+
+    The question every coordination meeting asks: does the duct hit the beam?
+    This pairs up the two sets and reports every overlap, with the volume of
+    the overlap so the worst ones can be dealt with first. With
+    ``create_solids`` it also draws each overlap, which is the quickest way to
+    see what is actually fouling.
+
+    Solids only — AutoCAD's own check does not handle surfaces or meshes, and
+    anything else in the lists is reported rather than quietly skipped.
+
+    It needs the **Changes** padlock even to report, because AutoCAD builds the
+    overlap as a real solid to measure it. With ``create_solids`` off, each one
+    is removed again as soon as its volume is read, so nothing is left behind —
+    but the drawing was written to, and a tool that can write says so (D-31:
+    the level belongs to the tool, not to the call it happens to make).
+
+    One undo step.
+
+    Args:
+        handles (list[str]): the first set of solids.
+        against (Optional[list[str]]): the second set; omit to check within the first.
+        create_solids (bool): draw the overlaps. Default false.
+        layer (Optional[str]): layer for the clash solids.
+        color (Optional[str | int]): colour for them.
+        limit (int): stop after this many clashes.
+
+    Returns:
+        str: JSON: {"checked_pairs": int, "clashes": int, "clear": bool,
+             "worst": {...} | null,
+             "found": [{"a", "b", "volume", "handle", "bounding_box"}],
+             "skipped": [{"handle", "reason"}], "stopped_early": bool}
+
+    Examples:
+        - Use when: "does this ductwork hit the steel" — handles=the ducts,
+          against=the beams.
+        - Use when: "show me the clashes" — create_solids=true, layer='Z-CLASH',
+          then autocad_set_3d_view and autocad_preview.
+        - Use when: before issuing a model: an empty 'found' with "clear": true
+          is the answer you want.
+        - Don't use when: the parts are 2D lines, not solids — this reads
+          nothing from them. Clash checking needs a model.
+    """
+    aci = to_aci(color)
+
+    def work() -> dict[str, Any]:
+        doc = get_doc()
+        require_idle(doc)
+        if layer:
+            ensure_layer(doc, layer)
+
+        skipped: list[dict[str, Any]] = []
+
+        def solids_of(names: list[str]) -> list[tuple[str, Any]]:
+            out = []
+            for entity in resolve_handles(doc, names):
+                handle = str(entity.Handle)
+                kind = short_type(entity)
+                if kind == "3dsolid":
+                    out.append((handle, entity))
+                else:
+                    skipped.append({"handle": handle, "reason": f"{kind} is not a 3D solid"})
+            return out
+
+        first = solids_of(handles)
+        second = solids_of(against) if against else first
+        if not first or not second:
+            raise AutocadError(
+                "A clash check needs 3D solids on both sides. "
+                + (f"Skipped: {skipped}" if skipped else "Nothing given was a solid.")
+            )
+
+        # Against itself, each pair is checked once rather than twice.
+        same = against is None
+        pairs = []
+        for i, (ha, ea) in enumerate(first):
+            for j, (hb, eb) in enumerate(second):
+                if same and j <= i:
+                    continue
+                if ha == hb:
+                    continue
+                pairs.append((ha, ea, hb, eb))
+
+        found: list[dict[str, Any]] = []
+        stopped = False
+        with undo_mark(doc):
+            for ha, ea, hb, eb in pairs:
+                if len(found) >= limit:
+                    stopped = True
+                    break
+                try:
+                    made = ea.CheckInterference(eb, bool(create_solids))
+                except BaseException as exc:  # noqa: BLE001
+                    skipped.append({"handle": f"{ha}+{hb}", "reason": com_message(exc)})
+                    continue
+                # pywin32 hands back the [out] flag alongside the solid when the
+                # method declares one, so both shapes have to be understood.
+                overlap, interferes = made, None
+                if isinstance(made, tuple):
+                    overlap = made[0] if made else None
+                    interferes = next((v for v in made[1:] if isinstance(v, bool)), None)
+                clash = bool(interferes) if interferes is not None else overlap is not None
+                if not clash:
+                    continue
+                row: dict[str, Any] = {"a": ha, "b": hb}
+                if overlap is not None:
+                    row["volume"] = _try(lambda o=overlap: round(float(o.Volume), 6))
+                    if create_solids:
+                        if layer:
+                            _write(overlap, "Layer", layer.strip())
+                        if aci is not None:
+                            _write(overlap, "Color", aci)
+                        row["handle"] = _try(lambda o=overlap: str(o.Handle))
+                        low, high = _try(lambda o=overlap: o.GetBoundingBox(), (None, None))
+                        if low is not None:
+                            row["bounding_box"] = {"min": point_to_list(low), "max": point_to_list(high)}
+                    else:
+                        # Not asked for, so it must not be left in the drawing.
+                        _try(lambda o=overlap: o.Delete())
+                found.append(row)
+
+        with_volume = [r for r in found if r.get("volume")]
+        payload: dict[str, Any] = {
+            "checked_pairs": len(pairs),
+            "clashes": len(found),
+            "clear": not found,
+            "found": found,
+            "worst": max(with_volume, key=lambda r: r["volume"]) if with_volume else None,
+            "solids_drawn": bool(create_solids and found),
+        }
+        if stopped:
+            payload["stopped_early"] = True
+            payload["hint"] = (
+                f"Stopped at {limit} clashes; there are more. Fix these, or raise 'limit'."
+            )
+        if skipped:
+            payload["skipped"] = skipped
+        return payload
+
+    return dumps(await run(work))
+
+
+@mcp.tool(name="autocad_transform_3d", **tool_meta("Move Rotate Or Mirror In 3D"))
+@tool_errors
+async def autocad_transform_3d(
+    handles: Annotated[list[str], Field(min_length=1, description="What to move. Any entities, not only solids.")],
+    operation: Annotated[
+        Literal["move", "rotate", "mirror", "array"],
+        Field(
+            description=(
+                "'move' shifts by a displacement that can include Z. 'rotate' turns about "
+                "any axis in space, not just the Z axis. 'mirror' reflects in a plane. "
+                "'array' copies up in levels, for floors of a building."
+            )
+        ),
+    ],
+    displacement: Annotated[list[float] | None, Field(default=None, description="Move: [dx, dy, dz].")] = None,
+    axis_point: Annotated[list[float] | None, Field(default=None, description="Rotate: a point on the axis, as [x, y, z].")] = None,
+    axis_direction: Annotated[list[float] | None, Field(default=None, description="Rotate: which way the axis runs, e.g. [1,0,0] to tip something about the X axis.")] = None,
+    angle: Annotated[float | None, Field(default=None, description="Rotate: degrees about the axis, right-hand rule.")] = None,
+    plane_point: Annotated[list[float] | None, Field(default=None, description="Mirror: a point the mirror plane passes through.")] = None,
+    plane_normal: Annotated[list[float] | None, Field(default=None, description="Mirror: the direction the mirror plane faces, e.g. [0,0,1] to flip upside down.")] = None,
+    keep_original: Annotated[bool, Field(default=True, description="Mirror: keep the original as well as the reflection. Default true, as AutoCAD's MIRROR3D does.")] = True,
+    levels: Annotated[int | None, Field(default=None, ge=2, le=200, description="Array: how many copies in total, counting the original.")] = None,
+    level_spacing: Annotated[float | None, Field(default=None, description="Array: the rise between copies. A floor-to-floor height.")] = None,
+    coords: Annotated[str, COORDS_OPT] = "world",
+) -> str:
+    """Move, rotate, mirror or array in three dimensions.
+
+    The ordinary modify tools work on the flat: they move in XY and rotate
+    about Z. A model needs more — tip a brace about the X axis, mirror a
+    handed assembly in a vertical plane, stack a floor layout up through a
+    building. That is this.
+
+    One undo step, however many objects.
+
+    Args:
+        handles (list[str]): what to transform.
+        operation (str): move, rotate, mirror or array.
+        displacement (Optional[list[float]]): move: [dx, dy, dz].
+        axis_point / axis_direction (Optional[list[float]]): rotate: the axis.
+        angle (Optional[float]): rotate: degrees.
+        plane_point / plane_normal (Optional[list[float]]): mirror: the plane.
+        keep_original (bool): mirror: keep the original too. Default true.
+        levels (Optional[int]): array: how many in total.
+        level_spacing (Optional[float]): array: the rise between them.
+        coords (str): 'world' or 'ucs'.
+
+    Returns:
+        str: JSON: {"operation", "count": int, "handles": [str],
+             "new_handles": [str], "failed": [{"handle", "reason"}]}
+
+    Examples:
+        - Use when: "lift that whole frame 3500 up" — move,
+          displacement=[0, 0, 3500].
+        - Use when: "tip that brace 30 degrees about the X axis" — rotate,
+          axis_point, axis_direction=[1,0,0], angle=30.
+        - Use when: "mirror this handed bracket about the horizontal plane at
+          2000" — mirror, plane_point=[0,0,2000], plane_normal=[0,0,1].
+        - Use when: "copy this floor up 12 times at 3600" — array, levels=13,
+          level_spacing=3600.
+        - Don't use when: everything stays flat — autocad_move_entities,
+          autocad_rotate_entities and autocad_mirror_entities are simpler and
+          read better for 2D work.
+    """
+    if operation == "move" and (not displacement or len(displacement) < 3):
+        raise AutocadError("A 3D move needs displacement as [dx, dy, dz]. For a flat move use autocad_move_entities.")
+    if operation == "rotate":
+        if angle is None or not axis_point or not axis_direction:
+            raise AutocadError("A 3D rotate needs angle, axis_point and axis_direction (e.g. [1,0,0]).")
+        if len(axis_direction) < 3 or all(abs(float(v)) < 1e-12 for v in axis_direction[:3]):
+            raise AutocadError("axis_direction needs [x, y, z] and cannot be all zeros.")
+    if operation == "mirror":
+        if not plane_point or not plane_normal:
+            raise AutocadError("A 3D mirror needs plane_point and plane_normal (e.g. [0,0,1] for a horizontal mirror).")
+        if len(plane_normal) < 3 or all(abs(float(v)) < 1e-12 for v in plane_normal[:3]):
+            raise AutocadError("plane_normal needs [x, y, z] and cannot be all zeros.")
+    if operation == "array" and (levels is None or level_spacing is None or abs(float(level_spacing)) < 1e-9):
+        raise AutocadError("A 3D array needs levels (2 or more) and a level_spacing that is not zero.")
+
+    def work() -> dict[str, Any]:
+        doc = get_doc()
+        require_idle(doc)
+        ucs = ucs_for(doc, coords)
+        entities = resolve_handles(doc, handles)
+        done: list[str] = []
+        new: list[str] = []
+        failed: list[dict[str, Any]] = []
+
+        with undo_mark(doc):
+            for entity in entities:
+                handle = str(entity.Handle)
+                try:
+                    if operation == "move":
+                        dx, dy, dz = (float(v) for v in displacement[:3])
+                        entity.Move(apoint(0.0, 0.0, 0.0), apoint(dx, dy, dz))
+                    elif operation == "rotate":
+                        ax, ay, az = world_coords(axis_point, ucs)
+                        dx, dy, dz = (float(v) for v in axis_direction[:3])
+                        entity.Rotate3D(
+                            apoint(ax, ay, az),
+                            apoint(ax + dx, ay + dy, az + dz),
+                            rad(angle),
+                        )
+                    elif operation == "mirror":
+                        p1, p2, p3 = plane_from("normal", list(world_coords(plane_point, ucs)), plane_normal)
+                        made = entity.Mirror3D(apoint(*p1), apoint(*p2), apoint(*p3))
+                        copy = made[0] if isinstance(made, tuple) and made else made
+                        if copy is not None:
+                            new.append(str(copy.Handle))
+                        if not keep_original:
+                            entity.Delete()
+                    else:
+                        for step in range(1, int(levels)):
+                            copy = entity.Copy()
+                            copy.Move(apoint(0.0, 0.0, 0.0),
+                                      apoint(0.0, 0.0, float(level_spacing) * step))
+                            new.append(str(copy.Handle))
+                except BaseException as exc:  # noqa: BLE001
+                    failed.append({"handle": handle, "reason": com_message(exc)})
+                    continue
+                done.append(handle)
+
+        if not done:
+            raise AutocadError(
+                "Nothing was transformed. "
+                + "; ".join(f"{f['handle']}: {f['reason']}" for f in failed)
+            )
+        payload: dict[str, Any] = {
+            "operation": operation,
+            "count": len(done),
+            "handles": done,
+        }
+        if new:
+            payload["new_handles"] = new
+            payload["created"] = len(new)
+        if failed:
+            payload["failed"] = failed
+        return payload
 
     return dumps(await run(work))

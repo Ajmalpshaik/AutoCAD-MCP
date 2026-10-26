@@ -46,6 +46,7 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "convert_points",
         "list_views",
         "solid_properties",
+        "list_materials",
     ),
     Risk.VIEW: (
         "zoom",
@@ -102,6 +103,10 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "add_solid",
         "extrude_profile",
         "solid_boolean",
+        "check_interference",
+        "slice_solid",
+        "transform_3d",
+        "apply_material",
         "draw_3d_path",
         "insert_block",
         "batch_draw",
@@ -124,6 +129,7 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "export",
     ),
     Risk.ADMIN: (
+        "render",
         "send_command",
         "run_lisp",
         "set_variable",

@@ -22,7 +22,7 @@ from .errors import AutocadError, com_message
 mcp = MCPServer(
     "autocad_mcp",
     title="Heron AI for AutoCAD",
-    version="1.5.0",
+    version="1.6.0",
     instructions=(
         "Controls the AutoCAD instance running on this machine through its COM "
         "Automation interface. Changes appear live in the user's open drawing.\n\n"
@@ -37,10 +37,14 @@ mcp = MCPServer(
         "advice — the geometry lands somewhere nobody meant.\n\n"
         "Entities are identified by their drawing 'handle', which every creation "
         "and query tool returns and every modify tool accepts.\n\n"
-        "FINDING THE RIGHT TOOL. There are over a hundred. Read the resource "
-        "autocad://tools: every tool grouped by the padlock it needs, with a "
-        "one-line summary and 'Use when' lines in the words a draftsman would "
-        "use. It needs no AutoCAD, so read it before anything is connected. "
+        "FINDING THE RIGHT TOOL. There are over a hundred. Ask "
+        "autocad://tools/find/{phrase} in plain words - 'how many metres of "
+        "DN50 pipe on this layer', 'does the ductwork clash with the steel' - "
+        "and it answers with the tool, its padlock and why it matched. For the "
+        "whole catalogue read autocad://tools: every tool grouped by the "
+        "padlock it needs, with a one-line summary and 'Use when' lines in the "
+        "words a draftsman would use. Neither needs AutoCAD, so both answer "
+        "before anything is connected. "
         "Each tool's own 'Use when' and \"Don't use when\" lines name the "
         "better tool when there is one — follow them rather than forcing the "
         "first tool that looks close.\n\n"

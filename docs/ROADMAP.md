@@ -69,5 +69,5 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 ## Repository
 
-- [ ] Tag `v1.4.0` after NEEDS-CHECKING groups A, D and E pass - `tools/live_check.py --group all --write` does D and E.
+- [ ] Tag `v1.6.0` after NEEDS-CHECKING groups A, D, E and F pass - `tools/live_check.py --group all --write` does D, E and F.
 - [ ] Later: offer this repository to Heron AI as its AutoCAD adapter when Heron's capability registry is ready ([D-12](DECISIONS.md)).

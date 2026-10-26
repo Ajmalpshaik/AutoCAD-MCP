@@ -103,6 +103,7 @@ COLOR_TOOLS = (
     "autocad_add_multileader",
     "autocad_add_revision_cloud",
     "autocad_add_solid",
+    "autocad_check_interference",
     "autocad_draw_3d_path",
     "autocad_extrude_profile",
     "autocad_make_shape",
@@ -302,7 +303,7 @@ class TestToolSurface:
     asserted rather than assumed."""
 
     async def test_all_tools_registered(self, tools):
-        assert len(tools) == 101
+        assert len(tools) == 107
 
     async def test_every_name_is_namespaced(self, tools):
         assert all(tool.name.startswith("autocad_") for tool in tools)

@@ -24,6 +24,7 @@ def register_all() -> None:
         geometry_tools,
         labels,
         layers,
+        materials,
         modify,
         query,
         resources,

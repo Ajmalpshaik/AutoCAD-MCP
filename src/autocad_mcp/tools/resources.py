@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from ..acad.findtool import Entry, search, split_bullets
 from ..core.registry import dumps, mcp
 from ..core.risk import RISK, Risk
 from . import document, layers
@@ -122,6 +123,59 @@ async def tool_index() -> str:
         "note": (
             "A tool's padlock is a property of the tool, not of the request, so nothing you "
             "write can raise or lower it. Turn a padlock on from the Heron tab in AutoCAD."
+        ),
+    })
+
+
+async def _entries() -> list[Entry]:
+    """Every tool as the search sees it, straight from the registry."""
+    rows: list[Entry] = []
+    for tool in await mcp.list_tools():
+        description = tool.description or ""
+        use, avoid = split_bullets(_use_when(description))
+        rows.append(Entry(tool.name, tool.title or "", _summary(description), use, avoid))
+    return rows
+
+
+@mcp.resource("autocad://tools/find/{phrase}", name="find_tool", description="The right tool for a job described in plain words. Needs no AutoCAD.", mime_type=_JSON)
+async def find_tool(phrase: str) -> str:
+    """Search the toolbox in the words a draftsman would use.
+
+    Reading the whole index works, but it is a hundred entries. This answers
+    "how many metres of DN50 pipe on this layer" with autocad_total_length and
+    stops. Scored on the tools' own names, summaries and "Use when" lines,
+    weighted so a rare word (DIMSCALE, flange) beats a common one (layer, set)
+    and so a "Don't use when" mention counts against rather than for.
+
+    Measured on 55 phrases a modeller would really say: the right tool came
+    first 45 times and was in the top three all 55 times. Those phrases are
+    our own, so treat it as a floor on a sample, not a promise - and when it
+    puts the wrong tool first, the fix is usually that tool's own "Use when"
+    line, not the scoring.
+
+    It touches no drawing, so like autocad://tools it is **not gated**.
+    """
+    entries = await _entries()
+    hits = search(entries, phrase, limit=5)
+    by_name = {entry.tool: entry for entry in entries}
+    return dumps({
+        "phrase": phrase,
+        "count": len(hits),
+        "matches": [
+            {
+                "tool": hit.tool,
+                "needs": _PADLOCK[RISK.get(hit.tool, Risk.ADMIN)],
+                "summary": by_name[hit.tool].summary,
+                "use_when": list(by_name[hit.tool].use_when),
+                "matched_words": list(hit.matched),
+                "score": hit.score,
+            }
+            for hit in hits
+        ],
+        "note": (
+            "Best first, but read the summary before you call it: the second one is "
+            "sometimes the right one. Nothing found? Read autocad://tools, the whole "
+            "catalogue."
         ),
     })
 
@@ -262,11 +316,20 @@ def model_part(part: str, material: str = "steel") -> str:
         "autocad_solid_boolean operation='subtract'. It refuses the whole call if any handle is not "
         "a solid, so a wrong handle never costs you the part. Check volume_after is less than "
         "volume_before - that is the proof the material came out.\n"
+        "4b. Anything that follows a route - a duct, a pipe, a tray, a handrail - is a section "
+        "swept along it: autocad_extrude_profile with path_handle, not a row of boxes.\n"
+        "4c. To see inside, autocad_slice_solid cuts it with a plane given the way you would say "
+        "it ('horizontally at 1500'). The two halves' volumes must add up to the original.\n"
+        "4d. If this part sits among others, autocad_check_interference tells you whether it "
+        "fouls them, with the overlap volume. Do that before anyone cuts metal.\n"
         "5. autocad_solid_properties for the real numbers: volume, centroid, bounding box, moments. "
         f"Multiply the volume by the density of {material} for the weight, and say which density you "
         "used.\n"
         "6. autocad_set_3d_view direction='sw_iso' visual_style='shaded' and autocad_preview to look "
-        "at it. Then direction='top' with '2dwireframe' to get back to plan.\n"
+        "at it. Then direction='top' with '2dwireframe' to get back to plan. For a material, "
+        "autocad_list_materials first and then autocad_apply_material - only what is already in "
+        "the drawing can be applied, and a material carries no density, so it never changes the "
+        "weight.\n"
         "7. For anything rolled or folded from sheet, draw the flat pattern too: "
         "autocad_make_shape shape='cone_development' or 'duct_transition'. Check it with "
         "autocad_polyline_info - each arc must be exactly as long as the girth it rolls onto "
