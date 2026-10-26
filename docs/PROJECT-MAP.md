@@ -28,7 +28,7 @@ flowchart TD
 |---|---|---|
 | [`src/autocad_mcp/`](../src/autocad_mcp/README.md) | The server | `tools/<subject>.py` for a tool, `server.py` for the command line |
 | [`generators/`](../generators/README.md) | Drawing-package scripts | The package's `*_run.py` runner |
-| [`drawings/`](../drawings/README.md) | Generated DWG / PDF / PNG | Never edit by hand; re-run the generator |
+| [`drawings/`](../drawings/README.md) | Generated DWG / PDF / PNG, **local only, not in git** | Never edit by hand; re-run the generator |
 | [`tools/`](../tools/README.md) | Smoke test, protocol check | |
 | [`tests/`](../tests/README.md) | Offline and live tests | `test_offline.py` |
 | [`docs/`](README.md) | All documentation | This file |

@@ -16,6 +16,7 @@
 | AHU-01 package, 11 sheets | Done | `drawings/AHU/` |
 | CCTV package, 42 sheets | Done | `drawings/CCTV/PDF/` |
 | CCTV pole enclosure detail | Drawn; **fibre type and title-block fields TBC** | `drawings/CCTV/ENCLOSURE/PDF/` |
+| Drawings | On this PC only, not in git ([D-11](DECISIONS.md)); paths in the table above are local | |
 | Git and GitHub | **Public** repo `Ajmalpshaik/AutoCAD-MCP` since 2026-10-26, branch `main` ([D-10](DECISIONS.md)) | |
 | Documentation | Full set written 2026-10-26 | [docs/README.md](README.md) |
 | CI | ruff + offline tests on `windows-latest`, **green** since the repository went public on 2026-10-26 (while private it was blocked by the account's Actions billing) | `.github/workflows/ci.yml` |

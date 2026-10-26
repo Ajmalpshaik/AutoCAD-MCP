@@ -1,7 +1,11 @@
-# drawings - generated output
+# drawings - generated output (local only)
 
-Everything here was produced by a script in [`generators/`](../generators/README.md). **Do not edit it
+Everything here is produced by a script in [`generators/`](../generators/README.md). **Do not edit it
 by hand**: change the generator and run it again, or the next run overwrites your edit.
+
+**None of it is in git.** This README is the only tracked file in the folder ([D-11](../docs/DECISIONS.md)).
+The drawings stay on the PC that made them; on a fresh clone the folders below fill up when you run
+the generators.
 
 | Folder | Package | Made by |
 |---|---|---|
@@ -13,4 +17,4 @@ by hand**: change the generator and run it again, or the next run overwrites you
 | `CCTV/_lsp/` | AutoLISP written for solid fills, one per sheet | `cctv_run.py` |
 | `CCTV/ENCLOSURE/` | Pole enclosure detail DWG, PDF and its LISP | `encl_run.py` |
 
-AutoCAD's `.bak`, `.dwl` and `.dwl2` files are ignored by git.
+Ignored by `drawings/*` with `!drawings/README.md` in [.gitignore](../.gitignore).

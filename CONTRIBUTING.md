@@ -13,7 +13,8 @@ are the house rules for any change, by a person or an AI agent.
 
 - `main` is always working. Do larger work on a branch: `feature/<name>`, `fix/<name>`, `docs/<name>`.
 - One subject per commit. Write the message as what the change does: *"Fit PDF export to A1 paper"*.
-- Never commit `.venv/`, AutoCAD `.bak` / `.dwl` files, or anything with a password or key in it.
+- Never commit `.venv/`, generated drawings (`drawings/`), AutoCAD `.bak` / `.dwl` files, or anything
+  with a password, key or real client detail in it.
   [.gitignore](.gitignore) covers the usual ones.
 
 ## The gates

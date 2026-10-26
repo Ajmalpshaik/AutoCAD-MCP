@@ -66,7 +66,8 @@ for reference; never build on it.
 **Decided:** 2026-10-26. **Status:** in force.
 `Ajmalpshaik/AutoCAD-MCP`, private. DWG, PDF and PNG outputs are committed (about 10 MB) so the
 packages are kept with the code that made them. AutoCAD `.bak` / `.dwl` files and the `.venv` are not.
-Visibility superseded by [D-10](#d-10---repository-made-public).
+Visibility superseded by [D-10](#d-10---repository-made-public); keeping drawings in git superseded
+by [D-11](#d-11---generated-drawings-are-not-kept-in-git).
 
 ## D-10 - Repository made public
 
@@ -76,3 +77,13 @@ Checked before switching: no keys, passwords or e-mail addresses in the files or
 package uses a sample client; the pole-enclosure sheet's client, location and consultant are still
 `TBC`. **When those TBCs are filled with a real client's details, think before committing them here:
 the repository is public.**
+
+## D-11 - Generated drawings are not kept in git
+
+**Decided:** 2026-10-26, on Ajmal's instruction ("why you keep drawings on this repo?? ... remove
+this"). **Status:** in force. Supersedes the *drawings included* part of D-09.
+The DWG, PDF, PNG and LISP output can be made again from `generators/`, it was about 10 MB against a
+small code base, and the pole-enclosure sheet is real site work that should not be public. Everything
+under `drawings/` except its README is ignored, and the files were **removed from the whole git history**
+(rewritten and force-pushed the same day, while the repository was one day old with no other copies).
+The files themselves stay on Ajmal's PC.

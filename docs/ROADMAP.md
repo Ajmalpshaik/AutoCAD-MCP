@@ -23,4 +23,3 @@ Ideas and known gaps, **not started**. Move an item to [HANDOVER](HANDOVER.md) w
 ## Repository
 
 - [ ] A release tag (`v1.1.0`) once the post-move redraw is confirmed.
-- [ ] Decide whether generated PDFs stay in git or move to GitHub Releases as the set grows.
