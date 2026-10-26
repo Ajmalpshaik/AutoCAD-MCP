@@ -173,7 +173,7 @@ def test_bridge_can_be_switched_off(monkeypatch):
 
 
 def test_conversation_id_can_be_fixed(monkeypatch):
-    # Scripts that start one server per call (generators, live checks) can
+    # Scripts that start one server per call (live checks) can
     # say they are one chat, so the one-chat hold does not lock them out.
     import importlib
 

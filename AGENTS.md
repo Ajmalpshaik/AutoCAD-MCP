@@ -43,7 +43,6 @@ once, read only).
   `tools/check_structure.py` fails the build.
 - **Never run `pip install -e .` while an `autocad-mcp` server is running**
   ([05 §1](docs/05-known-limits.md#1-reinstalling-while-the-server-runs)).
-- **Never import a generator to "check" it**: three of them plot on import. Use `py_compile`.
 - **Never drive AutoCAD from two sessions at once.**
 - **Never send an AutoLISP expression near 3,600 characters**; keep chunks under about 700.
 - **Never draw before `autocad_status` on that drawing.** It gives the units; the gate refuses changes until it has run ([D-19](docs/DECISIONS.md)).

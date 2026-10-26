@@ -60,11 +60,10 @@ switches are commands: `HERON`, `HERONSTATUS`, `HERONCHANGES`, `HERONPUBLISH`, `
 |---|---|---|
 | **Heron for AutoCAD** (C#) | The plug-in: ribbon, padlocks, banner, Keep or Discard, the secure pipe | [`autocad/`](autocad/README.md) |
 | **Heron MCP for AutoCAD** (Python) | The MCP server: the `autocad_*` tools, done over COM, gated by the plug-in | [`src/autocad_mcp/`](src/autocad_mcp/README.md) |
-| **Generators** | Scripts that build whole drawing packages through the server (AHU, CCTV) | [`generators/`](generators/README.md) |
 | **Tools & tests** | Build and install the plug-in, smoke test, structure check, test suites | [`tools/`](tools/README.md), [`tests/`](tests/README.md) |
 
 Documentation is in [`docs/`](docs/README.md); stopped experiments in [`archive/`](archive/README.md).
-Generated drawings stay on the PC that made them and are not in this repository.
+Drawings stay on the PC that made them; none are in this repository.
 
 ---
 

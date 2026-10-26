@@ -129,6 +129,14 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-23 - The generator scripts are removed
+
+**Decided:** 2026-10-26, on Ajmal's instruction: *"Remove all generators, including the folder."*
+**Status:** in force. Supersedes D-07 (generator paths) and the generator half of D-06.
+The `generators/` folder (AHU, CCTV and pole-enclosure scripts) was project work, not part of Heron,
+and normal use never makes such scripts: Heron draws straight into AutoCAD. The drawings they made
+stay on Ajmal's PC. The scripts are recoverable from git history, commit `a443df4` (main before removal).
+
 ## D-22 - Batch input goes through the plug-in with echo off
 
 **Decided:** 2026-10-26, from the live F2 check. **Status:** in force.
