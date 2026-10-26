@@ -26,6 +26,7 @@ import win32com.client
 
 from .errors import (
     AutocadError,
+    OutcomeUnknown,
     StaleDispatchError,
     com_message,
     is_dispatch_failure,
@@ -91,15 +92,35 @@ class _ComWorker:
 _worker = _ComWorker()
 
 
+_attempt = threading.local()
+
+
+def mark_writing() -> None:
+    """Record that the current attempt has started changing the drawing.
+
+    Called by ``undo_mark`` on the worker thread. From then on a busy signal
+    is no longer safe to retry: the first try may already have drawn part of
+    the work.
+    """
+    _attempt.writing = True
+
+
 def _with_retry(fn: Callable[[], T]) -> T:
-    """Call ``fn``, retrying for as long as AutoCAD reports it is busy."""
+    """Call ``fn``, retrying for as long as AutoCAD reports it is busy.
+
+    Only while nothing has been written: once a write began, a busy signal
+    becomes OutcomeUnknown instead of a second run.
+    """
     last: BaseException | None = None
     for _ in range(RETRY_ATTEMPTS):
+        _attempt.writing = False
         try:
             return fn()
         except BaseException as exc:  # noqa: BLE001
             if not is_retryable(exc):
                 raise
+            if getattr(_attempt, "writing", False):
+                raise OutcomeUnknown() from exc
             last = exc
             if is_dispatch_failure(exc):
                 # The cached pointer, or an object reached through it, stopped

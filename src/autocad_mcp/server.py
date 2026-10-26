@@ -12,6 +12,7 @@ Or over HTTP, for a client on another machine on the same network:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__
@@ -53,12 +54,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the registered tools and exit, without contacting AutoCAD.",
     )
+    parser.add_argument(
+        "--no-bridge",
+        action="store_true",
+        help=(
+            "Developer use only: do not ask the Heron plug-in in AutoCAD before "
+            "each call. Padlocks, banner and Keep or Discard are then skipped."
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"autocad-mcp {__version__}")
     return parser
 
 
+def apply_options(args: argparse.Namespace) -> None:
+    """Turn command-line switches into the settings the server reads."""
+    if args.no_bridge:
+        os.environ["HERON_AUTOCAD_BRIDGE"] = "off"
+
+
 def main() -> int:
     args = build_parser().parse_args()
+    apply_options(args)
     register_all()
 
     if args.list_tools:

@@ -82,4 +82,16 @@ def created_payload(
     }
     payload.update({k: v for k, v in extra.items() if v is not None})
     payload.update(notes)
+    # Read the new object back by its handle: a reply that says "created" is
+    # only trusted once the drawing agrees.
+    try:
+        found = entity.Document.HandleToObject(payload["handle"])
+        payload["verified"] = str(found.ObjectName) == str(entity.ObjectName)
+    except Exception:  # noqa: BLE001 - any failure to read back is the finding
+        payload["verified"] = False
+    if not payload["verified"]:
+        payload["warning"] = (
+            f"The new object {payload['handle']} could not be read back from the "
+            "drawing. Check it with autocad_get_entity before building on it."
+        )
     return payload

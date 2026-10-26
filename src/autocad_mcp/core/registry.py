@@ -16,6 +16,7 @@ import pythoncom
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
+from .connection import mark_writing
 from .errors import AutocadError, com_message
 
 mcp = MCPServer(
@@ -132,6 +133,13 @@ def tool_errors(func: Callable) -> Callable:
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> str:
+        # Every call goes through the Heron gate: connection, padlocks,
+        # wrong-drawing guard, Keep or Discard, audit (core/gate.py).
+        from .gate import guarded
+
+        return await guarded(func.__name__, lambda: _run(*args, **kwargs))
+
+    async def _run(*args: Any, **kwargs: Any) -> str:
         try:
             return await func(*args, **kwargs)
         except AutocadError as exc:
@@ -161,6 +169,9 @@ class undo_mark:
         self.doc = doc
 
     def __enter__(self) -> Any:
+        # From here on the drawing may change, so a busy signal must not
+        # re-run the work (see connection._with_retry).
+        mark_writing()
         try:
             self.doc.StartUndoMark()
         except BaseException:  # noqa: BLE001 - grouping is a nicety, not a gate
