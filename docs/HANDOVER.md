@@ -23,7 +23,7 @@
 
 ## Next, in order
 
-1. Quiet the batch's command-line echo through the plug-in ([ROADMAP](ROADMAP.md)); A21 itself passes (D-21).
+1. At the next AutoCAD restart: `tools/install_plugin.py` (the 1.5 s double-click window, D-20), then check A20.
 2. Run the remaining 2027 rows (A8e, A15, A16, A19, A20); restart AutoCAD first so the
    double-click fix (D-20) is loaded. Live checks are driven with one server for several calls
    (`HERON_CONVERSATION_ID` keeps one chat id across scripts).

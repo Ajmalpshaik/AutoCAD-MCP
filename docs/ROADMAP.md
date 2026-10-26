@@ -14,9 +14,9 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 ## Found in the first live checks (2026-10-26)
 
-- [ ] `autocad_batch_draw` fills AutoCAD's command history with its LISP text (the security box itself
-  is fixed, D-21). Have the plug-in send the expressions with `SendStringToExecute(..., echoCommand: false)`,
-  allowed only while a Heron CHANGE job is running.
+- [ ] A batch still leaves one `Command:` prompt per piece in the history (about 27 for 41 objects).
+  Harmless; fewer, larger pieces may be possible through the plug-in (the 600-character limit was
+  measured for COM SendCommand).
 - [ ] `autocad_preview`: the picture comes out portrait with the drawing at the left edge; fit and
   centre it, landscape when the drawing is wide.
 - [ ] Remaining live rows: A8e, A9 ribbon label, A15, A16, A18 Enter, A19, A20.

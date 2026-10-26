@@ -129,6 +129,16 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-22 - Batch input goes through the plug-in with echo off
+
+**Decided:** 2026-10-26, from the live F2 check. **Status:** in force.
+Sent over COM, every batch piece was echoed into the command history. The plug-in now takes the
+pieces (`send_quiet`) and types them with `SendStringToExecute(..., echoCommand: false)`. It accepts
+them only inside this chat's running CHANGE / PUBLISH / ADMIN job, so it adds no new way in: the
+padlock check at `begin` already covered the job. Without the plug-in (or an older one) the server
+falls back to COM SendCommand. Each piece also returns nothing printable (`(princ)`). Side effect:
+batches run inside AutoCAD and are about 8x faster (0.17 s against 1.4 s for 41 objects).
+
 ## D-21 - Batch drawing sends expressions; it never loads a file
 
 **Decided:** 2026-10-26, from live check A21. **Status:** in force.

@@ -86,7 +86,7 @@ AutoCAD."* The hold frees itself after 3 quiet minutes, or when you disconnect.
 | Address file | `%LOCALAPPDATA%\Heron\autocad\bridges\<pid>.json`: pid, pipe, versions, token, start time. Written on connect, deleted on disconnect; a file whose AutoCAD is gone is deleted by the server |
 | Token | 24 random bytes, new on every connect, compared in constant time |
 | Message | one JSON line each way: `{op, token, client, conversation, ...}` |
-| Ops | `ping`, `info`, `release`, `begin`, `end`, `ask_keep` |
+| Ops | `ping`, `info`, `release`, `begin`, `end`, `ask_keep`, `send_quiet` (batch input, echo off, only inside a running change job, [D-22](DECISIONS.md)) |
 
 **Units first ([D-19](DECISIONS.md)).** Nothing is changed in a drawing until Heron has run
 `autocad_status` on it, which reports its units. A switch to another drawing needs a new status check
