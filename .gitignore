@@ -31,3 +31,9 @@ drawings/
 
 # Plan-execution scratch
 .superpowers/
+
+# .NET build output
+bin/
+obj/
+*.user
+.vs/

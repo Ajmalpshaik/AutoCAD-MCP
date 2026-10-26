@@ -1,0 +1,13 @@
+<Project>
+  <!-- Shared by every Heron for AutoCAD project. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <Company>Ajmal PS</Company>
+    <Product>Heron AI for AutoCAD</Product>
+    <Copyright>Copyright (c) 2026 Ajmal PS</Copyright>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
