@@ -15,7 +15,7 @@ SHEETS = [("AHU-01_M-AHU-002_Isometric", (22430, -11000), (47660, 6820)),
           ("AHU-01_M-AHU-004_BMS_Details", (73690, -11000), (98920, 6820))]
 
 async def main():
-    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[])) as (r, w):
+    async with stdio_client(StdioServerParameters(command=ahu_run.SERVER, args=[], env=dict(os.environ))) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
             st = json.loads(await ahu_run.call(s, "autocad_status", {}, quiet=True))

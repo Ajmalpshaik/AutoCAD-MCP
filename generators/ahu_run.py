@@ -44,7 +44,7 @@ def pt(p):
 
 async def main(phases):
     d = ahu_gen.build()
-    params = StdioServerParameters(command=SERVER, args=[])
+    params = StdioServerParameters(command=SERVER, args=[], env=dict(os.environ))
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as s:
             await s.initialize()

@@ -34,7 +34,7 @@ NO = "DT-001"
 
 
 async def main(cmd):
-    params = StdioServerParameters(command=cctv_run.SERVER, args=[])
+    params = StdioServerParameters(command=cctv_run.SERVER, args=[], env=dict(os.environ))
     async with stdio_client(params) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
