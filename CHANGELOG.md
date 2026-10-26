@@ -4,6 +4,8 @@ Newest first. Dates are when the change was made.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
+- Take-off tools from the Lee Mac study (ideas only, our own code, D-26): `autocad_count_blocks`,
+  `autocad_total_length`, `autocad_get_dynamic_properties`, `autocad_set_dynamic_properties`.
 - Drafting rules built in: server instructions + `draw_detail` prompt + docs/07 (D-25).
 - New `autocad_make_block`: parts become named blocks in place (D-24). Labels can hang right-aligned.
 - New `autocad_add_label`: MTEXT + LEADER in Ajmal's TLD style (L or angled), or a MULTILEADER;

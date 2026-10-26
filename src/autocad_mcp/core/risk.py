@@ -35,6 +35,9 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "preview",
         "check_standards",
         "extract_attributes",
+        "count_blocks",
+        "total_length",
+        "get_dynamic_properties",
     ),
     Risk.VIEW: (
         "zoom",
@@ -57,6 +60,7 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "add_hatch",
         "add_label",
         "make_block",
+        "set_dynamic_properties",
         "insert_block",
         "batch_draw",
         "move_entities",

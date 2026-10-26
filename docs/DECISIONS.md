@@ -129,6 +129,15 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-26 - Lee Mac's ideas are rebuilt as Heron tools; his code never enters the repository
+
+**Decided:** 2026-10-26, Ajmal: *"study lee-mac.com word by word ... make it part of this mcp"*.
+**Status:** in force.
+His terms need written consent to redistribute and forbid commercial use, which this public MIT
+repository cannot promise, so no Lee Mac code is copied, translated or bundled. Each idea is written
+fresh from the AutoCAD ActiveX reference, tested without AutoCAD, and credited in
+[08](08-lee-mac-study.md). First four: count blocks, total length, dynamic block get and set.
+
 ## D-25 - The drafting rules ship inside Heron
 
 **Decided:** 2026-10-26, Ajmal: *"bring that drafting rules also"*, after asking whether anyone who

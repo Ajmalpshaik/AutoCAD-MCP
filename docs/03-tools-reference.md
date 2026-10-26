@@ -104,6 +104,17 @@ nothing.
 `autocad_send_command` refuses commands known to open a modal dialog and names the command-line
 alternative, because a dialog blocks COM until a person closes it.
 
+## Take-off and dynamic blocks (get Read, set Change)
+
+From the [Lee Mac study](08-lee-mac-study.md); our own code.
+
+| Tool | Purpose |
+|---|---|
+| `autocad_count_blocks` | Count blocks by real name (dynamic blocks too); `group_by` name, name_layer, name_visibility, name_properties; name and layer wildcards |
+| `autocad_total_length` | Total length and closed area by layer, type or one total; splines and ellipses counted as unmeasured |
+| `autocad_get_dynamic_properties` | A dynamic block's properties: value, allowed choices, read-only |
+| `autocad_set_dynamic_properties` | Set visibility, size, distance, flip: `{name: value}`, typed and checked; failures listed |
+
 ## Seeing and checking (Read)
 
 | Tool | Purpose |

@@ -28,6 +28,7 @@
 | 05 | [Known limits and traps](05-known-limits.md) | What broke before, and the fix |
 | 06 | [The Heron plug-in](06-heron-plugin.md) | Ribbon, padlocks, banner, Keep or Discard, the bridge protocol |
 | 07 | [Drafting rules](07-drafting-rules.md) | How every drawing is set out: blocks, TLD labels, aligned views, preview check |
+| 08 | [Lee Mac study](08-lee-mac-study.md) | His licence, which ideas became Heron tools, what comes next |
 
 ## Registers and working pages
 

@@ -24,9 +24,9 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 ## Server
 
-- [ ] Dynamic blocks: read and set a dynamic block's properties (length, size, visibility, flip) so
-  Ajmal's own dynamic-block library can be used. Authoring parameters and actions has no API; it
-  stays a Block Editor job.
+- [x] Dynamic blocks: read and set properties (`autocad_get/set_dynamic_properties`). Authoring
+  parameters and actions has no API; it stays a Block Editor job.
+- [ ] The next Lee Mac ideas, in the order listed in [08](08-lee-mac-study.md).
 
 - [ ] `autocad_batch_draw`: hatch, mtext and dimension operations.
 - [ ] Draw an attribute schedule as an AutoCAD table (a CHANGE tool beside `autocad_extract_attributes`).

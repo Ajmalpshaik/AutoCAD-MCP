@@ -22,6 +22,7 @@ def register_all() -> None:
         query,
         resources,
         standards,
+        takeoff,
     )
 
 
