@@ -27,6 +27,10 @@
 
 ## Next, in order
 
+0. **2026-10-27: `autocad_batch_labels` built** (one call + one undo step for a label column,
+   `arrow_scale`, `crossing` report); offline gates green. Live row A30 is NOT RUN: merge to main,
+   restart the server, then draw a 15-label column. Why: a CCTV pole test sheet took ~120 tool calls,
+   mostly one label / block / dimension at a time; batch blocks and dimensions are the next candidates.
 1. **Run NEEDS-CHECKING groups D, E and F** (90 rows) on AutoCAD 2027. **This is one command
    now, not a day of clicking** — with the Changes padlock on:
 

@@ -92,6 +92,7 @@ CASES = [
     ("text pasted from Word keeps its own font", "autocad_text_clean"),
     ("the sheets are out of order, renumber them", "autocad_manage_layouts"),
     ("tidy that column of labels so they line up", "autocad_align_text"),
+    ("label all the parts of this detail in one go", "autocad_batch_labels"),
     ("check the drawing database for errors", "autocad_audit"),
     ("what is DIMSCALE set to", "autocad_get_variable"),
     ("which drawings are open", "autocad_list_drawings"),

@@ -96,6 +96,7 @@ COLOR_TOOLS = (
     "autocad_add_mtext",
     "autocad_add_hatch",
     "autocad_add_label",
+    "autocad_batch_labels",
     "autocad_modify_entity",
     "autocad_list_entities",
     "autocad_add_viewport",
@@ -303,7 +304,7 @@ class TestToolSurface:
     asserted rather than assumed."""
 
     async def test_all_tools_registered(self, tools):
-        assert len(tools) == 107
+        assert len(tools) == 108
 
     async def test_every_name_is_namespaced(self, tools):
         assert all(tool.name.startswith("autocad_") for tool in tools)
