@@ -52,7 +52,7 @@ once, read only).
 - **Never add a tool without a `Use when:` line.** Every tool carries an `Examples:` section
   whose bullets say, in the words a draftsman would use, when to reach for it — and a
   `Don't use when:` naming the better tool where there is one. `tests/test_tool_index.py`
-  fails without it. With 101 tools, one that cannot be found does not exist.
+  fails without it. With over a hundred tools, one that cannot be found does not exist.
 - **Never edit a test until it passes.**
 
 ## How to work
