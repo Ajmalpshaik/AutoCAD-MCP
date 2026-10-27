@@ -5,7 +5,277 @@ Newest first. Dates are when the change was made.
 ## Unreleased
 
 - New `autocad_batch_labels`: a whole column of TLD labels in one call and one undo step, checked
-  before drawing, with `arrow_scale` per view and a `crossing` report. 76 tools. Live check A30.
+  before drawing, with `arrow_scale` per view and a `crossing` report. 108 tools. Live check A30.
+
+## 1.6.0 - 2026-10-26 - The rest of 3D, and findability proved
+
+Two things Ajmal asked for: finish the 3D side, and show that the tools can
+actually be found fast. 6 new tools, 107 in all. Detail:
+[docs/03](docs/03-tools-reference.md), [D-32 / D-33](docs/DECISIONS.md),
+[NEEDS-CHECKING group F](docs/NEEDS-CHECKING.md).
+
+### Findability: he was right to doubt it
+
+The index shipped in 1.5.0, but nobody had measured whether it works. Measured
+now, on 67 phrases a modeller would really say ("how many metres of DN50 pipe
+on this layer", "does the ductwork clash with the steel"):
+
+| | right tool first | in the top three |
+|---|---|---|
+| First attempt | 36 / 55 | 49 / 55 |
+| Now, over 107 tools | **55 / 67** | **67 / 67** |
+
+- **New resource `autocad://tools/find/{phrase}`.** Ask in plain words, get
+  the tool, its padlock and why it matched. Needs no AutoCAD.
+- **`acad/findtool.py`** scores on the tools' own words: a rare word (DIMSCALE,
+  flange) beats a common one (layer, set); a `Don't use when` mention counts
+  **against**; and a word we guessed from yours - a plural, a synonym - counts
+  less than one you typed. Both weights were picked by sweeping them against
+  the 67 phrases, not by taste, and the good region is wide rather than a
+  knife edge.
+- **It found real documentation gaps**, which is the point: `autocad_drawing_setup`
+  never said "DIMSCALE" out loud, so "set DIMSCALE and LTSCALE for 1:50" landed
+  on the Admin-level `autocad_set_variable` instead. Now fixed.
+- `tests/test_find_tool.py` keeps the 67 phrases as a floor, so a rename or a
+  reword that costs findability fails the build.
+
+### The rest of 3D
+
+- **Oval shapes.** `autocad_add_solid` gains `elliptical_cylinder` and
+  `elliptical_cone` - an oval duct, a tapered oval stack. They take the
+  **overall** sizes; the half-axis conversion is done here, because calling out
+  a 400 x 200 duct and getting 800 x 400 is the obvious trap.
+- **Sweep.** `autocad_extrude_profile` gains `path_handle`: run a section along
+  a route, which is how a duct, a pipe, a cable tray or a handrail is really
+  modelled.
+- **`autocad_slice_solid`.** Cut a solid with a plane - a real section through a
+  model. Given the way a drafter says it ("horizontally at 1500", "on the
+  diagonal"), with the three points AutoCAD wants worked out in pure Python and
+  tested without AutoCAD.
+- **`autocad_check_interference` - clash detection.** Every solid in one set
+  against every in another, with the overlap volume so the worst is dealt with
+  first, and `create_solids` to draw them. It is **Changes, not Read**, because
+  AutoCAD builds the overlap as a real solid to measure it; with the drawing off
+  each one is removed again, and row F11 exists to prove that.
+- **`autocad_transform_3d`.** Move with Z, rotate about any axis, mirror in a
+  plane, array up in levels. The flat modify tools only ever did XY and Z-axis
+  rotation.
+- **Materials.** `autocad_list_materials` and `autocad_apply_material`.
+- **`autocad_render`** drives `-render`, at Admin.
+
+### What 3D cannot do, said out loud (D-33)
+
+Researched before building, because a guessed COM signature can destroy a
+model. Three honest limits now documented in the tools themselves:
+
+- **`SectionSolid` is not built.** No parameter list for it exists in any
+  reference we could find. `autocad_slice_solid` covers sectioning instead.
+- **Materials cannot be created, and carry no density.** There is no automation
+  route into Autodesk's library, so an unknown name is refused *with the list of
+  what the drawing does have*. And a material is appearance only - MASSPROP
+  assumes density 1, so a weight is volume times a density you state.
+  Assigning "Steel" does not make anything weigh.
+- **Rendering has no automation call.** `-render` is the only route; its prompts
+  differ between releases, and script rendering has been reported to drop
+  objects. `autocad_render` says both in its own docstring. For a picture to
+  look at, `autocad_preview` is instant and needs no padlock.
+
+### Checking
+
+- **NEEDS-CHECKING group F**: 23 new rows, 90 live rows in all.
+  `tools/live_check.py --group F` measures 19 of them, including the ones that
+  would catch a real error: an oval duct measuring 400 x 200 and not 800 x 400;
+  a slice whose two halves add up to the original; a clash check that leaves
+  the entity count unchanged; a 1000 tall column that lies down to 100 when
+  tipped 90 degrees about X.
+- `tests/test_solids_3d.py`: the cutting-plane arithmetic for every named plane
+  and seven arbitrary normals, including the vertical case where the helper axis
+  has to dodge the normal. 38 tests.
+- 1812 offline tests.
+
+## 1.5.0 - 2026-10-26 - 101 tools you can actually find
+
+No new tools. A toolbox nobody can search is worse than a small one, and 47
+of the 101 did not say what they were for.
+
+- **Every tool now says when to use it.** All 101 carry an `Examples:`
+  section whose bullets are in the words a draftsman would use - *"how many
+  metres of DN50 pipe on this layer"*, *"this detail came in at 1:10, make it
+  full size"* - and a **`Don't use when:`** naming the better tool where there
+  is one (`autocad_count_text` points at `autocad_count_blocks`;
+  `autocad_set_variable` points at `autocad_drawing_setup`, which needs only
+  the Changes padlock; `autocad_delete_layer` points at freezing instead).
+  47 were written for this release; one that was prose became a bullet so the
+  index can read it.
+- **New resource `autocad://tools`.** The whole toolbox in one place, grouped
+  by the padlock it needs, each with its summary and its `Use when` lines. It
+  is built from the live registry, so it cannot drift from the code - a tool
+  added, renamed or re-levelled appears with no second edit. It touches no
+  drawing, so unlike the other four resources it is **not gated**: it answers
+  before AutoCAD is open and before Heron is pressed.
+- **The server tells connecting AIs to read it**, and to prefer the tool that
+  does the whole job in one call - `autocad_batch_draw` over many single
+  draws, `autocad_make_shape` over building a standard shape by hand,
+  `autocad_dimension_run` over one dimension at a time, `autocad_sequence`
+  for a settled list of steps. One call is one undo step for the user.
+- **A rule, not a habit.** `tests/test_tool_index.py` fails if any tool lacks
+  a `Use when` line, if the index cannot read it, if a wrapped bullet is cut
+  off mid-sentence, or if a tool is filed under the wrong padlock. AGENTS.md
+  carries it as a Never. 514 new tests; 1627 offline.
+
+### Same five levels as Heron AI's fragments
+
+Checked against `archive/revit_encl/heron_send.py`: Heron AI sends fragments
+as `run_fragment_read` / `show` / `write` / `publish` / `admin`. This server's
+`core/risk.py` carries exactly those five - READ / VIEW / CHANGE / PUBLISH /
+ADMIN, with VIEW being Heron's `show`. The gate is the same idea.
+
+What differs is the unit. A Heron fragment is C# **source sent in at run
+time** and compiled by Revit. A tool here is a fixed function already in the
+server, with a schema, a level and tests - nothing new can be sent in except
+through `autocad_run_lisp`, which is why that one is Admin. So the padlocks
+behave the same, and the index above is what makes the fixed set as easy to
+reach for as writing a fragment.
+
+## 1.4.0 - 2026-10-26 - The live checks run themselves, and four job prompts
+
+No new tools; still 101. This is the step from "built" and "tested offline"
+to **proved in AutoCAD**, plus four prompts that spend the tools in the right
+order. Detail: [tools/README.md](tools/README.md),
+[docs/03](docs/03-tools-reference.md).
+
+- **`tools/live_check.py`.** One command measures 46 of the 67 live rows in
+  [NEEDS-CHECKING](docs/NEEDS-CHECKING.md) and writes the results back with
+  their evidence. It works in a scratch drawing it makes and closes itself, so
+  the drawing you have open is never touched. `--list`, `--group D|E|all`,
+  `--row E4`, `--write`.
+- **It measures, it does not merely run.** A cone development's arcs against
+  the girths they roll onto (pi x D); a slot's perimeter against 2L + pi x W,
+  and that it is one polyline; a 1:100 viewport's `CustomScale` read back off
+  the viewport; a solid's base against z=0; the volume a subtract removed
+  against pi x r^2 x t; that a sequence with a bad step leaves the entity
+  count unchanged; that a bulge becomes a 90-degree arc and centred text is
+  centred.
+- **The 21 rows it cannot measure say why.** A title block .dwg, the twist
+  direction, "the sheet looks right", which sheet sizes a plotter offers,
+  which variables a release makes read-only - each is written **NOT RUN** with
+  the reason instead of left looking unexamined. A row the padlocks refuse is
+  **NOT RUN** too, never PASS.
+- **`tools/live_results.py`** replaces only the last cell of a row, keeping
+  leading whitespace, the trailing newline and every other cell
+  byte-identical, and strips `|` and newlines from the evidence so it cannot
+  break the table. Its test runs it against the real register.
+- **Four job prompts** in `tools/resources.py`: `make_sheet` (layout, page
+  setup, title block, viewport at a scale, saved view), `import_to_shop_drawing`
+  (the IFC flow, dry run first, dimensions checked against their geometry),
+  `model_part` (profile, extrude or revolve, cut, weigh - and it will not guess
+  a density), `shape_from_words` (catalogue, dry run, draw, measure back).
+- **Tests that keep both honest.** Every D/E row in the register is either
+  measured or given a reason, or the suite fails - so adding a row forces the
+  runner to account for it. And every tool a prompt names is checked against
+  the registry, so a prompt cannot send the AI after a tool that was renamed.
+  52 new tests; 1107 offline.
+
+## 1.3.0 - 2026-10-26 - Complex geometry, annotation and 3D
+
+Server only; the plug-in is unchanged at 1.1.0. 12 new tools, 101 in all.
+Everything COM touches is **NOT RUN**: see
+[NEEDS-CHECKING group E](docs/NEEDS-CHECKING.md). Detail:
+[docs/10](docs/10-geometry-annotation-3d.md).
+
+- **Simple words, complex geometry.** `autocad_make_shape` draws 24 named
+  shapes from their dimensions: slot, rounded rectangle, hexagon sized across
+  the flats, flange with its bolt circle, steel sections (i/h/c/l/t/shs/rhs/chs),
+  elbow with its centreline, duct transition, stair in section or plan, ladder,
+  truss, grating, gear, spiral, star, zigzag, and **the flat pattern for a
+  reducer** - plus the drafting furniture (detail bubble, section mark, north
+  point, scale bar, level mark, revision tag). Each shape is a pure generator
+  ([D-30](docs/DECISIONS.md)) drawn through the batch engine, so the geometry is
+  tested without AutoCAD, it lands as one undo step, and `coords="ucs"` works
+  on all of it. `dry_run` hands back the geometry instead of drawing it.
+- **Arcs stay part of their object.** `autocad_batch_draw` polylines now take
+  `bulges`, so a slot, a rounded corner, an elbow and a flat pattern are each
+  *one* polyline rather than a pile of loose arcs. Text now takes `align` and
+  `style`, so a bubble's number sits on its point.
+- **Dimension the run, not the dimension.** `autocad_dimension_run` lays out a
+  whole run in one call - `chain` (AutoCAD's Continue), `baseline` stepped
+  clear of itself, `overall`, or `ordinate` from a datum, on any of the three
+  axes. The points are put in order first, and every span is worked out here as
+  well as measured by AutoCAD, so a run that does not add up says so.
+  `autocad_add_centre_marks` puts the cross on every circle and arc, by handle
+  or by layer.
+- **Annotation that needs more than one object.** `autocad_add_multileader` is
+  one note with as many arrows as it needs, text or block content.
+  `autocad_add_table` puts a schedule on the sheet as a real AutoCAD table with
+  a title and headings - pair it with `autocad_extract_attributes`.
+  `autocad_add_revision_cloud` clouds a boundary, a rectangle or an object's
+  own extents as one polyline with bulges, its arc spacing adjusted to divide
+  the boundary exactly and its bulge signed so the arcs always face outward.
+- **3D.** `autocad_add_solid` (box, wedge, cylinder, cone, sphere, torus),
+  placed by the centre of its **base** rather than of its bounding box, which
+  is what AutoCAD's own calls do and is never what a drafter means.
+  `autocad_extrude_profile` turns a closed 2D profile into a solid by extruding
+  (with taper) or revolving, cleaning up the intermediate region afterwards.
+  `autocad_solid_boolean` does union, subtract and intersect, checking every
+  handle **before** anything is consumed and reporting the volume before and
+  after. `autocad_solid_properties` reads volume, centroid, bounding box and
+  moments. `autocad_draw_3d_path` draws a pipe route or a helix as one 3D
+  polyline. `autocad_set_3d_view` sets a named direction and a visual style and
+  needs no padlock, because it changes only what is on screen
+  ([D-31](docs/DECISIONS.md)).
+- Drafting rules 16-23 added to [docs/07](docs/07-drafting-rules.md) and to the
+  server's own instructions.
+- 402 more offline tests. The flat pattern is checked the only way that counts:
+  its arcs have to be exactly as long as the girths they roll onto. Two real
+  faults were found and fixed while writing them - a `color` key that was doing
+  double duty as both a filter and a target colour in the layer remapper, and a
+  cone-development guard that could never fire while the hazard it was meant to
+  catch (a polyline bulge running away near 360 degrees) went unguarded.
+
+## 1.2.0 - 2026-10-26 - Sheets, coordinates and shop drawings
+
+Server only; the plug-in is unchanged at 1.1.0. 14 new tools, 89 in all. Everything COM touches is
+**NOT RUN**: see [NEEDS-CHECKING group D](docs/NEEDS-CHECKING.md). Detail:
+[docs/09](docs/09-sheets-and-coordinates.md).
+
+- **The UCS, at last.** Every coordinate here is a world coordinate and the modeller's are not, so
+  `autocad_status` now reports the drawing's UCS and warns in plain words when it is not the world
+  one; `autocad_get_ucs`, `autocad_set_ucs` and `autocad_convert_points` (AutoLISP's `trans`) make
+  it workable; and `autocad_batch_draw` takes `coords="ucs"`, converting every point and angle
+  before anything is sent — a rectangle square to a turned grid comes out turned. A tilted UCS is
+  refused for a flat request rather than guessed ([D-27](docs/DECISIONS.md)).
+- **Sheets.** `autocad_create_layout`, `autocad_page_setup` (one sheet or all of them),
+  `autocad_place_title_block` (one sheet or all of them, with per-sheet attributes) and
+  `autocad_add_viewport`. The viewport's model window is worked out to the viewport's own
+  proportions, so 1:50 comes out 1:50; leave the scale out and the largest standard scale that fits
+  is chosen; `twist` / `align_to_ucs` makes a rotated plan read upright; and viewports lock by
+  default, because an unlocked one gets scrolled and the scale on the title block stops being true.
+  Frame to ISO 5457 (20 mm binding edge, 10 elsewhere, title block bottom-right).
+- **One location, used everywhere.** `autocad_save_view` and `autocad_list_views` name an area once;
+  `autocad_export` gained `area` (`layout`, `window`, `view`, ...) and `scale`, and
+  `autocad_add_viewport` takes the same `view_name` — so the area plotted and the area in the
+  viewport are the same area.
+- **Drawing settings.** `autocad_drawing_setup` takes the scale once and sets DIMSCALE, the
+  annotation scale and LTSCALE from it, plus units, precision, snaps, point style and limits;
+  `autocad_create_styles` makes text and dimension styles, putting the drawing's own DIM variables
+  back afterwards. Both write only from a fixed list in code, which is why they need Changes and not
+  Admin ([D-28](docs/DECISIONS.md)), and both report every old value beside its new one.
+- **An import into a shop drawing.** `autocad_remap_layers` puts everything on the right layers and
+  makes those layers properly (rules match the old layer name *or* the block name, the type, the
+  colour or the text; `preset="ifc"` is a starting point, `rules_path` takes an office standard);
+  `autocad_tidy_entities` clears the per-object colour / linetype / lineweight overrides that make a
+  layer change look like it did nothing, flattens Z, moves geometry off layer 0 and deletes the
+  zero-length leftovers. Both default to `dry_run=true`.
+- **`autocad_sequence`:** AutoLISP's `progn` as a tool. Several tools in one call, every step's
+  arguments checked against that tool's own schema before the first one runs. It refuses Publish and
+  Admin steps and a sequence inside a sequence, so it can never spend more than the Changes padlock
+  ([D-29](docs/DECISIONS.md)); a test asserts that against every registered Publish and Admin tool
+  by name.
+- Drafting rules 9-15 added to [docs/07](docs/07-drafting-rules.md) and to the server's own
+  instructions, so every AI that connects follows them.
+- 286 more offline tests (`tests/test_coords.py`, `test_sheets.py`, `test_settings.py`,
+  `test_convert.py`, `test_sequence.py`): all the UCS arithmetic, the sheet arithmetic, the
+  plain-words-to-system-variables mapping, the layer and tidy plans, and the sequence's ceiling.
 
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 

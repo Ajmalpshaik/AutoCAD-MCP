@@ -184,6 +184,12 @@ async def autocad_add_label(
 
     Returns:
         JSON: {"created": true, "kind", "handle" (text or mleader), "handles", "points"}
+
+    Examples:
+        - Use when: "point a label at that bracket saying 100x100x10 ANGLE".
+        - Don't use when: one note serves several parts - one
+          autocad_add_multileader with three arrows reads better than three
+          labels.
     """
     spec = {"text": text, "arrow": arrow, "position": position, "height": height, "kind": kind,
             "shape": shape, "extension": extension, "width": width, "text_align": text_align,
@@ -276,6 +282,11 @@ async def autocad_batch_labels(
     Returns:
         JSON: {"created": n, "labels": [per-label result, in order],
                "crossing": [[i, j], ...], "arrow_scale": float}
+
+    Examples:
+        - Use when: "label all the parts of this detail in a column on the right".
+        - Use when: "put the 15 labels on the pole elevation at 1:25".
+        - Don't use when: one or two labels - autocad_add_label is enough.
     """
     defaults = {"height": height, "kind": kind, "shape": shape, "text_align": text_align,
                 "extension": extension, "width": width, "mask": mask, "layer": layer,

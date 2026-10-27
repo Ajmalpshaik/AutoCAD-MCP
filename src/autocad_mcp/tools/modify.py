@@ -312,6 +312,12 @@ async def autocad_scale_entities(
     Returns:
         str: JSON: {"scaled": int, "handles": [str], "factor": float,
              "base_point": [x, y]}
+
+    Examples:
+        - Use when: "this detail came in at 1:10, make it full size" ->
+          scale_factor=10 about a base point you can check afterwards.
+        - Don't use when: you only want the plot bigger - that is the
+          viewport scale, autocad_add_viewport.
     """
 
     def work() -> dict[str, Any]:
@@ -437,6 +443,11 @@ async def autocad_offset_entities(
     Error Handling:
         - Text, blocks, hatches and dimensions cannot be offset; each is
           reported in "failed" with its type rather than aborting the call.
+
+    Examples:
+        - Use when: "give me the inside face of that wall, 200 in" ->
+          distance=200, side towards the point you name.
+        - Use when: "a kerb line 150 either side" -> both_sides=true.
     """
     if distance == 0:
         raise AutocadError("An offset distance of 0 would just duplicate in place.")

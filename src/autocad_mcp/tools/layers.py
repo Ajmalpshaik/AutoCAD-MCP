@@ -138,6 +138,11 @@ async def autocad_create_layer(
         str: JSON: {"name": str, "created": bool, "current": bool,
              "color": int, "linetype": str, "lineweight": int, ...}
              "created" is false when the layer already existed and was updated.
+
+    Examples:
+        - Use when: "make a layer M-HVAC-DUCT, cyan, dashed".
+        - Don't use when: you are sorting out a whole import - the layers come
+          out of autocad_remap_layers already.
     """
     validate_name(name, "layer")
     aci = to_aci(color)
@@ -335,6 +340,12 @@ async def autocad_set_current_layer(
 
     Returns:
         str: JSON: {"current_layer": str, "created": bool, "previous": str}
+
+    Examples:
+        - Use when: you are about to draw several things by hand and want them
+          on the right layer without saying so each time.
+        - Don't use when: you are drawing through these tools - every draw tool
+          takes its own layer, which is safer.
     """
 
     def work() -> dict[str, Any]:
@@ -395,6 +406,12 @@ async def autocad_delete_layer(
     Returns:
         str: JSON: {"deleted": bool, "layer": str, "entities_deleted": int}
              With confirm=false: a preview of what the call would remove.
+
+    Examples:
+        - Use when: an import left empty layers behind and you are tidying up.
+        - Don't use when: you only want it out of the way - freeze or turn it
+          off with autocad_set_layer_state. Deleting takes the geometry too if
+          you ask it to.
     """
 
     def work() -> dict[str, Any]:
@@ -616,6 +633,12 @@ async def autocad_list_styles() -> str:
                               "width_factor": float}],
              "dimension_styles": [str],
              "linetypes": [str]}
+
+    Examples:
+        - Use when: a text or dimension style is named in a standard and you
+          need to know whether this drawing has it.
+        - Use when: before autocad_create_styles, so you do not replace one
+          that is already right.
     """
 
     def work() -> dict[str, Any]:

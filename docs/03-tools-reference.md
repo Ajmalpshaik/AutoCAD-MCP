@@ -15,6 +15,12 @@ The group headings below give the level.
 - Entities are identified by their **handle**. Creation and query tools return it; modify tools take it.
 - Drawing tools share `layer`, `color`, `linetype` and `space` options. A missing layer is created
   and reported.
+- **Coordinates are WORLD coordinates.** `autocad_status` reports the drawing's UCS and warns when
+  it is not the world one. `autocad_batch_draw`, `autocad_make_shape` and the other tools built on
+  that engine take `coords="ucs"`; for the rest convert first with `autocad_convert_points`
+  ([09](09-sheets-and-coordinates.md)).
+- `autocad_batch_draw` polylines take **`bulges`** (one per vertex, `tan(sweep/4)`, positive
+  anticlockwise) so arcs stay part of the object, and text takes **`align`** and `style`.
 
 ## Session and files (Read / View; save and export are Publish)
 
@@ -26,7 +32,7 @@ The group headings below give the level.
 | `autocad_open_drawing` | Open a .dwg or .dxf |
 | `autocad_save_drawing` | Save, or Save As to a new path |
 | `autocad_switch_drawing` | Make another open drawing active |
-| `autocad_export` | PDF (extents fitted, optional `paper_size` such as `A3`, `A1 portrait`), DXF, WMF, SAT, BMP, EPS, STL |
+| `autocad_export` | PDF, DXF, WMF, SAT, BMP, EPS, STL. PDF takes `paper_size` (`A3`, `A1 portrait`), `area` (`extents` default, `layout`, `limits`, `display`, `window`, `view`), `corner1`/`corner2`, `view_name` and `scale` |
 | `autocad_zoom` | Extents, all, or a window |
 | `autocad_get_variable` | Read a system variable |
 | `autocad_set_variable` | Write a system variable |
@@ -136,6 +142,126 @@ alternative, because a dialog blocks COM until a person closes it.
 | `autocad_import_from_drawing` | Change | Blocks, layers, linetypes, text / dim styles from a closed DWG; existing names skipped |
 | `autocad_manage_layouts` | Change | Order, renumber, rename layouts; copy paper-space objects to other layouts |
 
+## Coordinates and the UCS (Read; setting it is Change)
+
+A rotated or moved UCS is why a line lands somewhere nobody meant. Detail:
+[09 §1](09-sheets-and-coordinates.md#1-the-ucs-why-a-line-lands-in-the-wrong-place).
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_get_ucs` | Read | Is a UCS set? Origin, axes, rotation in degrees, moved / rotated / tilted / flipped, the saved ones, and what to do about it |
+| `autocad_convert_points` | Read | AutoLISP's `trans`: points and angles between the UCS and the world. Changes nothing |
+| `autocad_set_ucs` | Change | `world`, `named`, `origin` + angle, `3point`, `entity`, `view`; `save_as` keeps it by name |
+
+## Sheets, title blocks and viewports (Change)
+
+A sheet from nothing in four calls, or one `autocad_sequence`. Detail:
+[09 §3](09-sheets-and-coordinates.md#3-laying-out-a-sheet).
+
+| Tool | Purpose |
+|---|---|
+| `autocad_create_layout` | New sheet: paper size, orientation, plotter, plot style table, optionally copied from another layout. Returns the frame, the drawing space and where the title block goes |
+| `autocad_page_setup` | Page Setup on one sheet or `all_layouts`: plotter, paper, `plot_area`, scale, `monochrome.ctb`, lineweights. Only what you pass is written |
+| `autocad_place_title_block` | The title block in the sheet's corner (ISO 5457 bottom-right by default) with its attributes filled; `all_layouts` and `per_layout_attributes` do a whole set |
+| `autocad_add_viewport` | A viewport at a real scale (`"1:50"`, or omitted to fit) looking at a point, a window, a saved view or a set of objects; `twist` / `align_to_ucs` for a rotated plan; locked by default |
+
+## Saved locations (Read; saving is Change)
+
+One named area, used for a plot, a viewport and a measurement. Detail:
+[09 §2](09-sheets-and-coordinates.md#2-one-location-used-everywhere).
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_list_views` | Read | Every saved view with its centre, size and both corners |
+| `autocad_save_view` | Change | Name an area, from two corners or from the objects' own extents + `pad` |
+
+## Drawing settings and styles (Change)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_drawing_setup` | Units, precision, the drawing `scale` (which sets DIMSCALE, the annotation scale and LTSCALE), `paper_text_height`, object snaps, point style, linetype scaling, limits. `dry_run` shows the plan; writes only from a fixed list ([D-28](DECISIONS.md)) |
+| `autocad_create_styles` | Text styles (font, height, width factor, oblique) and dimension styles (scale, text height, arrows, precision, or raw `DIM...` variables). The drawing's own DIM variables are put back |
+
+## An import into a shop drawing (Change)
+
+Both default to `dry_run=true`: read the counts, then run it. Detail:
+[09 §5](09-sheets-and-coordinates.md#5-an-ifc-or-revit-export-into-a-shop-drawing).
+
+| Tool | Purpose |
+|---|---|
+| `autocad_remap_layers` | Rules match `name_like` (layer **or** block name), `source_layer`, `block_name`, `entity_type`, `source_color`, `text_contains`; the target layer is created with its colour, linetype, lineweight, description and plot setting. `preset="ifc"` is a starting point; `rules_path` takes an office standard |
+| `autocad_tidy_entities` | Colour / linetype / lineweight back to ByLayer, `flatten_z`, `zero_thickness`, `off_layer_0`, `delete_empty` |
+
+## Several tools in one call (Change)
+
+`autocad_sequence` runs a list of steps in order. Every step's arguments are checked against that
+tool's own schema **before the first one runs**, so a sequence with a mistake in step four changes
+nothing. Steps at the Publish or Admin level, and a sequence inside a sequence, are refused: a
+sequence holds the **Changes** padlock only ([D-29](DECISIONS.md)). `stop_on_error` (default true)
+and `dry_run`.
+
+## Shapes from a few numbers (Change)
+
+`autocad_make_shape` draws a named shape from its dimensions — 24 of them, from
+a slot to a reducer's flat pattern. Detail: [10 §1](10-geometry-annotation-3d.md#1-simple-words-complex-geometry).
+
+| Group | Shapes |
+|---|---|
+| Plain | polygon, hexagon (across flats), star, slot, rounded_rectangle, spiral, zigzag |
+| Fabrication | flange, bolt_circle, steel_section (i/h/c/l/t/shs/rhs/chs), gear, **cone_development** (the flat pattern for a reducer) |
+| MEP | elbow (with centreline), duct_transition, grating |
+| Building | stair (section or plan), ladder, truss |
+| Furniture | detail_bubble, section_mark, north_arrow, scale_bar, level_mark, revision_tag |
+
+Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
+`dry_run=true` returns the geometry instead of drawing it.
+
+## Dimensioning and annotation (Change)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_dimension_run` | A whole run in one call: `chain`, `baseline` (stepped clear of each other), `overall`, `ordinate`. Horizontal, vertical or aligned; the points are put in order first; `include_overall` adds the overall above. Reports both its own arithmetic and AutoCAD's measurement |
+| `autocad_add_centre_marks` | The cross on every circle and arc, by handle or by layer; `extend` makes full centre lines |
+| `autocad_add_multileader` | One note with **as many arrows as it needs**; text or block content |
+| `autocad_add_table` | A schedule as a real AutoCAD table, with title and headings |
+| `autocad_add_revision_cloud` | A cloud round a boundary, a rectangle, or an object's own extents. One polyline with bulges, like REVCLOUD |
+
+## 3D (Change; reading is Read, the view is View)
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_add_solid` | Change | box, wedge, cylinder, cone, sphere, torus, elliptical_cylinder, elliptical_cone — placed by the centre of its **base**, not its bounding box. Oval shapes take the **overall** sizes, not the half axes |
+| `autocad_extrude_profile` | Change | A closed 2D profile into a solid: extrude along Z (with taper), revolve about an axis, or **sweep along a path** — a duct, pipe or tray following a route. The intermediate region is cleaned up |
+| `autocad_solid_boolean` | Change | union / subtract / intersect. The others are **consumed**, as AutoCAD's own commands do; every handle is checked first |
+| `autocad_solid_properties` | Read | Volume, centroid, bounding box, moments — for a weight take-off |
+| `autocad_draw_3d_path` | Change | A pipe or cable route as one 3D polyline, or a helix |
+| `autocad_slice_solid` | Change | Cut solids with a plane — a real section through a model. The plane is given the way a drafter says it ("horizontally at 1500"); the three points AutoCAD wants are worked out here |
+| `autocad_check_interference` | Change | **Clash check.** Every solid in one set against every solid in another, with the overlap volume so the worst comes first. `create_solids` draws the overlaps. Needs Changes because AutoCAD builds the overlap as a real solid to measure it, even to report |
+| `autocad_transform_3d` | Change | move with Z, rotate about **any** axis, mirror in a plane, array up in levels. The flat tools only do XY and Z-axis rotation |
+| `autocad_set_3d_view` | View | A named direction (top, front, sw_iso …) and a visual style. Changes only what is on screen ([D-31](DECISIONS.md)) |
+
+`SectionSolid` is deliberately **not** here: no documented ActiveX signature for it could be
+found, and guessing one would risk the model ([D-33](DECISIONS.md)).
+
+## Materials and rendering (Change; listing is Read, rendering is Admin)
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_list_materials` | Read | The materials in this drawing, and how many objects use each. Run it first: only a material already in the drawing can be applied |
+| `autocad_apply_material` | Change | Apply one to objects or to a whole layer. Refuses an unknown name **and lists what the drawing does have** |
+| `autocad_render` | Admin | Renders the current view to an image, by driving `-render`. Admin, because that is the command line |
+
+Three limits worth knowing before you plan around them ([D-33](DECISIONS.md)):
+
+- **No library access.** Automation cannot reach Autodesk's material library, so a material has to
+  be brought into the drawing through the Materials Browser first.
+- **No density.** A material is appearance only. MASSPROP and `autocad_solid_properties` both work
+  as if density were 1, so a weight is volume times a density *you* state. Assigning "Steel" does
+  not make anything weigh.
+- **No render API.** There is no automation call for rendering at all; `-render` is the only route,
+  its prompts differ between releases, and script rendering has been reported to drop objects. For
+  a picture to look at use `autocad_preview`; for one on a sheet use `autocad_export`.
+
 ## Seeing and checking (Read)
 
 | Tool | Purpose |
@@ -152,9 +278,33 @@ alternative, because a dialog blocks COM until a person closes it.
 | `autocad://drawing/layers` | `autocad_list_layers` |
 | `autocad://drawing/blocks` | `autocad_list_blocks` |
 | `autocad://drawing/styles` | `autocad_list_styles` |
+| `autocad://tools` | **the toolbox index** — not a drawing read, so it needs no AutoCAD |
 
-They call the gated tools, so they are refused the same way while AutoCAD is not connected.
-Prompts: `check_standards` (report only), `draw_from_spec` (draw, then preview).
+The four drawing resources call the gated tools, so they are refused the same way while AutoCAD is
+not connected.
+
+`autocad://tools` is the one that is not about the drawing: every tool grouped by the padlock it
+needs, with its one-line summary and its **`Use when`** lines. It is built from the live registry,
+so it cannot drift from the code, and it answers before Heron is pressed. Each tool's own
+`Use when:` / `Don't use when:` bullets name the better tool when there is one — which is how 101
+tools stay findable. A tool without them fails `tests/test_tool_index.py`.
+
+A prompt is a whole job written out in the right order, so the AI does not have to work out which
+of the tools to reach for or what to check afterwards. Pick one in your client and fill in its
+arguments.
+
+| Prompt | Arguments | What it walks through |
+|---|---|---|
+| `check_standards` | `rules_path` | Checks the drawing against a layer standard and reports. Changes nothing |
+| `draw_from_spec` | `spec` | Draws from a written spec on named layers, then previews it |
+| `draw_detail` | `subject`, `scale` | The full drafting checklist: sheet plan, layers, parts as blocks, hatching, labels, dimensions, titles, notes, then look at it |
+| `make_sheet` | `sheet_name`, `paper_size`, `scale` | Layout, page setup, title block, viewport at a scale, and a saved view so the same location comes back |
+| `import_to_shop_drawing` | `discipline`, `scale` | An IFC or CAD import into a shop drawing: layer audit, remap and tidy (dry run first), styles, details, dimensions, annotation, sheet, PDF |
+| `model_part` | `part`, `material` | Profile, extrude or revolve, cut the holes, take the volume and weight off the solid, and the flat pattern if it is rolled |
+| `shape_from_words` | `description`, `scale` | Picks the shape from the catalogue, dry-runs it, draws it, then measures it back |
+
+Every tool a prompt names is checked against the registry by `tests/test_drafting_rules.py`, so a
+prompt cannot send the AI after a tool that was renamed or never built.
 
 ## Start options
 

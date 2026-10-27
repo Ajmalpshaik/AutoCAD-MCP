@@ -429,6 +429,11 @@ async def autocad_regen(
 
     Returns:
         str: JSON: {"regenerated": str}
+
+    Examples:
+        - Use when: the screen looks wrong after a settings change - linetypes
+          not showing their pattern, text the wrong size.
+        - Use when: after autocad_drawing_setup changes LTSCALE.
     """
 
     def work() -> dict[str, Any]:
@@ -469,6 +474,12 @@ async def autocad_audit(
         - AUDIT writes its findings to AutoCAD's text window rather than
           returning them over COM, so the counts are not available here. Check
           the .adt log file beside the drawing for the detail.
+
+    Examples:
+        - Use when: a drawing came in from outside and behaves oddly, or
+          AutoCAD has reported an error in it.
+        - Use when: before handing a cleaned-up import on. It needs Admin,
+          because repairing changes the database itself.
     """
 
     def work() -> dict[str, Any]:

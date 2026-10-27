@@ -49,6 +49,10 @@ once, read only).
 - **Never copy Lee Mac's code into this public repository**: ideas only, re-implemented and credited ([D-26](docs/DECISIONS.md), [08](docs/08-lee-mac-study.md)).
 - **Never draw before `autocad_status` on that drawing.** It gives the units; the gate refuses changes until it has run ([D-19](docs/DECISIONS.md)).
 - **Never claim a drawing is right without `autocad_preview`.**
+- **Never add a tool without a `Use when:` line.** Every tool carries an `Examples:` section
+  whose bullets say, in the words a draftsman would use, when to reach for it — and a
+  `Don't use when:` naming the better tool where there is one. `tests/test_tool_index.py`
+  fails without it. With over a hundred tools, one that cannot be found does not exist.
 - **Never edit a test until it passes.**
 
 ## How to work

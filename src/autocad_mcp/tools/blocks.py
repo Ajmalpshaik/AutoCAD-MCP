@@ -43,6 +43,12 @@ async def autocad_make_block(
 
     Returns:
         JSON: {"created": true, "block": name, "handle": insert handle (null when keep_originals)}
+
+    Examples:
+        - Use when: "make these lines into a block called BASE PLATE
+          250x250x12" -> handles=[...], base_point=the insertion corner.
+        - Use when: a part repeats. Drafting rule 2: parts are blocks, not
+          loose lines.
     """
 
     def work() -> dict[str, Any]:

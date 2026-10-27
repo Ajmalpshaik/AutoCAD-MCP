@@ -150,6 +150,12 @@ async def autocad_polyline_info(
 
     Returns:
         JSON: {"total_length", "area", "centroid", "segments": [...], "vertices": [...]}
+
+    Examples:
+        - Use when: "is that slot one object, and what is its perimeter" ->
+          segment count, which are arcs, radii, total length.
+        - Use when: checking a flat pattern: each arc must be as long as the
+          girth it rolls onto (pi x diameter).
     """
 
     def work() -> dict[str, Any]:
@@ -187,6 +193,12 @@ async def autocad_add_field_label(
 
     Returns:
         JSON: {"handle", "value" (as shown now), "field_code"}
+
+    Examples:
+        - Use when: "label that duct with its length, and keep it right if I
+          stretch it" -> handles=[the duct], kind="length".
+        - Don't use when: a fixed number is fine -
+          autocad_label_segment_lengths does a whole run in one call.
     """
     if position is None and not (block_handle and tag):
         raise AutocadError("Give 'position' for new text, or 'block_handle' and 'tag' for an attribute.")
@@ -243,6 +255,12 @@ async def autocad_select_connected(
 
     Returns:
         JSON: {"handles", "count", "total_length", "open_ends"}
+
+    Examples:
+        - Use when: "select that whole pipe run" from one line you can point
+          at, then total it or move it as one.
+        - Don't use when: the run is all on its own layer - a layer filter is
+          simpler.
     """
 
     def work() -> dict[str, Any]:
@@ -286,6 +304,12 @@ async def autocad_label_segment_lengths(
 
     Returns:
         JSON: {"labels": n, "items": [{handle, text, position, rotation}]}
+
+    Examples:
+        - Use when: "write the length on every leg of that run", above the
+          line and the right way up.
+        - Don't use when: the numbers must update if the run is stretched -
+          autocad_add_field_label.
     """
     gap = height * 0.5 if offset is None else offset
 
@@ -355,6 +379,12 @@ async def autocad_place_along(
 
     Returns:
         JSON: {"placed": n, "handles", "spacing", "run_length"}
+
+    Examples:
+        - Use when: "hangers every 2 m along that duct, ends matching" ->
+          spacing=2000; it centres the run so both ends are equal.
+        - Don't use when: the positions come from a schedule -
+          autocad_place_from_csv.
     """
     if not spacing and not count:
         raise AutocadError("Give 'spacing' or 'count'.")
@@ -402,6 +432,11 @@ async def autocad_place_from_csv(
 
     Returns:
         JSON: {"placed": n, "handles", "attributes_not_found"}
+
+    Examples:
+        - Use when: "place all 42 cameras from this schedule, with their tags
+          filled in" -> the csv carries x, y and the attribute columns.
+        - Use when: a surveyor hands you coordinates.
     """
     data = list(rows or [])
     if csv_path:
@@ -454,6 +489,12 @@ async def autocad_break_at_blocks(
 
     Returns:
         JSON: {"broken": n, "new_handles", "removed", "skipped": [{handle, reason}]}
+
+    Examples:
+        - Use when: a symbol sits on top of the line it belongs to and the
+          drawing reads badly: cut a clean gap round every block.
+        - Use when: an import has wiring or pipework running straight through
+          its devices.
     """
 
     def work() -> dict[str, Any]:

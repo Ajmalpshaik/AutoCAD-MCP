@@ -487,6 +487,12 @@ async def autocad_get_extents(
     Error Handling:
         - Returns an empty-drawing error when there is no geometry to measure,
           rather than the meaningless extents AutoCAD reports for a blank file.
+
+    Examples:
+        - Use when: "how big is this drawing" before choosing a sheet size or
+          a viewport scale.
+        - Use when: something plots tiny: a stray object far from the rest
+          shows up here.
     """
 
     def work() -> dict[str, Any]:

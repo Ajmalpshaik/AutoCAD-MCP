@@ -202,6 +202,11 @@ async def autocad_count_blocks(
 
     Returns:
         JSON: {"total": n, "rows": [{"block", ..., "count"}]}
+
+    Examples:
+        - Use when: "how many diffusers on this floor" -> grouped by block
+          name, optionally per layer.
+        - Use when: pricing or ordering: this is the take-off count.
     """
 
     def work() -> list[dict[str, Any]]:
@@ -240,6 +245,12 @@ async def autocad_total_length(
 
     Returns:
         JSON: {"total_length", "total_area", "rows": [{layer|type, count, length, area, unmeasured}]}
+
+    Examples:
+        - Use when: "how many metres of DN50 pipe on this layer" ->
+          layer="M-PIPE-DN50".
+        - Use when: cable, duct, kerb, skirting - anything bought by the
+          metre.
     """
 
     def work() -> list[dict[str, Any]]:
@@ -271,6 +282,12 @@ async def autocad_get_dynamic_properties(
 
     Returns:
         JSON: {"handle", "block", "properties": [{name, value, allowed, read_only, description}]}
+
+    Examples:
+        - Use when: a dynamic block is not showing what you expect and you
+          need its real property names and allowed values first.
+        - Use when: before autocad_set_dynamic_properties, so you pass a value
+          the block will accept.
     """
 
     def work() -> dict[str, Any]:
@@ -311,6 +328,12 @@ async def autocad_set_dynamic_properties(
 
     Returns:
         JSON: {"handle", "changed": {name: value}, "failed": {name: reason}}
+
+    Examples:
+        - Use when: "switch those doors to the 900 leaf" -> the width
+          property, or the visibility state.
+        - Don't use when: you do not know the property names - read them with
+          autocad_get_dynamic_properties first.
     """
 
     def work() -> dict[str, Any]:

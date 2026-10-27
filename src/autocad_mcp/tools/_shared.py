@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ..acad.coords import Ucs, as_vec3
 from ..acad.entities import describe
 from ..core.errors import AutocadError
 from ..core.variants import apoint
@@ -56,14 +57,91 @@ HANDLES_OPT = Field(
 )
 
 
-def point(value: Sequence[float] | None, name: str) -> Any:
-    """Validate a coordinate list and convert it to AutoCAD's point VARIANT."""
+COORDS_OPT = Field(
+    default="world",
+    description=(
+        "Which coordinate system the points and angles are given in. 'world' "
+        "(the default) is AutoCAD's World Coordinate System, what every tool "
+        "here has always used. 'ucs' means the drawing's current UCS — use it "
+        "when the modeller has set a UCS (moved or turned onto a wall, a grid "
+        "or a wing of the building) and is reading coordinates off that screen. "
+        "autocad_status and autocad_get_ucs report whether a UCS is set."
+    ),
+    pattern="^(world|ucs)$",
+)
+
+TILTED_UCS = (
+    "The drawing's current UCS is tilted out of the world XY plane, so a flat "
+    "[x, y] in it has no single world answer and an angle on that plane is not "
+    "an angle in the world. Convert the points yourself with "
+    "autocad_convert_points (it gives all three numbers), then call this tool "
+    "with coords='world'."
+)
+
+
+def current_ucs(doc: Any) -> Ucs:
+    """The drawing's current UCS, read from the system variables that hold it.
+
+    UCSORG, UCSXDIR and UCSYDIR are the origin and the two axes, all in world
+    coordinates. A drawing with no UCS set reads back as the world one, so this
+    never needs a special case.
+    """
+    try:
+        return Ucs.build(
+            as_vec3(doc.GetVariable("UCSORG"), (0.0, 0.0, 0.0)),
+            as_vec3(doc.GetVariable("UCSXDIR"), (1.0, 0.0, 0.0)),
+            as_vec3(doc.GetVariable("UCSYDIR"), (0.0, 1.0, 0.0)),
+        )
+    except BaseException:  # noqa: BLE001 - unreadable means assume the world one
+        return Ucs()
+
+
+def ucs_for(doc: Any, coords: str | None) -> Ucs | None:
+    """The UCS to convert through for a tool call, or None to leave points alone.
+
+    Returns None for coords='world' so the world path costs nothing, and
+    refuses a flat 2D request on a tilted UCS rather than guessing a Z.
+    """
+    if not coords or str(coords).strip().lower() != "ucs":
+        return None
+    ucs = current_ucs(doc)
+    if ucs.is_world:
+        return None
+    if ucs.tilted:
+        raise AutocadError(TILTED_UCS)
+    return ucs
+
+
+def world_coords(value: Sequence[float], ucs: Ucs | None) -> list[float]:
+    """A caller's point as plain world [x, y, z], converted when a UCS applies."""
+    if ucs is None:
+        return list(as_vec3(value))
+    return list(ucs.to_world(value))
+
+
+def world_angle(degrees: float | None, ucs: Ucs | None) -> float | None:
+    """A caller's angle as a world angle.
+
+    On a plan UCS every angle is simply turned by the UCS rotation, which is
+    what a drafter means by "horizontal" on a rotated grid.
+    """
+    if degrees is None or ucs is None:
+        return degrees
+    return (float(degrees) + ucs.rotation_degrees) % 360.0
+
+
+def point(value: Sequence[float] | None, name: str, ucs: Ucs | None = None) -> Any:
+    """Validate a coordinate list and convert it to AutoCAD's point VARIANT.
+
+    ``ucs`` comes from ``ucs_for``: pass it and the point is read as a UCS
+    coordinate and handed to COM as the world one it means.
+    """
     if not value or len(value) < 2:
         raise AutocadError(
             f"'{name}' must be a coordinate list of at least [x, y], got {value!r}."
         )
-    z = float(value[2]) if len(value) > 2 else 0.0
-    return apoint(float(value[0]), float(value[1]), z)
+    x, y, z = world_coords(value, ucs)
+    return apoint(x, y, z)
 
 
 def created_payload(

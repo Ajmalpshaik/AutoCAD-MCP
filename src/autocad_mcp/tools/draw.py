@@ -307,6 +307,12 @@ async def autocad_draw_circle(
     Error Handling:
         - Returns an error if neither radius nor diameter is given, or if both
           are, rather than silently picking one.
+
+    Examples:
+        - Use when: "a 300 dia hole at 2000,1500" -> center=[2000,1500],
+          diameter=300.
+        - Don't use when: you want the hole and its centre lines - draw it,
+          then autocad_add_centre_marks.
     """
     if radius is None and diameter is None:
         raise AutocadError("Give either 'radius' or 'diameter'.")
@@ -467,6 +473,10 @@ async def autocad_draw_ellipse(
     Error Handling:
         - Returns an error if minor_radius exceeds major_radius, since AutoCAD
           would otherwise reject the axis ratio with an opaque COM failure.
+
+    Examples:
+        - Use when: "an oval access panel 600 by 400" -> major_axis=300,
+          minor_axis=200 (they are half-axes).
     """
     if minor_radius > major_radius:
         raise AutocadError(
@@ -531,6 +541,11 @@ async def autocad_draw_point(
     Returns:
         str: JSON: {"created": true, "handle": str, "type": "point",
              "layer": str, "position": [float, float, float]}
+
+    Examples:
+        - Use when: "mark the survey points from this list" -> one call each,
+          after autocad_drawing_setup sets a point style you can see.
+        - Don't use when: you want a visible symbol - insert a block instead.
     """
     aci = to_aci(color)
 
@@ -600,6 +615,11 @@ async def autocad_add_text(
     Returns:
         str: JSON: {"created": true, "handle": str, "type": "text",
              "layer": str, "text": str, "height": float}
+
+    Examples:
+        - Use when: "write GROUND FLOOR at 0,5000, 200 high".
+        - Don't use when: the note has to wrap or carry formatting - use
+          autocad_add_mtext.
     """
     aci = to_aci(color)
 
@@ -670,6 +690,10 @@ async def autocad_add_mtext(
     Returns:
         str: JSON: {"created": true, "handle": str, "type": "mtext",
              "layer": str, "height": float, "width": float}
+
+    Examples:
+        - Use when: "put these four notes in a 3000 wide block of text".
+        - Don't use when: it is one short line - autocad_add_text is lighter.
     """
     aci = to_aci(color)
 
@@ -945,6 +969,12 @@ async def autocad_insert_block(
           not defined, so the next call can use a valid name.
         - Reports requested attribute tags the block does not have in
           "attributes_not_found" rather than failing the whole insertion.
+
+    Examples:
+        - Use when: "put a CAM-DOME at 4500,2300 turned 90" ->
+          block_name="CAM-DOME", position=[4500,2300], rotation=90.
+        - Use when: the block is not in the drawing yet: pass the .dwg path as
+          block_name and it is brought in.
     """
 
     def work() -> dict[str, Any]:
@@ -1083,6 +1113,11 @@ async def autocad_add_hatch(
     Error Handling:
         - Names the offending handle when a boundary entity is an open shape,
           which is the usual cause of a failed hatch.
+
+    Examples:
+        - Use when: "hatch that slab as concrete" -> pattern="AR-CONC" round
+          the slab's boundary.
+        - Use when: you want a solid fill - pattern="SOLID".
     """
     aci = to_aci(color)
     pattern_name = pattern.strip().upper()
