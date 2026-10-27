@@ -22,6 +22,10 @@
 
 ## Next, in order
 
+0. **2026-10-27: `autocad_batch_labels` built** (one call + one undo step for a label column,
+   `arrow_scale`, `crossing` report); offline gates green. Live row A30 is NOT RUN: merge to main,
+   restart the server, then draw a 15-label column. Why: a CCTV pole test sheet took ~120 tool calls,
+   mostly one label / block / dimension at a time; batch blocks and dimensions are the next candidates.
 1. Choose-which-AutoCAD when several are open ([ROADMAP](ROADMAP.md)).
 2. Run the remaining 2027 rows (A8e, A15, A16, A19, A20); restart AutoCAD first so the
    double-click fix (D-20) is loaded. Live checks are driven with one server for several calls

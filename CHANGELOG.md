@@ -2,6 +2,11 @@
 
 Newest first. Dates are when the change was made.
 
+## Unreleased
+
+- New `autocad_batch_labels`: a whole column of TLD labels in one call and one undo step, checked
+  before drawing, with `arrow_scale` per view and a `crossing` report. 76 tools. Live check A30.
+
 ## 1.1.0 - 2026-10-26 - Heron AI for AutoCAD
 
 - The whole Lee Mac study built (D-26): 16 more tools (attributes, numbering, text count / clean /

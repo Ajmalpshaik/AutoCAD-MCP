@@ -50,6 +50,13 @@ The group headings below give the level.
 The arrow is sized from DIMSCALE (a leader made over COM ignores the override). Dimensions made by
 `autocad_add_dimension` get DIMSCALE the same way.
 
+`autocad_batch_labels` places a whole column of labels in **one call and one undo step**, with the
+same TLD geometry. Shared settings (`height`, `shape` - `angled` by default here, `text_align`, `kind`,
+`layer`, ...) can be overridden per label. Every label is checked first: a bad one stops the batch
+with its index and nothing is drawn. `arrow_scale` sets the arrow size for this view (25 for 1:25)
+without touching DIMSCALE, so a sheet with 1:10 and 1:25 views keeps the right arrows. The result
+lists any pair of leaders that cross in `crossing` (drafting rule 4).
+
 ## Blocks from parts (Change)
 
 `autocad_make_block` turns drawn objects into a named block and puts one insert in their place
