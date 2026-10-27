@@ -38,6 +38,9 @@ namespace Heron.AutoCAD.Addin
             _hooked = false;
         }
 
+        /// <summary>True on AutoCAD's main thread, where waiting for Idle would wait forever.</summary>
+        public static bool OnMainThread => _main != null && _main.CheckAccess();
+
         public static void Post(Action action)
         {
             Work.Enqueue(action);

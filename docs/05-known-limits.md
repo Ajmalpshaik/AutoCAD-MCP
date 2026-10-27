@@ -71,3 +71,11 @@ retry could repeat them ([D-15](DECISIONS.md)).
 The plug-in passed every live check on AutoCAD 2027 (2026-10-26). The 2021-2024 and 2025-2026
 builds compile and pass their offline tests, but have not run in those AutoCADs
 ([NEEDS-CHECKING](NEEDS-CHECKING.md) groups B and C).
+
+## 14. A read's undo pause is not yet proven live
+
+Reads should leave no undo step: the plug-in turns undo recording off for the length of a Read job
+([D-34](DECISIONS.md)). Until row A31 passes, a plug-in built before 2026-10-27, or a read that ran
+while AutoCAD was mid-command (the pause waits 2 s for AutoCAD to be idle, then goes ahead without
+it), can still leave steps: the U then undoes the look, not the change. Press U again, or check the
+object count.

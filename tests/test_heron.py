@@ -36,6 +36,21 @@ def test_levels_match_spec():
         assert risk_of("autocad_preview") is Risk.READ
 
 
+def test_the_a30_reads_are_read_level():
+    # The plug-in turns undo recording off only for Read jobs (UndoPause), so
+    # these must stay Read: moved to View, each would cost a Ctrl+Z again.
+    for tool in ("autocad_list_entities", "autocad_get_variable", "autocad_preview"):
+        assert risk_of(tool) is Risk.READ, tool
+
+
+def test_read_only_annotation_means_read_or_view():
+    # A tool that tells the client it changes nothing must not be graded
+    # Change: the plug-in would record its undo steps.
+    for tool in asyncio.run(mcp.list_tools()):
+        if tool.annotations is not None and tool.annotations.read_only_hint:
+            assert risk_of(tool.name) in (Risk.READ, Risk.VIEW), tool.name
+
+
 def test_unknown_tool_has_no_level():
     try:
         risk_of("autocad_not_a_tool")
