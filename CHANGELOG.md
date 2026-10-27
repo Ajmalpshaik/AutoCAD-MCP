@@ -6,6 +6,9 @@ Newest first. Dates are when the change was made.
 
 - New `autocad_batch_labels`: a whole column of TLD labels in one call and one undo step, checked
   before drawing, with `arrow_scale` per view and a `crossing` report. 108 tools. Live check A30.
+- Plug-in: a read (list, variable, preview and every other Read tool) no longer leaves an undo step,
+  so one Ctrl+Z after Claude looked at the drawing still undoes the last change. Found in live check
+  A30; [D-34](docs/DECISIONS.md), live row A31 (NOT RUN).
 
 ## 1.6.0 - 2026-10-26 - The rest of 3D, and findability proved
 

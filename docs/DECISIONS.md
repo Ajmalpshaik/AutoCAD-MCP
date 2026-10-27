@@ -129,6 +129,23 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-34 - A read leaves no undo step: the plug-in pauses undo recording
+
+**Decided:** 2026-10-27, after live check A30. **Status:** in force. A U typed after Claude ran
+`autocad_list_entities`, `autocad_get_variable` and `autocad_preview` removed nothing; a U straight
+after `autocad_batch_labels` removed the batch. Cause, in the source: reads call no command and put
+no UNDO mark down, but some write through COM to look. `autocad_preview` adds a page-setup snapshot,
+changes about eight layout settings, copies the snapshot back and deletes it; the first list in a
+drawing adds the scratch selection set. Each COM write outside an undo group is an undo step of its
+own. Now: when a **Read** job begins, the plug-in calls `Database.DisableUndoRecording(true)` on the
+active drawing (only if recording was on) and turns it back on at that job's end, before replying,
+so the next job never starts unrecorded. Safety nets: the next job's begin, Disconnect, the
+modeller starting any command (except PLOT, which a preview may run itself), the drawing closing,
+and a 2-minute deadline. The rules are in `Bridge/UndoPause.cs` (tested offline), the switching in
+`Addin/UndoSwitch.cs`. **View** jobs (zoom, regen) keep their undo step, as AutoCAD's own ZOOM does.
+Rejected: `UNDO _Mark` then `UNDO _Back` around each read (if the mark is missed, Back undoes the
+whole session) and `UNDO _Control _None` (wipes the history). Live row A31.
+
 ## D-33 - What 3D can and cannot be automated, said out loud
 
 **Decided:** 2026-10-26, on Ajmal's instruction to cover "all kind of 3-D modelling inside

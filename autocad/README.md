@@ -21,6 +21,7 @@ Every project builds three ways: `net48` (AutoCAD 2021-2024), `net8.0-windows` (
 | `HeronCommands.cs` | `HERON`, `HERONSTATUS`, `HERONCHANGES`, `HERONPUBLISH`, `HERONADMIN`, `HERONASKTOKEEP` |
 | `AcadJobHost.cs` | Bridge -> AutoCAD: banner, command-line line, select and zoom, Keep box |
 | `IdleQueue.cs` | Gets pipe-thread work onto AutoCAD's main thread through `Application.Idle` |
+| `UndoSwitch.cs` | Undo recording off while a read runs, back on after, with safety nets (rules: `Bridge/UndoPause.cs`, [D-34](../docs/DECISIONS.md)) |
 | `HeronActivityBanner.cs` | The READING / CHANGING / DONE / STOPPED card, on its own thread |
 | `HeronStatusWindow.cs`, `HeronKeepQuestion.cs`, `HeronUi.cs` | The two windows and their shared look |
 | `Resources/*.png` | Icons copied from Heron AI for Revit |

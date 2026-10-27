@@ -27,6 +27,10 @@
 
 ## Next, in order
 
+0. **2026-10-27: reads leave no undo step** (branch `claude/read-calls-no-undo-step`, D-34). Found in
+   A30: a U after list / variable / preview removed nothing. The plug-in now pauses undo recording
+   for Read jobs. Offline gates green; live row A31 is NOT RUN: merge, rebuild and install the
+   plug-in, then batch, look, and press U once.
 0. **2026-10-27: `autocad_batch_labels` built** (one call + one undo step for a label column,
    `arrow_scale`, `crossing` report); offline gates green. Live row A30 is NOT RUN: merge to main,
    restart the server, then draw a 15-label column. Why: a CCTV pole test sheet took ~120 tool calls,

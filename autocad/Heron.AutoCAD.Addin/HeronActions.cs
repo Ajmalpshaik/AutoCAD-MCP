@@ -29,6 +29,7 @@ namespace Heron.AutoCAD.Addin
                 if (server.IsRunning)
                 {
                     server.Stop();
+                    UndoSwitch.Resume();
                     Say("Heron: disconnected. No chat can reach this AutoCAD.");
                     HeronLog.Write("Disconnected.");
                 }

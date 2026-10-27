@@ -588,3 +588,188 @@ public class QuietSendTests
         Assert.False(Quiet().GetProperty("ok").GetBoolean());
     }
 }
+
+/// <summary>
+/// A drawing's undo history, as far as these tests need it: every write while
+/// recording is on is one Ctrl+Z.
+/// </summary>
+public class FakeUndo
+{
+    public bool Recording { get; set; } = true;
+    public List<string> Steps { get; } = new();
+    public int Pauses { get; private set; }
+    public int Resumes { get; private set; }
+
+    public void Write(string what)
+    {
+        if (Recording) Steps.Add(what);
+    }
+
+    public bool Pause()
+    {
+        if (!Recording) return false;
+        Recording = false;
+        Pauses++;
+        return true;
+    }
+
+    public void Resume()
+    {
+        Recording = true;
+        Resumes++;
+    }
+}
+
+public class UndoPauseTests
+{
+    private readonly FakeUndo _undo = new();
+    private readonly UndoPause _pause;
+
+    public UndoPauseTests() => _pause = new UndoPause(_undo.Pause, _undo.Resume);
+
+    private static JobInfo Job(string id, Risk risk) => new() { Job = id, Risk = risk, Tool = "autocad_x" };
+
+    [Fact]
+    public void A_read_job_turns_recording_off_and_its_end_turns_it_back_on()
+    {
+        _pause.Begin(Job("j1", Risk.Read));
+        Assert.False(_undo.Recording);
+        Assert.Equal("j1", _pause.PausedFor);
+        _pause.End("j1");
+        Assert.True(_undo.Recording);
+        Assert.Null(_pause.PausedFor);
+    }
+
+    [Theory]
+    [InlineData(Risk.View)]
+    [InlineData(Risk.Change)]
+    [InlineData(Risk.Publish)]
+    [InlineData(Risk.Admin)]
+    public void Every_other_job_keeps_recording_on(Risk risk)
+    {
+        _pause.Begin(Job("j1", risk));
+        Assert.True(_undo.Recording);
+        Assert.Equal(0, _undo.Pauses);
+        _pause.End("j1");
+        Assert.Equal(0, _undo.Resumes);
+    }
+
+    [Fact]
+    public void A_lost_end_is_put_right_by_the_next_begin()
+    {
+        _pause.Begin(Job("read", Risk.Read));
+        // The server died before "end": the next job must not draw unrecorded.
+        _pause.Begin(Job("draw", Risk.Change));
+        Assert.True(_undo.Recording);
+        Assert.Equal(1, _undo.Resumes);
+    }
+
+    [Fact]
+    public void The_end_of_another_job_does_not_turn_it_back_on()
+    {
+        _pause.Begin(Job("j2", Risk.Read));
+        _pause.End("j1");
+        Assert.False(_undo.Recording);
+    }
+
+    [Fact]
+    public void Undo_the_modeller_turned_off_stays_off()
+    {
+        // UNDO Control None: nothing was paused, so nothing is turned on.
+        _undo.Recording = false;
+        _pause.Begin(Job("j1", Risk.Read));
+        _pause.End("j1");
+        Assert.False(_undo.Recording);
+        Assert.Equal(0, _undo.Resumes);
+    }
+
+    [Fact]
+    public void An_end_sent_twice_resumes_once()
+    {
+        _pause.Begin(Job("j1", Risk.Read));
+        _pause.End("j1");
+        _pause.End("j1");
+        Assert.Equal(1, _undo.Resumes);
+    }
+
+    [Fact]
+    public void Two_reads_in_a_row_each_pause_and_resume()
+    {
+        _pause.Begin(Job("j1", Risk.Read));
+        _pause.End("j1");
+        _pause.Begin(Job("j2", Risk.Read));
+        Assert.False(_undo.Recording);
+        _pause.End("j2");
+        Assert.True(_undo.Recording);
+        Assert.Equal(2, _undo.Pauses);
+        Assert.Equal(2, _undo.Resumes);
+    }
+}
+
+/// <summary>Live check A30, offline: a batch, then Claude looks, then one Ctrl+Z.</summary>
+public class ReadLeavesNoUndoStepTests
+{
+    private const string Token = "tok";
+    private readonly FakeUndo _undo = new();
+    private readonly HeronConfig _config = new() { WriteEnabled = true };
+    private readonly BridgeProtocol _protocol;
+
+    private sealed class PausingHost : IJobHost
+    {
+        private readonly UndoPause _pause;
+        public PausingHost(UndoPause pause) => _pause = pause;
+        public void Begin(JobInfo job) => _pause.Begin(job);
+        public void End(JobEnd end) => _pause.End(end.Job);
+        public string AskKeep(KeepRequest request) => "keep";
+        public void SendQuiet(string[] lines) { }
+    }
+
+    public ReadLeavesNoUndoStepTests() =>
+        _protocol = new BridgeProtocol(
+            new PausingHost(new UndoPause(_undo.Pause, _undo.Resume)), () => _config, Token, new HeronHold(), () => DateTime.UtcNow);
+
+    private bool Send(object request) =>
+        JsonDocument.Parse(_protocol.Handle(JsonSerializer.Serialize(request))).RootElement.GetProperty("ok").GetBoolean();
+
+    /// <summary>One tool call through begin and end, with the COM writes it makes in between.</summary>
+    private void Call(string job, string tool, string risk, params string[] writes)
+    {
+        Assert.True(Send(new { op = "begin", token = Token, conversation = "chat-a", job, tool, risk, summary = tool, drawing = "a.dwg" }));
+        foreach (var write in writes) _undo.Write(write);
+        Assert.True(Send(new { op = "end", token = Token, conversation = "chat-a", job, ok = true, outcome = "done", summary = tool, ms = 200 }));
+    }
+
+    [Fact]
+    public void One_ctrl_z_after_list_variable_and_preview_still_undoes_the_batch()
+    {
+        Call("j1", "autocad_batch_labels", "change", "15 labels (one undo group)");
+        Call("j2", "autocad_list_entities", "read", "scratch selection set");
+        Call("j3", "autocad_get_variable", "read");
+        // What _plot_png does through COM, each write outside any undo group.
+        Call("j4", "autocad_preview", "read",
+            "add snapshot page setup", "snapshot CopyFrom", "ConfigName", "CanonicalMediaName",
+            "PlotType", "UseStandardScale", "StandardScale", "CenterPlot",
+            "layout CopyFrom snapshot", "delete snapshot");
+
+        Assert.Equal("15 labels (one undo group)", _undo.Steps.Last());
+        Assert.Single(_undo.Steps);
+        Assert.True(_undo.Recording);
+    }
+
+    [Fact]
+    public void A_change_after_a_read_is_still_its_own_undo_step()
+    {
+        Call("j1", "autocad_preview", "read", "ConfigName");
+        Call("j2", "autocad_draw_line", "change", "line");
+        Assert.Equal(new[] { "line" }, _undo.Steps);
+    }
+
+    [Fact]
+    public void A_refused_begin_pauses_nothing()
+    {
+        _config.WriteEnabled = false;
+        Assert.False(Send(new { op = "begin", token = Token, conversation = "chat-a", job = "j1", tool = "autocad_draw_line", risk = "change", summary = "x", drawing = "a.dwg" }));
+        Assert.True(_undo.Recording);
+        Assert.Equal(0, _undo.Pauses);
+    }
+}

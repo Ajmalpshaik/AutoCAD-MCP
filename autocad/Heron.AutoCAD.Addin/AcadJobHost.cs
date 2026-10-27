@@ -19,6 +19,8 @@ namespace Heron.AutoCAD.Addin
         private static readonly TimeSpan KeepWait = HeronKeepQuestion.Deadline + TimeSpan.FromSeconds(30);
         private readonly HeronActivityBanner _banner;
         private readonly Func<HeronConfig> _config;
+        // A read leaves no undo step, so one Ctrl+Z still undoes the last change.
+        private readonly UndoPause _undo = new UndoPause(UndoSwitch.Pause, UndoSwitch.Resume);
 
         public AcadJobHost(HeronActivityBanner banner, Func<HeronConfig> config)
         {
@@ -29,12 +31,15 @@ namespace Heron.AutoCAD.Addin
         public void Begin(JobInfo job)
         {
             HeronLog.Write("begin " + job.Tool + " (" + job.Risk + ") on " + job.Drawing);
+            _undo.Begin(job);
             if (_config().ActivityBanner) _banner.Begin(job);
         }
 
         public void End(JobEnd end)
         {
             HeronLog.Write("end " + end.Job + " " + end.Outcome + " " + end.Ms + " ms");
+            // Before the reply, so the next job never starts with recording off.
+            _undo.End(end.Job);
             _banner.End(end);
             var seconds = (end.Ms / 1000.0).ToString("0.0");
             string line;
