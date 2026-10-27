@@ -16,7 +16,7 @@
 | Server tools | **107 tools**, every one gated by the plug-in; 5 resources, a tool search and **7 job prompts** | `pytest -m "not live"` green (1812 tests); `tools/check_structure.py` OK |
 | Sheets, UCS, shop drawings | **14 tools, server 1.2.0** (2026-10-26): the UCS, layouts, page setup, title blocks, viewports, saved locations, drawing settings and styles, remap layers, tidy an import, `autocad_sequence`. All the arithmetic and planning is tested offline; **everything COM touches is NOT RUN** | [09](09-sheets-and-coordinates.md), D-27 / D-28 / D-29, [NEEDS-CHECKING group D](NEEDS-CHECKING.md) |
 | Geometry, annotation, 3D | **12 tools, server 1.3.0** (2026-10-26): 24 named shapes, dimension runs, centre marks, multileaders, tables, revision clouds, solids, extrude / revolve, booleans, mass properties, 3D paths, 3D views. Plus polyline bulges and text justification in the batch. Geometry tested offline (402 tests); **everything COM touches is NOT RUN** | [10](10-geometry-annotation-3d.md), D-30 / D-31, [NEEDS-CHECKING group E](NEEDS-CHECKING.md) |
-| Proving it in AutoCAD | **`tools/live_check.py`, server 1.4.0** (2026-10-26): one command measures 46 of the 67 live rows in a scratch drawing it makes itself and writes the results here. The other 21 need an eye or depend on the machine and say so. **Not yet run on a real AutoCAD** | `tools/README.md`, [NEEDS-CHECKING](NEEDS-CHECKING.md) header |
+| Proving it in AutoCAD | **`tools/live_check.py`** (2026-10-26): one command measures 65 of the 90 live rows in a scratch drawing it makes itself and writes the results here. The other 25 need an eye or depend on the machine and say so. **Not yet run on a real AutoCAD** | `tools/README.md`, [NEEDS-CHECKING](NEEDS-CHECKING.md) header |
 | Findability | **Measured, not assumed** (2026-10-26): every tool carries a `Use when` line, `autocad://tools` indexes them and `autocad://tools/find/{phrase}` searches them. 67 real phrases: 55 put the right tool first, all 67 in the top three | `tests/test_find_tool.py`, D-32 |
 | The rest of 3D | **6 tools, server 1.6.0** (2026-10-26): oval primitives, sweep along a path, slice, clash detection, 3D move/rotate/mirror/array, materials, render. The plane arithmetic is tested offline; **everything COM touches is NOT RUN** | [NEEDS-CHECKING group F](NEEDS-CHECKING.md), D-33 |
 | Plug-in (C#) | Ribbon, padlocks, banner, Bridge Status, Keep or Discard, 6 commands. Builds for net48 / net8 / net10 with 0 warnings | `dotnet build`; bridge tests green incl. real Python <-> C# |
@@ -27,8 +27,26 @@
 
 ## Next, in order
 
-1. **Run NEEDS-CHECKING groups D and E** (31 + 36 rows) on AutoCAD 2027. These 26 tools have never
-   touched a real AutoCAD. From group E, five rows matter most:
+1. **Run NEEDS-CHECKING groups D, E and F** (90 rows) on AutoCAD 2027. **This is one command
+   now, not a day of clicking** — with the Changes padlock on:
+
+   ```bash
+   .venv\Scripts\python.exe tools/live_check.py --group all --write
+   ```
+
+   It works in a scratch drawing it makes and closes itself, measures 65 of the 90 rows, and
+   writes each result and its evidence straight into NEEDS-CHECKING.md. Read the FAIL list
+   first: a FAIL there is a defect in a tool, not in the runner, until shown otherwise. The 25
+   it cannot measure are written NOT RUN with the reason; `--list` names them.
+
+   From group F, the newest and least proven, start with:
+   - **F1** — a 400 x 200 oval duct must measure 400 x 200. If it comes out 800 x 400, the
+     half-axis conversion in `tools/solids.py` is inverted.
+   - **F5 / F11** — a slice's two halves must add up to the original, and a clash check with
+     `create_solids=false` must leave the entity count unchanged.
+   - **F15** — a 1000 tall column tipped 90 degrees about X must lie down to 100.
+
+   From group E, five rows matter most:
    - **E4** — measure the two arcs of a cone development. Outer 628.3, inner 314.2. That one
      measurement proves every flat pattern the server will ever draw.
    - **E1 / E36** — a slot must come out as **one** polyline, not a pile of arcs, and a batch text

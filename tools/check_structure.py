@@ -7,6 +7,7 @@
 2. Every registered tool has a risk level (src/autocad_mcp/core/risk.py), so
    no tool can slip past the padlocks.
 3. Every relative link in the Markdown docs points at a file that exists.
+4. The tool count docs/SETUP.md tells the reader to expect is the real one.
 
 Exit code 0 when all hold, 1 with one line per problem otherwise.
 """
@@ -67,8 +68,40 @@ def broken_links(root: Path) -> list[str]:
     return problems
 
 
+def stale_tool_count(root: Path = ROOT) -> list[str]:
+    """docs/SETUP.md tells the reader how many tools to expect. It must be true.
+
+    It has gone stale twice - a reader who sees a smaller number than the
+    install prints concludes the install is broken, which is the worst kind of
+    wrong documentation.
+    """
+    setup = root / "docs" / "SETUP.md"
+    if not setup.exists():
+        return []
+    sys.path.insert(0, str(root / "src"))
+    import asyncio
+
+    from autocad_mcp.core.registry import mcp
+    from autocad_mcp.tools import register_all
+
+    register_all()
+    real = len(asyncio.run(mcp.list_tools()))
+    text = setup.read_text(encoding="utf-8")
+    claimed = [int(n) for n in re.findall(r"You should see (\d+) tools", text)]
+    return [
+        f"docs/SETUP.md says {n} tools; the server registers {real}"
+        for n in claimed
+        if n != real
+    ]
+
+
 def run_all(root: Path = ROOT) -> list[str]:
-    return autocad_api_outside_addin(root) + tools_without_level() + broken_links(root)
+    return (
+        autocad_api_outside_addin(root)
+        + tools_without_level()
+        + broken_links(root)
+        + stale_tool_count(root)
+    )
 
 
 def main() -> int:
