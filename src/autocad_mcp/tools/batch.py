@@ -15,10 +15,12 @@ import os
 import tempfile
 import time
 import uuid
+from collections.abc import Sequence
 from typing import Annotated, Any
 
 from pydantic import Field
 
+from ..acad.coords import Ucs
 from ..acad.lisp import (
     build_chunks,
     dotted,
@@ -33,6 +35,7 @@ from ..core.connection import get_doc, mark_writing, require_idle, run
 from ..core.errors import AutocadError
 from ..core.gate import quiet_sender
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta
+from ._shared import COORDS_OPT, ucs_for
 
 MAX_OPERATIONS = 5000
 
@@ -105,24 +108,64 @@ def _build_point(op: dict[str, Any], i: int) -> list[str]:
     return pairs
 
 
+# DXF justification for TEXT: group 72 across, group 73 up and down. Anything
+# other than left-baseline also needs group 11, the point that then does the
+# positioning. "center" and "right" use middle (73 = 2) as well, because a
+# centred annotation wants to sit on its point both ways - which is what a
+# detail bubble, a level mark and a revision tag all need.
+_TEXT_ALIGN = {
+    "left": (0, 0),
+    "center": (1, 2),
+    "centre": (1, 2),
+    "right": (2, 2),
+    "baseline_center": (1, 0),
+    "baseline_centre": (1, 0),
+}
+
+
 def _build_text(op: dict[str, Any], i: int) -> list[str]:
     pairs = _common_pairs(op, "TEXT")
-    pairs.append(dotted(10, lisp_point(_require(op, "position", i))))
+    position = _require(op, "position", i)
+    pairs.append(dotted(10, lisp_point(position)))
     pairs.append(dotted(40, lisp_number(op.get("height", 2.5))))
     pairs.append(dotted(1, lisp_string(_require(op, "text", i))))
     if op.get("rotation"):
         pairs.append(dotted(50, lisp_number(rad(op["rotation"]))))
+    align = str(op.get("align", "left")).strip().lower()
+    if align not in _TEXT_ALIGN:
+        raise AutocadError(
+            f"Operation {i} (text) has align '{op.get('align')}'. Use one of: "
+            + ", ".join(sorted(set(_TEXT_ALIGN)))
+            + "."
+        )
+    across, updown = _TEXT_ALIGN[align]
+    if across or updown:
+        pairs.append(dotted(72, str(across)))
+        pairs.append(dotted(73, str(updown)))
+        # Group 11 is what actually places a justified text; 10 is kept because
+        # entmake validates the subclass with it there.
+        pairs.append(dotted(11, lisp_point(position)))
+    if op.get("style"):
+        pairs.append(dotted(7, lisp_string(str(op["style"]).strip())))
     return pairs
 
 
 def _polyline_pairs(
-    op: dict[str, Any], vertices: list[list[float]], closed: bool
+    op: dict[str, Any],
+    vertices: list[list[float]],
+    closed: bool,
+    bulges: Sequence[float] | None = None,
 ) -> list[str]:
     """LWPOLYLINE needs its subclass markers, unlike the simpler entities.
 
     entmake validates against the DXF subclass structure here, so the
     AcDbEntity / AcDbPolyline markers and the vertex count are mandatory, and
     colour has to sit in the AcDbEntity section before the second marker.
+
+    A bulge (group 42) belongs to the segment *leaving* its vertex, so it is
+    written straight after that vertex's group 10. Bulge is tan(sweep / 4),
+    positive anticlockwise - which is what turns a corner into a fillet, a
+    rectangle into a slot and a route into an elbow, all in one object.
     """
     pairs = [dotted(0, lisp_string("LWPOLYLINE")), dotted(100, lisp_string("AcDbEntity"))]
     if op.get("layer"):
@@ -133,13 +176,18 @@ def _polyline_pairs(
     pairs.append(dotted(100, lisp_string("AcDbPolyline")))
     pairs.append(dotted(90, str(len(vertices))))
     pairs.append(dotted(70, "1" if closed else "0"))
-    for vertex in vertices:
+    if op.get("width") is not None:
+        pairs.append(dotted(43, lisp_number(op["width"])))
+    for index, vertex in enumerate(vertices):
         pairs.append(
             dotted(
                 10,
                 f"(list {lisp_number(vertex[0])} {lisp_number(vertex[1])})",
             )
         )
+        bulge = float(bulges[index]) if bulges and index < len(bulges) else 0.0
+        if bulge:
+            pairs.append(dotted(42, lisp_number(bulge)))
     return pairs
 
 
@@ -156,7 +204,14 @@ def _build_polyline(op: dict[str, Any], i: int) -> list[str]:
                 f"Operation {i} (polyline) vertex {n} is {vertex!r}; every "
                 "vertex needs at least [x, y]."
             )
-    return _polyline_pairs(op, points, bool(op.get("closed", False)))
+    bulges = op.get("bulges")
+    if bulges is not None and len(bulges) > len(points):
+        raise AutocadError(
+            f"Operation {i} (polyline) has {len(bulges)} bulges for {len(points)} "
+            "vertices. A bulge belongs to the segment leaving its vertex, so give "
+            "one per vertex or fewer."
+        )
+    return _polyline_pairs(op, points, bool(op.get("closed", False)), bulges)
 
 
 def _build_rectangle(op: dict[str, Any], i: int) -> list[str]:
@@ -172,6 +227,86 @@ def _build_rectangle(op: dict[str, Any], i: int) -> list[str]:
         )
     corners = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
     return _polyline_pairs(op, corners, closed=True)
+
+
+# Which field of an operation holds a point, a run of points, or an angle.
+# Used only on the coords='ucs' path, to rewrite a batch before it is built.
+_POINT_FIELDS: dict[str, tuple[str, ...]] = {
+    "line": ("start", "end"),
+    "circle": ("center",),
+    "arc": ("center",),
+    "point": ("position",),
+    "text": ("position",),
+}
+_POINT_RUN_FIELDS: dict[str, tuple[str, ...]] = {"polyline": ("points",)}
+# Bulges are deliberately not converted: a bulge is the shape of a segment, not
+# a position or a direction, so turning the UCS leaves every one of them alone.
+_ANGLE_FIELDS: dict[str, tuple[str, ...]] = {
+    "arc": ("start_angle", "end_angle"),
+    "text": ("rotation",),
+}
+
+
+def _turn_rectangle(op: dict[str, Any], ucs: Ucs) -> dict[str, Any]:
+    """A two-corner rectangle in a UCS, as the four-corner polyline it really is.
+
+    Square to the modeller's turned grid is not square to the world, so the
+    two corners cannot stay two corners. A degenerate one is handed back
+    untouched so _build_rectangle still reports it by operation number.
+    """
+    c1, c2 = op.get("corner1") or [], op.get("corner2") or []
+    if len(c1) < 2 or len(c2) < 2:
+        return dict(op)
+    x1, y1, x2, y2 = float(c1[0]), float(c1[1]), float(c2[0]), float(c2[1])
+    if x1 == x2 or y1 == y2:
+        return dict(op)
+    turned = {k: v for k, v in op.items() if k not in ("corner1", "corner2")}
+    turned["type"] = "polyline"
+    turned["closed"] = True
+    turned["points"] = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    return turned
+
+
+def to_world_ops(
+    operations: Sequence[dict[str, Any]], ucs: Ucs | None
+) -> list[dict[str, Any]]:
+    """Operations given in a UCS, rewritten as the world ones entmake needs.
+
+    ``entmake`` writes straight into the drawing database, which holds world
+    coordinates only: unlike the command line, it never applies the current
+    UCS. So the conversion happens here, in plain Python, before one
+    expression is built - and is therefore tested without AutoCAD.
+
+    ``ucs`` of None (coords='world', or a drawing with no UCS set) hands the
+    batch back unchanged, so the world path costs nothing.
+    """
+    if ucs is None:
+        return [dict(op) if isinstance(op, dict) else op for op in operations]
+    out: list[dict[str, Any]] = []
+    for op in operations:
+        if not isinstance(op, dict):
+            out.append(op)
+            continue
+        kind = str(op.get("type", "")).strip().lower()
+        moved = dict(op)
+        if kind == "rectangle":
+            moved = _turn_rectangle(op, ucs)
+            kind = str(moved.get("type", "")).strip().lower()
+        for field in _POINT_FIELDS.get(kind, ()):
+            value = moved.get(field)
+            if value is not None and len(value) >= 2:
+                moved[field] = list(ucs.to_world(value))
+        for field in _POINT_RUN_FIELDS.get(kind, ()):
+            run_of = moved.get(field)
+            if run_of:
+                moved[field] = [
+                    list(ucs.to_world(v)) if len(v) >= 2 else v for v in run_of
+                ]
+        for field in _ANGLE_FIELDS.get(kind, ()):
+            if moved.get(field) is not None:
+                moved[field] = (float(moved[field]) + ucs.rotation_degrees) % 360.0
+        out.append(moved)
+    return out
 
 
 BUILDERS = {
@@ -201,6 +336,10 @@ async def autocad_batch_draw(
                 'line: {"type":"line","start":[0,0],"end":[100,0]}\n'
                 'polyline: {"type":"polyline","points":[[0,0],[10,0],[10,5]],'
                 '"closed":true}\n'
+                '  arcs: add "bulges":[0,0.4142,0] - one per vertex, for the '
+                "segment leaving it. Bulge is tan(sweep/4), positive "
+                "anticlockwise; 0.4142 is a 90 degree arc. This is how a "
+                "fillet, a slot or an elbow stays one object.\n"
                 'rectangle: {"type":"rectangle","corner1":[0,0],'
                 '"corner2":[100,50]}\n'
                 'circle: {"type":"circle","center":[0,0],"radius":25} '
@@ -209,6 +348,9 @@ async def autocad_batch_draw(
                 '"start_angle":0,"end_angle":90}\n'
                 'text: {"type":"text","position":[0,0],"text":"ROOM 1",'
                 '"height":2.5,"rotation":0}\n'
+                '  justification: add "align":"center" (or "right") to sit the '
+                'text on its point instead of starting from it - what a bubble '
+                'or a tag needs. "style" picks a text style by name.\n'
                 'point: {"type":"point","position":[0,0]}\n\n'
                 'Example with styling: {"type":"line","start":[0,0],'
                 '"end":[5000,0],"layer":"A-WALL","color":"red"}'
@@ -230,6 +372,7 @@ async def autocad_batch_draw(
             ),
         ),
     ] = True,
+    coords: Annotated[str, COORDS_OPT] = "world",
 ) -> str:
     """Create many entities at once, far faster than one call per entity.
 
@@ -254,6 +397,9 @@ async def autocad_batch_draw(
             description for the shape of each type.
         return_handles (bool): Return each new entity's handle. Roughly doubles
             the run time; turn off for large batches you will not modify.
+        coords (str): "world" (default) or "ucs" to read every point and angle
+            in the drawing's current UCS. A rectangle given in a turned UCS
+            comes out turned, as a drafter would expect.
 
     Returns:
         str: JSON: {
@@ -280,6 +426,33 @@ async def autocad_batch_draw(
         - If AutoCAD rejects individual operations (locked layer, degenerate
           geometry), "failed" counts them and "created" reflects what did land.
     """
+    return dumps(await draw_operations(operations, return_handles, coords))
+
+
+async def draw_operations(
+    operations: Sequence[dict[str, Any]],
+    return_handles: bool = True,
+    coords: str = "world",
+) -> dict[str, Any]:
+    """Validate, build and send a run of operations. The engine behind two tools.
+
+    ``autocad_batch_draw`` takes the operations from the caller;
+    ``autocad_make_shape`` generates them from a shape's settings. Both end up
+    here, so there is one place that validates a batch, one that converts a UCS
+    and one that talks to AutoCAD.
+    """
+    # coords='ucs': read the UCS before validating, so the whole batch is still
+    # checked and built before anything is sent. One extra read, and only on
+    # this path.
+    ucs = None
+    if str(coords).strip().lower() == "ucs":
+
+        def read_ucs() -> Any:
+            return ucs_for(get_doc(), "ucs")
+
+        ucs = await run(read_ucs)
+    operations = to_world_ops(operations, ucs)
+
     # Validate and generate everything up front: a batch that cannot be fully
     # built should not half-draw itself.
     entities: list[list[str]] = []
@@ -356,13 +529,15 @@ async def autocad_batch_draw(
 
         result = parse_output(text, expected=len(entities))
         result["layers_created"] = created_layers
+        if ucs is not None:
+            result["converted_from_ucs"] = ucs.describe()
         result["elapsed_seconds"] = round(elapsed, 3)
         if elapsed > 0:
             result["entities_per_second"] = round(result["created"] / elapsed, 1)
         return result
 
     try:
-        return dumps(await run(work))
+        return await run(work)
     finally:
         try:
             os.remove(output_path)

@@ -20,6 +20,7 @@ from autocad_mcp.tools.document import (
     AC_EXTENTS,
     AC_SCALE_TO_FIT,
     PDF_PLOTTER,
+    PLOT_AREAS,
     SNAPSHOT_NAME,
     _match_media,
     _plot_pdf,
@@ -47,6 +48,7 @@ PAGE_SETUP = (
     "PlotType",
     "UseStandardScale",
     "StandardScale",
+    "CustomScale",
     "CenterPlot",
 )
 
@@ -91,6 +93,8 @@ class FakeLayout:
                 "PlotType": 0,
                 "UseStandardScale": False,
                 "StandardScale": 7,
+                "CustomScale": 1.0,
+                "ViewToPlot": "",
                 "CenterPlot": False,
             },
         )
@@ -273,6 +277,7 @@ class TestPlotPdf:
         assert result == {
             "layout": "Model",
             "paper": "ISO full bleed A3 (420.00 x 297.00 MM)",
+            "area": "extents",
         }
 
     def test_unknown_paper_size_fails_before_plotting(self, doc, target):
@@ -286,6 +291,41 @@ class TestPlotPdf:
         with pytest.raises(AutocadError, match="DWG To PDF.pc3"):
             _plot_pdf(doc, target, None)
         assert doc.PlotConfigurations.items == {}
+
+
+class TestPlotArea:
+    """area='window' / 'view' / 'layout': plotting a location rather than the lot."""
+
+    def test_extents_is_still_the_default(self, doc, target):
+        _plot_pdf(doc, target, None)
+        assert doc.Plot.calls[0]["layout"]["PlotType"] == AC_EXTENTS
+
+    def test_a_window_is_set_before_the_plot_type(self, doc, target):
+        corners = []
+        doc.ActiveLayout.__dict__["SetWindowToPlot"] = lambda a, b: corners.append((a, b))
+        result = _plot_pdf(doc, target, None, "window", ("ll", "ur"))
+        assert corners == [("ll", "ur")]
+        assert doc.Plot.calls[0]["layout"]["PlotType"] == PLOT_AREAS["window"]
+        assert result["area"] == "window"
+
+    def test_a_saved_view_is_named_on_the_layout(self, doc, target):
+        result = _plot_pdf(doc, target, None, "view", None, "DETAIL-A")
+        assert doc.ActiveLayout.state["ViewToPlot"] == "DETAIL-A"
+        assert doc.Plot.calls[0]["layout"]["PlotType"] == PLOT_AREAS["view"]
+        assert result["view"] == "DETAIL-A"
+
+    def test_the_sheet_itself_plots_at_a_real_scale(self, doc, target):
+        result = _plot_pdf(doc, target, None, "layout", None, None, "1:1")
+        at_plot = doc.Plot.calls[0]["layout"]
+        assert at_plot["PlotType"] == PLOT_AREAS["layout"]
+        assert at_plot["UseStandardScale"] is False
+        assert at_plot["CustomScale"] == 1.0
+        assert result["scale"] == "1:1"
+
+    def test_without_a_scale_it_still_fits_the_sheet(self, doc, target):
+        result = _plot_pdf(doc, target, None, "layout")
+        assert doc.Plot.calls[0]["layout"]["StandardScale"] == AC_SCALE_TO_FIT
+        assert "scale" not in result
 
 
 class TestMatchMedia:

@@ -12,20 +12,31 @@ def register_all() -> None:
     """Import every tool module, registering its tools on the shared server."""
     from . import (  # noqa: F401
         advanced,
+        annotate,
         batch,
         blocks,
+        convert,
+        coordinates,
+        dimensions,
         document,
         draw,
         drawing_tools,
         geometry_tools,
         labels,
         layers,
+        materials,
         modify,
         query,
         resources,
+        sequence,
+        settings,
+        shapes,
+        sheets,
+        solids,
         standards,
         takeoff,
         text_tools,
+        views,
     )
 
 
