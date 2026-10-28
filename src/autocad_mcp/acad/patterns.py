@@ -48,6 +48,14 @@ def _n(value: float) -> str:
     return "0" if text in ("-0", "") else text
 
 
+def _writable(value: float, what: str) -> float:
+    """A length the file can hold: one that rounds to 0 would silently become 0."""
+    number = float(value)
+    if number != 0.0 and _n(number) == "0":
+        raise ValueError(f"{what} {number} is too small to write; the file keeps six decimal places")
+    return number
+
+
 def check_name(name: str, kind: str = "pattern") -> str:
     """A pattern or linetype name that is also a safe file name."""
     clean = str(name).strip()
@@ -90,7 +98,11 @@ def hatch_families(
             offset = list(fam.get("offset") or [])
             if len(origin) < 2 or len(offset) < 2:
                 raise ValueError(f"family {i} needs 'offset' as [along, spacing] (and 'origin' as [x, y])")
-            out.append({"angle": float(fam.get("angle", 0.0)), "origin": origin[:2],
+            try:
+                angle_deg = float(fam.get("angle", 0.0))
+            except (TypeError, ValueError):
+                raise ValueError(f"family {i} needs 'angle' as a number of degrees") from None
+            out.append({"angle": angle_deg, "origin": origin[:2],
                         "offset": offset[:2], "dashes": list(fam.get("dashes") or [])})
     else:
         if float(spacing) <= 0:
@@ -99,8 +111,11 @@ def hatch_families(
                "dashes": list(dashes or [])}
         out = [one] if key == "lines" else [one, {**one, "angle": float(angle) + 90.0}]
     for i, fam in enumerate(out):
-        if abs(float(fam["offset"][1])) < 1e-12:
+        if float(fam["offset"][1]) == 0.0:
             raise ValueError(f"family {i} has a spacing of 0, so its lines lie on top of each other")
+        _writable(fam["offset"][1], f"family {i}'s spacing")
+        for d in fam["dashes"]:
+            _writable(d, f"family {i}'s dash")
         if len(fam["dashes"]) > MAX_PAT_DASHES:
             raise ValueError(f"family {i} has {len(fam['dashes'])} dashes; AutoCAD reads at most six")
     return out
@@ -126,7 +141,7 @@ def pat_text(name: str, description: str, families: Sequence[dict[str, Any]]) ->
 def _element(item: Any) -> str:
     if isinstance(item, dict):
         text = str(item["text"])
-        return (f'["{text}",{item.get("style", "STANDARD")},S={_n(item.get("height", 2.5))},'
+        return (f'["{text}",{item.get("style", "STANDARD")},S={_n(item.get("s", item.get("height", 2.5)))},'
                 f'R={_n(item.get("rotation", 0.0))},X={_n(item.get("x", 0.0))},Y={_n(item.get("y", 0.0))}]')
     return _n(float(item))
 
@@ -139,11 +154,18 @@ def lin_text(name: str, description: str, elements: Sequence[Any]) -> str:
         raise ValueError(f"the description is {len(description)} characters; a linetype's may be 47")
     if not elements:
         raise ValueError("a linetype needs at least one dash")
-    specs = [e for e in elements if not isinstance(e, dict)]
+    specs = [float(e) for e in elements if not isinstance(e, dict)]
+    if len(specs) < 2:
+        raise ValueError("a linetype needs at least a dash and a gap, e.g. [12, -3]")
     if len(specs) > MAX_LIN_SPECS:
         raise ValueError(f"{len(specs)} dashes and gaps; a linetype takes at most 12")
-    if isinstance(elements[0], dict) or float(elements[0]) < 0:
+    # 'A' alignment: the first spec draws (or is a dot), the second lifts the pen.
+    if isinstance(elements[0], dict) or specs[0] < 0:
         raise ValueError("a linetype must start with a dash (or a dot, 0), not a gap or text")
+    if specs[1] >= 0:
+        raise ValueError("the second dash spec must be a gap (a negative number), e.g. [12, -3]")
+    for d in specs:
+        _writable(d, "dash or gap")
     pattern = "A," + ",".join(_element(e) for e in elements)
     if len(pattern) > MAX_LIN_LINE:
         raise ValueError(f"the pattern line is {len(pattern)} characters; AutoCAD reads 280")
@@ -158,6 +180,7 @@ def text_linetype(
     height: float = 2.5,
     style: str = "STANDARD",
     text_width: float | None = None,
+    style_height: float | None = None,
 ) -> tuple[list[Any], str]:
     """A service line with its name in it: ---- CHWS ---- CHWS ----.
 
@@ -165,6 +188,9 @@ def text_linetype(
     pad clear of the dash before it, in a gap that clears its width plus the
     same pad again. Sizes are as they plot when LTSCALE is the drawing scale
     factor, which autocad_drawing_setup sets.
+
+    S= is the text height for a style of height 0, and a multiplier of the
+    style's own height when it has one: give style_height for such a style.
     """
     check_name(name, "linetype")
     label = _ascii(str(text).strip(), "text")
@@ -180,6 +206,7 @@ def text_linetype(
         float(dash),
         -float(pad),
         {"text": label, "style": str(style).strip() or "STANDARD", "height": float(height),
+         "s": float(height) / float(style_height) if style_height else float(height),
          "rotation": 0.0, "x": 0.0, "y": -float(height) / 2.0},
         -(width + float(pad)),
     ]

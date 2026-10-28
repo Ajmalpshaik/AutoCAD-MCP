@@ -17,7 +17,15 @@ from ..acad.units import rad
 from ..core.connection import get_doc, get_space, require_idle, run
 from ..core.errors import AutocadError, com_message
 from ..core.registry import dumps, mcp, tool_errors, tool_meta, undo_mark
-from ._shared import COORDS_OPT, LAYER_OPT, SPACE_OPT, created_payload, point, ucs_for
+from ._shared import (
+    COORDS_OPT,
+    LAYER_OPT,
+    SPACE_OPT,
+    created_payload,
+    point,
+    ucs_for,
+    world_angle,
+)
 from .draw import dwg_path
 
 
@@ -104,7 +112,7 @@ async def autocad_attach_xref(
             try:
                 ref = get_space(doc, space).AttachExternalReference(
                     resolved, ref_name, point(insertion, "insertion", ucs),
-                    float(scale), float(scale), float(scale), rad(rotation), bool(overlay),
+                    float(scale), float(scale), float(scale), rad(world_angle(rotation, ucs)), bool(overlay),
                 )
             except BaseException as exc:  # noqa: BLE001
                 raise AutocadError(

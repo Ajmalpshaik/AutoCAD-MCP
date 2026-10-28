@@ -27,8 +27,10 @@ def support_folder() -> Path:
 
 
 def _target(folder: str | None, name: str, ext: str) -> Path:
+    # Whole, because the path goes on to AutoCAD, which would read a relative
+    # one from its own folder, not the server's.
     base = Path(os.path.expandvars(os.path.expanduser(folder.strip().strip('"')))) if folder else support_folder()
-    return base / f"{name}{ext}"
+    return (base / f"{name}{ext}").resolve()
 
 
 def _write(path: Path, content: str, replace: bool) -> None:
@@ -38,9 +40,17 @@ def _write(path: Path, content: str, replace: bool) -> None:
     path.write_text(content, encoding="ascii", newline="\r\n" if os.name == "nt" else "\n")
 
 
-def _named(collection: Any, name: str) -> bool:
+def _find(collection: Any, name: str) -> Any:
     wanted = name.strip().lower()
-    return any(str(collection.Item(i).Name).strip().lower() == wanted for i in range(int(collection.Count)))
+    for i in range(int(collection.Count)):
+        item = collection.Item(i)
+        if str(item.Name).strip().lower() == wanted:
+            return item
+    return None
+
+
+def _named(collection: Any, name: str) -> bool:
+    return _find(collection, name) is not None
 
 
 def _on_support_path(doc: Any, folder: Path) -> bool:
@@ -202,18 +212,26 @@ async def autocad_create_linetype(
     """
     if (text is None) == (dashes is None):
         raise AutocadError("Give either text (a service line with its name in it) or dashes, not both or neither.")
-    try:
-        clean = pat.check_name(name, "linetype")
+    def build(style_height: float | None = None) -> str:
         if text is not None:
-            elements, sketch = pat.text_linetype(clean, text, dash, gap, height, text_style, text_width)
+            elements, sketch = pat.text_linetype(
+                clean, text, dash, gap, height, text_style, text_width, style_height
+            )
         else:
             elements = [float(d) for d in dashes or []]
             sketch = "".join("_" * 3 if d > 0 else ("." if d == 0 else " ") for d in elements)[:47]
-        content = pat.lin_text(clean, description if description is not None else sketch, elements)
+        return pat.lin_text(clean, description if description is not None else sketch, elements)
+
+    try:
+        clean = pat.check_name(name, "linetype")
+        content = build()
     except ValueError as exc:
         raise AutocadError(str(exc)) from exc
     path = _target(folder, clean, ".lin")
     hint = f"Use it with linetype='{clean}' on a layer or a draw tool."
+    if text is not None and not load:
+        hint += (" Not loaded, so the text size assumes a style of height 0 (like STANDARD); "
+                 "load it to have a fixed-height style's own height allowed for.")
     if dry_run:
         return dumps({"dry_run": True, "file": str(path), "file_text": content, "hint": hint})
     if not load:
@@ -227,19 +245,26 @@ async def autocad_create_linetype(
                 f"This drawing already has a linetype called '{clean}'. Give the new one another "
                 "name, or reload it in AutoCAD's LINETYPE dialog."
             )
-        if text is not None and not _named(doc.TextStyles, text_style):
-            raise AutocadError(
-                f"This drawing has no text style called '{text_style}', which the linetype's text "
-                "needs. Use STANDARD, or make the style with autocad_create_styles first."
-            )
-        _write(path, content, replace)
+        final = content
+        if text is not None:
+            style = _find(doc.TextStyles, text_style)
+            if style is None:
+                raise AutocadError(
+                    f"This drawing has no text style called '{text_style}', which the linetype's text "
+                    "needs. Use STANDARD, or make the style with autocad_create_styles first."
+                )
+            # A style with its own height makes S a multiplier, not the height.
+            fixed = float(getattr(style, "Height", 0.0) or 0.0)
+            if fixed > 0:
+                final = build(fixed)
+        _write(path, final, replace)
         try:
             doc.Linetypes.Load(clean, str(path))
         except BaseException as exc:  # noqa: BLE001
             raise AutocadError(
                 f"The linetype is written to '{path}', but AutoCAD would not load it ({com_message(exc)})."
             ) from exc
-        return {"file": str(path), "file_text": content, "loaded": True, "hint": hint}
+        return {"file": str(path), "file_text": final, "loaded": True, "hint": hint}
 
     return dumps(await run(work))
 

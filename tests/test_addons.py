@@ -203,3 +203,42 @@ def test_a_hatch_pattern_not_in_acad_pat_is_tried_as_a_custom_pattern_file(monke
     answer = asyncio.run(draw.autocad_add_hatch(boundary_handles=["2A0"], pattern="CHW-INS"))
     assert not answer.startswith("Error"), answer
     assert Space.asked == [1, 2]
+
+
+def test_a_busy_autocad_is_not_mistaken_for_a_missing_hatch_pattern(monkeypatch):
+    """Only a refused name falls back to the custom type; a busy AutoCAD is passed on as busy."""
+    import pythoncom
+
+    from autocad_mcp.tools import draw
+
+    class Space:
+        asked = []
+
+        def AddHatch(self, pattern_type, name, associative):
+            Space.asked.append(pattern_type)
+            raise pythoncom.com_error(-2147418111, "Call was rejected by callee.", None, None)
+
+    class Boundary:
+        ObjectName, Closed = "AcDbPolyline", True
+
+    class Doc:
+        ModelSpace = PaperSpace = Space()
+
+        def HandleToObject(self, handle):
+            return Boundary()
+
+        def StartUndoMark(self):
+            pass
+
+        def EndUndoMark(self):
+            pass
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(draw, "run", run)
+    monkeypatch.setattr(draw, "get_doc", lambda: Doc())
+    monkeypatch.setattr(draw, "require_idle", lambda d: None)
+    answer = asyncio.run(draw.autocad_add_hatch(boundary_handles=["2A0"], pattern="ANSI31"))
+    assert Space.asked == [1]
+    assert "no hatch pattern" not in answer.lower()

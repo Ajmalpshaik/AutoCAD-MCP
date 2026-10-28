@@ -347,3 +347,150 @@ def test_a_wipeout_autocad_does_not_take_is_cancelled_and_reported(monkeypatch):
 
 def test_wipeout_level():
     assert risk_of("autocad_add_wipeout") is Risk.CHANGE
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (2026-10-28): spaces, flipped outlines, slow commands, numbers
+# ---------------------------------------------------------------------------
+
+
+class TwoSpaceDoc(WipeoutDoc):
+    """Model and paper space apart, as in a real drawing; WIPEOUT draws where the work is."""
+
+    def __init__(self, active_space=1, mspace=False, outline=None, appear_after=0):
+        super().__init__(outline=outline)
+        self.ModelSpace, self.PaperSpace = Space(), Space()
+        self.ModelSpace.ObjectID, self.PaperSpace.ObjectID = 11, 22
+        self.ActiveSpace, self.MSpace = active_space, mspace
+        self.appear_after, self.reads = appear_after, 0
+
+    def SendCommand(self, text):
+        self.sent.append(text)
+        if text.startswith("_.WIPEOUT"):
+            working = self.ModelSpace if (self.ActiveSpace == 1 or self.MSpace) else self.PaperSpace
+            self.pending = working
+
+    def _maybe_appear(self):
+        pending = getattr(self, "pending", None)
+        if pending is not None:
+            self.reads += 1
+            if self.reads > self.appear_after:
+                pending.items.append(Entity("AcDbWipeout", "2EA"))
+                self.pending = None
+
+
+class CountingSpace(Space):
+    def __init__(self, doc):
+        super().__init__()
+        self.doc = doc
+
+    @property
+    def Count(self):
+        self.doc._maybe_appear()
+        return len(self.items)
+
+
+def _two(monkeypatch, **kwargs):
+    fake = TwoSpaceDoc(**kwargs)
+    fake.ModelSpace, fake.PaperSpace = CountingSpace(fake), CountingSpace(fake)
+    fake.ModelSpace.ObjectID, fake.PaperSpace.ObjectID = 11, 22
+    return _wipe(monkeypatch, fake)
+
+
+SQUARE = [[0, 0], [10, 0], [10, 10], [0, 10]]
+
+
+def test_a_wipeout_made_inside_a_layout_viewport_is_found_in_model_space(monkeypatch):
+    """In a layout with a viewport active, ActiveSpace says paper but WIPEOUT draws in model space."""
+    fake = _two(monkeypatch, active_space=0, mspace=True)
+    out = call(drafting.autocad_add_wipeout(points=SQUARE))
+    assert out["handle"] == "2EA" and fake.ModelSpace.items and not fake.PaperSpace.items
+
+
+def test_a_boundary_in_the_other_space_is_refused(monkeypatch):
+    outline = Outline([0, 0, 500, 0, 500, 300, 0, 300])
+    outline.OwnerID = 11  # in model space, while a layout is current
+    fake = _two(monkeypatch, active_space=0, outline=outline)
+    answer = asyncio.run(drafting.autocad_add_wipeout(boundary_handle="2D1", erase_boundary=True))
+    assert answer.startswith("Error") and "space" in answer
+    assert fake.sent == [] and not outline.deleted
+
+
+def test_a_flipped_polyline_is_refused_because_its_corners_would_mirror(monkeypatch):
+    """LWPOLYLINE corners are in its own plane; with its normal down they read mirrored in X."""
+    outline = Outline([0, 0, 500, 0, 500, 300, 0, 300])
+    outline.Normal = (0.0, 0.0, -1.0)
+    fake = _two(monkeypatch, outline=outline)
+    answer = asyncio.run(drafting.autocad_add_wipeout(boundary_handle="2D1"))
+    assert answer.startswith("Error") and "flipped" in answer and fake.sent == []
+
+
+def test_a_wipeout_that_appears_a_moment_late_is_still_found(monkeypatch):
+    fake = _two(monkeypatch, appear_after=3)
+    out = call(drafting.autocad_add_wipeout(points=SQUARE))
+    assert out["handle"] == "2EA" and not any(s.startswith("\x1b") for s in fake.sent)
+
+
+def test_a_wipeout_that_never_appears_is_cancelled_too(monkeypatch):
+    fake = _two(monkeypatch, appear_after=10**6)
+    answer = asyncio.run(drafting.autocad_add_wipeout(points=SQUARE))
+    assert answer.startswith("Error") and fake.sent[-1].startswith("\x1b")
+
+
+@pytest.mark.parametrize(("value", "typed"), [(123456789.123456, "123456789.123456"), (1.4e-14, "0"),
+                                             (-0.0, "0"), (2500.5, "2500.5"), (-12.25, "-12.25")])
+def test_numbers_are_typed_in_full_and_never_with_an_exponent(value, typed):
+    assert drafting._num(value) == typed
+
+
+class LoggedDoc(StyledDoc):
+    def __init__(self):
+        super().__init__()
+        self.log = []
+
+    def StartUndoMark(self):
+        self.log.append("start")
+
+    def EndUndoMark(self):
+        self.log.append("end")
+
+    def SetVariable(self, name, value):
+        super().SetVariable(name, value)
+        self.log.append(("set", name, value))
+
+
+def test_the_multiline_style_is_put_back_inside_the_same_undo_step(monkeypatch):
+    fake = LoggedDoc()
+    _wipe(monkeypatch, fake)
+    call(drafting.autocad_draw_multiline(points=[[0, 0], [1000, 0]], style="WALL-200"))
+    assert fake.log.index(("set", "CMLSTYLE", "Standard")) < fake.log.index("end")
+
+
+def test_a_multiline_style_is_not_changed_when_the_current_one_cannot_be_read(monkeypatch):
+    fake = StyledDoc()
+    del fake.variables["CMLSTYLE"]
+    _wipe(monkeypatch, fake)
+    answer = asyncio.run(drafting.autocad_draw_multiline(points=[[0, 0], [1000, 0]], style="WALL-200"))
+    assert answer.startswith("Error") and fake.set_calls == [] and fake.ModelSpace.calls == []
+
+
+def test_a_closed_multiline_given_its_closing_point_does_not_double_it(mdoc):
+    call(drafting.autocad_draw_multiline(points=[[0, 0], [4000, 0], [4000, 3000], [0, 0]], closed=True))
+    (_, flat), = mdoc.ModelSpace.calls
+    assert len(flat) == 12  # three corners and the way back, not a zero-length last leg
+
+
+def test_a_closed_spline_given_its_closing_point_does_not_double_it(doc):
+    call(drafting.autocad_draw_spline(points=[[0, 0], [1000, 0], [500, 800], [0, 0]], closed=True))
+    (_, flat, _, _), = doc.ModelSpace.calls
+    assert len(flat) == 9
+
+
+def test_a_multilines_own_warning_does_not_hide_the_read_back_one(monkeypatch, mdoc):
+    def unreadable(entity, notes, **extra):
+        return {"created": True, "handle": "2C0", "type": "multiline", "layer": "0",
+                "verified": False, "warning": "could not be read back"}
+
+    monkeypatch.setattr(drafting, "created_payload", unreadable)
+    out = call(drafting.autocad_draw_multiline(points=[[0, 0], [10, 0], [10, 10]], closed=True))
+    assert "read back" in out["warning"] and "mitre" in out["warning"]

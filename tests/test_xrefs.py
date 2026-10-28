@@ -163,3 +163,26 @@ class TestManage:
 def test_levels():
     assert risk_of("autocad_attach_xref") is Risk.CHANGE
     assert risk_of("autocad_manage_xref") is Risk.CHANGE
+
+
+class TurnedDoc(Doc):
+    """A plan UCS turned 90 degrees."""
+
+    def GetVariable(self, name):
+        return {"UCSORG": (0.0, 0.0, 0.0), "UCSXDIR": (0.0, 1.0, 0.0), "UCSYDIR": (-1.0, 0.0, 0.0)}[name]
+
+
+def test_with_ucs_coordinates_the_rotation_is_turned_too(monkeypatch, plan_file):
+    """coords='ucs' means points and angles: an xref square to a turned grid is turned with it."""
+    fake = _patch(monkeypatch, TurnedDoc())
+    call(xrefs.autocad_attach_xref(path=str(plan_file), rotation=0, coords="ucs"))
+    assert fake.ModelSpace.calls[0][6] == pytest.approx(math.pi / 2)
+
+
+def test_a_relative_path_is_made_whole_before_autocad_sees_it(monkeypatch, plan_file):
+    """AutoCAD would read a relative path from its own folder, not the server's."""
+    fake = _patch(monkeypatch, Doc())
+    monkeypatch.chdir(plan_file.parent)
+    call(xrefs.autocad_attach_xref(path=plan_file.name))
+    sent = fake.ModelSpace.calls[0][0]
+    assert sent == str(plan_file) and sent == str(plan_file.resolve())

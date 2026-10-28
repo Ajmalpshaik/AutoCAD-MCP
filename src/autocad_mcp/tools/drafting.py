@@ -52,6 +52,14 @@ def _unit(vector: Sequence[float]) -> Vec3 | None:
     return (x / length, y / length, z / length)
 
 
+def _drop_closing(points: Sequence[Sequence[float]]) -> list[Sequence[float]]:
+    """The points without a last one that repeats the first: a closed shape closes itself."""
+    pts = list(points)
+    if len(pts) > 1 and math.dist(as_vec3(pts[0]), as_vec3(pts[-1])) <= 1e-9:
+        pts.pop()
+    return pts
+
+
 def _first_direction(points: Sequence[Vec3]) -> Vec3 | None:
     for a, b in zip(points, points[1:], strict=False):
         found = _unit((b[0] - a[0], b[1] - a[1], b[2] - a[2]))
@@ -148,18 +156,19 @@ async def autocad_draw_spline(
         - A closed spline AutoCAD will not close is drawn open and says so in
           "not_set".
     """
-    if closed and len(points) < 3:
-        raise AutocadError("A closed spline needs at least three points.")
     for i, p in enumerate(points):
         if len(p) < 2:
             raise AutocadError(f"Point {i} must be [x, y] or [x, y, z]; got {p}.")
+    fit = _drop_closing(points) if closed else list(points)
+    if closed and len(fit) < 3:
+        raise AutocadError("A closed spline needs at least three points.")
     aci = to_aci(color)
 
     def work() -> dict[str, Any]:
         doc = get_doc()
         require_idle(doc)
         ucs = ucs_for(doc, coords)
-        world = [tuple(world_coords(p, ucs)) for p in points]
+        world = [tuple(world_coords(p, ucs)) for p in fit]
         try:
             start, end = spline_tangents(
                 world,
@@ -264,34 +273,43 @@ async def autocad_draw_multiline(
     key = str(justification).strip().lower()
     if key not in MLINE_JUSTIFICATION:
         raise AutocadError(f"'{justification}' is not a justification. Use 'zero', 'top' or 'bottom'.")
-    if closed and len(points) < 3:
-        raise AutocadError("A closed multiline needs at least three points.")
     for i, p in enumerate(points):
         if len(p) < 2:
             raise AutocadError(f"Point {i} must be [x, y]; got {p}.")
+    vertices = _drop_closing(points) if closed else list(points)
+    if closed and len(vertices) < 3:
+        raise AutocadError("A closed multiline needs at least three points.")
     aci = to_aci(color)
 
     def work() -> dict[str, Any]:
         doc = get_doc()
         require_idle(doc)
         ucs = ucs_for(doc, coords)
-        world = [world_coords(p, ucs) for p in points]
+        world = [world_coords(p, ucs) for p in vertices]
         if closed:
             world.append(list(world[0]))
         flat = [float(v) for p in world for v in p]
         not_set: list[str] = []
         before = None
         if style:
-            before = _try(lambda: str(doc.GetVariable("CMLSTYLE")))
+            # Read first: a style that cannot be put back is not changed at all.
             try:
-                doc.SetVariable("CMLSTYLE", str(style).strip())
+                before = str(doc.GetVariable("CMLSTYLE"))
             except BaseException as exc:  # noqa: BLE001
                 raise AutocadError(
-                    f"This drawing has no multiline style called '{style}' ({com_message(exc)}). "
-                    "Make it with MLSTYLE, or copy it in with autocad_import_from_drawing."
+                    f"The drawing's current multiline style could not be read ({com_message(exc)}), "
+                    "so it is not changed. Draw without 'style', or set it with CMLSTYLE first."
                 ) from exc
-        try:
-            with undo_mark(doc):
+        with undo_mark(doc):
+            if style:
+                try:
+                    doc.SetVariable("CMLSTYLE", str(style).strip())
+                except BaseException as exc:  # noqa: BLE001
+                    raise AutocadError(
+                        f"This drawing has no multiline style called '{style}' ({com_message(exc)}). "
+                        "Make it with MLSTYLE, or copy it in with autocad_import_from_drawing."
+                    ) from exc
+            try:
                 entity = get_space(doc, space).AddMLine(double_array(flat))
                 for prop, value in (("Justification", MLINE_JUSTIFICATION[key]),
                                     ("MLineScale", float(scale) if scale else None)):
@@ -302,9 +320,10 @@ async def autocad_draw_multiline(
                     except BaseException as exc:  # noqa: BLE001 - drawn, and said
                         not_set.append(f"{prop} ({com_message(exc)})")
                 notes = apply_properties(doc, entity, layer, aci, None)
-        finally:
-            if before is not None:
-                _try(lambda: doc.SetVariable("CMLSTYLE", before))
+            finally:
+                # Inside the undo step, so one Ctrl+Z takes the multiline and the style back.
+                if before is not None:
+                    _try(lambda: doc.SetVariable("CMLSTYLE", before))
 
         payload = created_payload(
             entity,
@@ -315,11 +334,12 @@ async def autocad_draw_multiline(
             vertices=len(world),
         )
         if closed:
-            payload["warning"] = (
+            mitre = (
                 "Closed by repeating the first point: Automation has no close for a multiline, "
                 "so the last corner overlaps rather than being mitred. Where it shows, redraw "
                 "that corner with MLINE's Close option."
             )
+            payload["warning"] = f"{payload['warning']} {mitre}" if payload.get("warning") else mitre
         if not_set:
             payload["not_set"] = not_set
         return payload
@@ -341,7 +361,9 @@ COMMAND_POLL_S = 0.1
 
 
 def _num(value: float) -> str:
-    return f"{float(value):.10g}"
+    """A coordinate as typed: fixed point to 8 places, never an exponent, no trailing zeros."""
+    text = f"{float(value):.8f}".rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
 
 
 def wipeout_command(points: Sequence[Sequence[float]]) -> str:
@@ -376,6 +398,12 @@ def _outline_of(doc: Any, handle: str) -> tuple[Any, list[list[float]]]:
         raise AutocadError(f"{handle} is not a polyline. Give a closed polyline, or the corners as points.")
     if not bool(_try(lambda: outline.Closed, False)):
         raise AutocadError(f"{handle} is an open polyline; a wipeout needs a closed outline.")
+    normal = _try(lambda: as_vec3(outline.Normal))
+    if normal is not None and abs(normal[2] - 1.0) > 1e-9:
+        raise AutocadError(
+            f"{handle} is drawn on a flipped or tilted plane (its normal is {list(normal)}), so its "
+            "corners are not plain world X and Y. Give the corners as points instead."
+        )
     flat = [float(v) for v in outline.Coordinates]
     corners = [flat[i : i + 2] for i in range(0, len(flat) - 1, 2)]
     if any(abs(float(_try(lambda i=i: outline.GetBulge(i), 0.0) or 0.0)) > 1e-9 for i in range(len(corners))):
@@ -386,13 +414,22 @@ def _outline_of(doc: Any, handle: str) -> tuple[Any, list[list[float]]]:
     return outline, corners
 
 
-def _still_busy(doc: Any) -> bool:
+def _wait_for_new(doc: Any, target: Any, before: int) -> tuple[Any, bool]:
+    """The object a typed command made, once it is there and AutoCAD is back at its prompt.
+
+    Returns (the newest object or None, whether a command was still asking).
+    SendCommand normally returns with the command done; the wait covers the
+    times it starts late.
+    """
     deadline = time.monotonic() + COMMAND_WAIT_S
-    while _try(lambda: int(doc.GetVariable("CMDACTIVE")), 0):
+    while True:
+        busy = bool(_try(lambda: int(doc.GetVariable("CMDACTIVE")), 0))
+        count = int(_try(lambda: target.Count, before))
+        if not busy and count > before:
+            return target.Item(count - 1), False
         if time.monotonic() >= deadline:
-            return True
+            return None, busy
         time.sleep(COMMAND_POLL_S)
-    return False
 
 
 @mcp.tool(name="autocad_add_wipeout", **tool_meta("Add A Wipeout"))
@@ -466,21 +503,33 @@ async def autocad_add_wipeout(
             typed = wipeout_command(corners)
         except ValueError as exc:
             raise AutocadError(f"{boundary_handle}: {exc}" if boundary_handle else str(exc)) from exc
-        target = doc.ModelSpace if int(_try(lambda: doc.ActiveSpace, 1)) == 1 else doc.PaperSpace
+        # WIPEOUT draws where the work is: model space on the Model tab, and also
+        # inside a layout viewport that is active (ActiveSpace still says paper).
+        in_model = int(_try(lambda: doc.ActiveSpace, 1)) == 1 or bool(_try(lambda: doc.MSpace, False))
+        target = doc.ModelSpace if in_model else doc.PaperSpace
+        if outline is not None:
+            owner, here = _try(lambda: outline.OwnerID), _try(lambda: target.ObjectID)
+            if owner is not None and here is not None and owner != here:
+                raise AutocadError(
+                    f"{boundary_handle} is not in {'model' if in_model else 'paper'} space, where the "
+                    "wipeout would be drawn (that is where the work is now). Switch to its space "
+                    "first, or give the corners as points."
+                )
         before = int(target.Count)
         not_set: list[str] = []
 
         with undo_mark(doc):
             doc.SendCommand(typed)
-            if _still_busy(doc):
+            made, busy = _wait_for_new(doc, target, before)
+            if made is None or str(_try(lambda: made.ObjectName, "")) != "AcDbWipeout":
+                # Cancel whichever way it went, so AutoCAD is never left at the prompt.
                 _try(lambda: doc.SendCommand("\x1b\x1b"))
                 raise AutocadError(
                     "AutoCAD did not take the WIPEOUT input and was left asking; it has been "
                     "cancelled and no wipeout was kept. Check that no other command was running."
+                    if busy else
+                    "AutoCAD finished WIPEOUT but no wipeout came out of it; nothing was kept."
                 )
-            made = target.Item(int(target.Count) - 1) if int(target.Count) > before else None
-            if made is None or str(_try(lambda: made.ObjectName, "")) != "AcDbWipeout":
-                raise AutocadError("AutoCAD finished WIPEOUT but no wipeout came out of it.")
             if frame_key is not None:
                 try:
                     doc.SetVariable("WIPEOUTFRAME", WIPEOUT_FRAMES[frame_key])

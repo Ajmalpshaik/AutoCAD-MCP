@@ -17,7 +17,7 @@ from ..acad.entities import describe, resolve_handle
 from ..acad.tables import apply_properties
 from ..acad.units import rad
 from ..core.connection import get_doc, get_space, require_idle, run
-from ..core.errors import AutocadError, com_message
+from ..core.errors import AutocadError, com_message, is_dispatch_failure, is_retryable
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta, undo_mark
 from ..core.variants import apoint, double_array, object_array
 from ._shared import (
@@ -902,7 +902,8 @@ def dwg_path(raw: str) -> str:
     InsertBlock answers "Key not found" to forward slashes (measured on
     AutoCAD 2027), so the path is normalised to backslashes.
     """
-    resolved = os.path.normpath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
+    # Whole, because AutoCAD would read a relative path from its own folder, not ours.
+    resolved = os.path.abspath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
     if not os.path.isfile(resolved):
         raise AutocadError(f"No .dwg file exists at '{resolved}'.")
     return resolved
@@ -1157,6 +1158,8 @@ async def autocad_add_hatch(
             try:
                 entity = target.AddHatch(AC_HATCH_PREDEFINED, pattern_name, associative)
             except BaseException as first:  # noqa: BLE001 - not in acad.pat: try its own file
+                if is_retryable(first) or is_dispatch_failure(first):
+                    raise  # busy or disconnected, not a missing pattern
                 try:
                     entity = target.AddHatch(AC_HATCH_CUSTOM, pattern_name, associative)
                 except BaseException:  # noqa: BLE001

@@ -219,3 +219,53 @@ def test_give_text_or_dashes_not_both(doc, tmp_path):
 def test_levels():
     assert risk_of("autocad_create_hatch_pattern") is Risk.PUBLISH
     assert risk_of("autocad_create_linetype") is Risk.PUBLISH
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (2026-10-28)
+# ---------------------------------------------------------------------------
+
+
+class TestStricterFiles:
+    @pytest.mark.parametrize("elements", [[12], [0]])
+    def test_a_linetype_needs_a_dash_and_a_gap(self, elements):
+        with pytest.raises(ValueError, match="dash and a gap"):
+            p.lin_text("ONE", "", elements)
+
+    def test_the_second_spec_must_be_a_gap(self):
+        """'A' alignment: the first spec draws (or is a dot), the second lifts the pen."""
+        with pytest.raises(ValueError, match="gap"):
+            p.lin_text("TWO", "", [12, 3])
+
+    def test_a_spacing_too_small_to_write_is_refused_not_written_as_zero(self):
+        with pytest.raises(ValueError, match="too small"):
+            p.pat_text("TINY", "", p.hatch_families("lines", 45, 1e-7))
+
+    def test_a_dash_too_small_to_write_is_refused_not_turned_into_a_dot(self):
+        with pytest.raises(ValueError, match="too small"):
+            p.lin_text("TINYDASH", "", [1e-7, -3])
+
+    def test_a_custom_family_without_an_angle_number_is_refused_plainly(self):
+        with pytest.raises(ValueError, match="angle"):
+            p.hatch_families("custom", families=[{"angle": None, "offset": [0, 3]}])
+
+    def test_a_fixed_height_style_scales_the_text_to_the_height_asked(self):
+        """In a .lin text element S multiplies a style's fixed height; with height 0 it is the height."""
+        elements, _ = p.text_linetype("CHWS", "CHWS", height=2.5, style="ROMANS35", style_height=3.5)
+        line = p.lin_text("CHWS", "", elements).splitlines()[1]
+        assert "S=0.714286" in line and "Y=-1.25" in line
+
+
+def test_a_linetype_on_a_fixed_height_style_is_sized_from_the_drawings_style(doc, tmp_path):
+    style = Named("ROMANS35")
+    style.Height = 3.5
+    doc.TextStyles.items.append(style)
+    out = call(tools.autocad_create_linetype(name="CHWR", text="CHWR", text_style="ROMANS35", folder=str(tmp_path)))
+    assert "S=0.714286" in out["file_text"]
+
+
+def test_a_relative_folder_is_made_whole_before_autocad_sees_it(doc, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    out = call(tools.autocad_create_linetype(name="DD", dashes=[12, -3, 0, -3], folder="pats"))
+    assert Path(out["file"]) == (tmp_path / "pats" / "DD.lin").resolve()
+    assert doc.Linetypes.loaded[0][1] == out["file"]
