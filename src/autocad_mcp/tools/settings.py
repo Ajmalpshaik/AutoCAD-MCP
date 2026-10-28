@@ -29,6 +29,7 @@ from ..acad.units import INSUNITS, rad
 from ..core.connection import get_doc, require_idle, run
 from ..core.errors import AutocadError, com_message
 from ..core.registry import dumps, mcp, tool_errors, tool_meta, undo_mark
+from ..core.variants import double_array
 
 # ---------------------------------------------------------------------------
 # Plain words to system variables (pure: no AutoCAD below this line)
@@ -225,7 +226,7 @@ def plan_settings(wanted: dict[str, Any]) -> dict[str, Any]:
         out["AUPREC"] = _in_range(wanted["angle_precision"], 0, 8, "angle_precision")
 
     if wanted.get("scale") is not None:
-        ratio = plan.parse_scale(wanted["scale"])
+        ratio = plan.parse_typed_scale(wanted["scale"])
         factor = 1.0 / ratio
         out["DIMSCALE"] = factor
         out["CANNOSCALE"] = plan.scale_text(ratio)
@@ -319,6 +320,17 @@ DIM_OPTIONS: dict[str, str] = {
     "force_line_inside": "DIMTOFL",
 }
 
+# The ones AutoCAD holds as whole numbers. SetVariable refuses a decimal for
+# them, so 0.0 for DIMDEC fails where 0 lands.
+WHOLE_DIM_OPTIONS = frozenset(
+    {"precision", "angle_precision", "unit_format", "suppress_zeros",
+     "text_colour", "line_colour", "extension_colour"}
+)
+
+# The arrow variables read back empty for AutoCAD's own closed-filled arrow,
+# and a single period is how that arrow is set again.
+DEFAULT_ARROW_VARIABLES = frozenset({"DIMBLK", "DIMBLK1", "DIMBLK2", "DIMLDRBLK"})
+
 
 def plan_dim_style(options: dict[str, Any]) -> dict[str, Any]:
     """The DIM variables one dimension style's options come down to.
@@ -343,6 +355,11 @@ def plan_dim_style(options: dict[str, Any]) -> dict[str, Any]:
             out[variable] = text
         elif option in ("text_style", "arrow_block"):
             out[variable] = str(value)
+        elif option in WHOLE_DIM_OPTIONS:
+            number = float(value)
+            if not number.is_integer():
+                raise ValueError(f"{option} must be a whole number, got {value}.")
+            out[variable] = int(number)
         else:
             out[variable] = float(value)
 
@@ -367,15 +384,18 @@ def _read_variable(doc: Any, name: str) -> Any:
         value = doc.GetVariable(name)
     except BaseException:  # noqa: BLE001 - not every release has every variable
         return None
-    try:
-        return [round(float(v), 6) for v in value]
-    except TypeError:
-        pass
+    # Text first: a string is iterable too, and CANNOSCALE '1:10' or DIMTXSTY
+    # 'Standard' must not be taken for a point.
+    if isinstance(value, str):
+        return value
     if isinstance(value, float):
         return round(value, 6)
-    if isinstance(value, (int, str)):
+    if isinstance(value, int):
         return value
-    return str(value)
+    try:
+        return [round(float(v), 6) for v in value]
+    except (TypeError, ValueError):
+        return str(value)
 
 
 @mcp.tool(name="autocad_drawing_setup", **tool_meta("Set Up The Drawing"))
@@ -489,7 +509,9 @@ async def autocad_drawing_setup(
                     changed.append({"variable": variable, "from": before, "to": after})
                     continue
                 try:
-                    doc.SetVariable(variable, value)
+                    # A point (LIMMIN, LIMMAX) goes as an array of doubles: a plain
+                    # Python pair crosses COM as an array of variants.
+                    doc.SetVariable(variable, double_array(value) if isinstance(value, tuple) else value)
                 except BaseException as exc:  # noqa: BLE001 - one refusal, not the batch
                     failed.append({"variable": variable, "to": after, "reason": com_message(exc)})
                     continue
@@ -764,6 +786,8 @@ def _make_dim_style(
         for key, value in before.items():
             if value is None:
                 continue
+            if key in DEFAULT_ARROW_VARIABLES and value == "":
+                value = "."
             try:
                 doc.SetVariable(key, value)
             except BaseException:  # noqa: BLE001 - reported below if it matters

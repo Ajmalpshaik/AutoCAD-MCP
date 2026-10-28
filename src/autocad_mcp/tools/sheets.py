@@ -285,7 +285,7 @@ def _set_page(
             layout.StandardScale = AC_SCALE_TO_FIT
             written["scale"] = "fit"
         else:
-            ratio = plan.parse_scale(scale)
+            ratio = plan.parse_typed_scale(scale)
             layout.UseStandardScale = False
             layout.CustomScale = ratio
             written["scale"] = plan.scale_text(ratio)
@@ -975,7 +975,7 @@ async def autocad_add_viewport(
             except ValueError as exc:
                 raise AutocadError(str(exc)) from exc
         else:
-            ratio = plan.parse_scale(scale)
+            ratio = plan.parse_typed_scale(scale)
             text = plan.scale_text(ratio)
 
         window = plan.model_window(look_at, pw, ph, ratio)

@@ -810,9 +810,9 @@ def scale_bar(scale: Any, length: float, origin: Any = None, divisions: int = 5,
     distances that length stands for at ``scale``. A 100 mm bar at 1:50 reads
     0 to 5000.
     """
-    from .sheets import parse_scale, scale_text
+    from .sheets import parse_typed_scale, scale_text
 
-    ratio = parse_scale(scale)
+    ratio = parse_typed_scale(scale)
     run = _positive(length, "length")
     n = _at_least(divisions, 1, "divisions")
     bar = float(height) if height else run * 0.06

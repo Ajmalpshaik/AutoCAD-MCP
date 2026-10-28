@@ -23,10 +23,12 @@ and work the rest out, and report both.
 from __future__ import annotations
 
 import math
+import time
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StrictInt
 
+from ..acad.coords import as_vec3
 from ..acad.entities import describe, resolve_handle, resolve_handles, short_type
 from ..acad.tables import apply_properties, ensure_layer
 from ..acad.units import rad
@@ -41,6 +43,7 @@ from ._shared import (
     created_payload,
     ucs_for,
     world_coords,
+    world_direction,
 )
 
 # AcBooleanType: the Boolean method's operation. The first object is the one
@@ -71,6 +74,31 @@ VISUAL_STYLES = (
     "2dwireframe", "wireframe", "hidden", "realistic", "conceptual",
     "shaded", "shaded with edges", "shades of gray", "sketchy", "x-ray",
 )
+
+# What to answer the VSCURRENT command with for each. VSCURRENT is a command,
+# not a system variable - SetVariable("VSCURRENT", ...) is refused (AutoCAD
+# 2027, 2026-10-28) - and COM has no visual style on a model viewport. The
+# leading underscore keeps the English option in any language of AutoCAD; the
+# two names with spaces go by their capital letter, as the prompt shows them
+# ("shaded with Edges", "shades of Gray").
+VISUAL_STYLE_OPTIONS: dict[str, str] = {
+    "2dwireframe": "_2dwireframe",
+    "wireframe": "_Wireframe",
+    "hidden": "_Hidden",
+    "realistic": "_Realistic",
+    "conceptual": "_Conceptual",
+    "shaded": "_Shaded",
+    "shaded with edges": "_E",
+    "shades of gray": "_G",
+    "sketchy": "_SKetchy",
+    "x-ray": "_X",
+}
+
+# How long VSCURRENT gets to finish before a prompt still open means its answer
+# was not taken. SendCommand normally returns with the command done; the wait
+# covers the times it does not.
+VSCURRENT_WAIT_S = 1.0
+VSCURRENT_POLL_S = 0.1
 
 Primitive = Literal[
     "box", "wedge", "cylinder", "cone", "sphere", "torus",
@@ -260,6 +288,10 @@ async def autocad_add_solid(
         lift = 0.0 if shape in ("sphere", "torus") else float(height) / 2.0
         cx, cy, cz = bx, by, bz + lift
         centre = apoint(cx, cy, cz)
+        # AutoCAD makes a box, a wedge and an oval square to the world. On a
+        # turned UCS they are turned to match, as a batch rectangle is.
+        turn = rad(ucs.rotation_degrees) if ucs is not None and shape in (
+            "box", "wedge", "elliptical_cylinder", "elliptical_cone") else 0.0
 
         with undo_mark(doc):
             try:
@@ -273,8 +305,20 @@ async def autocad_add_solid(
                     solid = target.AddCone(centre, r, float(height))
                 elif shape == "sphere":
                     solid = target.AddSphere(centre, r)
+                elif shape in ("elliptical_cylinder", "elliptical_cone"):
+                    # AutoCAD takes radii, major one first along X: length and
+                    # width are overall sizes, so halve them, and make a shape
+                    # wider than long the long way, then turn it 90 degrees.
+                    across, deep = float(length) / 2.0, float(width) / 2.0
+                    add = (target.AddEllipticalCylinder if shape == "elliptical_cylinder"
+                           else target.AddEllipticalCone)
+                    solid = add(centre, max(across, deep), min(across, deep), float(height))
+                    if deep > across:
+                        turn += math.pi / 2.0
                 else:
                     solid = target.AddTorus(centre, r, float(tube_radius))
+                if abs(turn) > 1e-12:
+                    solid.Rotate(centre, turn)
             except BaseException as exc:  # noqa: BLE001
                 raise AutocadError(
                     f"AutoCAD would not make that {shape} ({com_message(exc)}). Check the sizes "
@@ -466,7 +510,7 @@ async def autocad_extrude_profile(
                     solid = target.AddRevolvedSolid(
                         region,
                         apoint(*world_coords(axis_point, ucs)),
-                        apoint(*(float(v) for v in axis_direction[:3])),
+                        apoint(*world_direction(axis_direction, ucs)),
                         rad(revolve_angle),
                     )
                     operation = "revolve"
@@ -588,9 +632,7 @@ async def autocad_solid_boolean(
         # so a failure halfway would leave a mess that cannot be reasoned about.
         for entity, label in [(first, handle)] + list(zip(rest, others, strict=False)):
             kind = short_type(entity)
-            if kind not in ("3dsolid", "region") and "Solid3d" not in str(
-                _try(lambda e=entity: e.ObjectName, "")
-            ):
+            if kind not in ("3dsolid", "region"):
                 raise AutocadError(
                     f"{label} is a {kind}, not a 3D solid or a region, so it cannot take part "
                     "in a boolean. Make it a solid first with autocad_add_solid or "
@@ -918,7 +960,9 @@ async def autocad_set_3d_view(
     Error Handling:
         - An unknown direction or visual style is named, with the list of real
           ones, before anything changes.
-        - A visual style this AutoCAD does not have comes back in "not_set".
+        - The visual style is set by typing the VSCURRENT command (it is a
+          command, not a system variable). If AutoCAD does not take the
+          option, the command is cancelled and the style is in "not_set".
     """
     if direction and vector:
         raise AutocadError("Give a named 'direction' or a 'vector', not both.")
@@ -970,10 +1014,22 @@ async def autocad_set_3d_view(
             result["direction"] = [round(v, 6) for v in aim]
 
         if style is not None:
+            option = VISUAL_STYLE_OPTIONS[style]
             try:
-                doc.SetVariable("VSCURRENT", style)
+                # Over COM, not the plug-in's quiet input: the plug-in takes
+                # typed input only inside a Change job, and this is a View tool.
+                doc.SendCommand(f"_.VSCURRENT {option}\n")
             except BaseException as exc:  # noqa: BLE001 - say so, change nothing else
                 not_set.append(f"visual_style ({com_message(exc)})")
+            else:
+                # Still asking means the option was not taken: cancel, so the
+                # next tool does not find AutoCAD waiting at the prompt.
+                if _still_asking(doc):
+                    _try(lambda: doc.SendCommand("\x1b\x1b"))
+                    not_set.append(
+                        f"visual_style (VSCURRENT did not take '{option}'; set it with "
+                        "the Visual Styles control at the top left of the drawing)"
+                    )
 
         if zoom_extents:
             try:
@@ -983,12 +1039,21 @@ async def autocad_set_3d_view(
                 not_set.append("zoom_extents")
 
         _try(lambda: doc.Regen(AC_ALL_VIEWPORTS))
-        result["current_visual_style"] = _try(lambda: str(doc.GetVariable("VSCURRENT")))
         if not_set:
             result["not_set"] = not_set
         return result
 
     return dumps(await run(work))
+
+
+def _still_asking(doc: Any) -> bool:
+    """Whether a command is still waiting once VSCURRENT has had its moment to finish."""
+    deadline = time.monotonic() + VSCURRENT_WAIT_S
+    while _try(lambda: int(doc.GetVariable("CMDACTIVE")), 0):
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(VSCURRENT_POLL_S)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -1115,8 +1180,11 @@ async def autocad_slice_solid(
         ucs = ucs_for(doc, coords)
         if layer:
             ensure_layer(doc, layer)
-        point = list(world_coords(through, ucs))
-        p1, p2, p3 = plane_from(points_spec, point, with_normal)
+        # Worked out in the caller's terms, then each point taken to the world:
+        # on a turned UCS 'vertical_x' holds the UCS X axis and 'normal' faces
+        # the way the modeller means.
+        plane_points = plane_from(points_spec, list(as_vec3(through)), with_normal)
+        p1, p2, p3 = (tuple(world_coords(p, ucs)) for p in plane_points)
 
         results: list[dict[str, Any]] = []
         failed: list[dict[str, Any]] = []
@@ -1429,18 +1497,20 @@ async def autocad_transform_3d(
                 handle = str(entity.Handle)
                 try:
                     if operation == "move":
-                        dx, dy, dz = (float(v) for v in displacement[:3])
+                        dx, dy, dz = world_direction(displacement, ucs)
                         entity.Move(apoint(0.0, 0.0, 0.0), apoint(dx, dy, dz))
                     elif operation == "rotate":
                         ax, ay, az = world_coords(axis_point, ucs)
-                        dx, dy, dz = (float(v) for v in axis_direction[:3])
+                        dx, dy, dz = world_direction(axis_direction, ucs)
                         entity.Rotate3D(
                             apoint(ax, ay, az),
                             apoint(ax + dx, ay + dy, az + dz),
                             rad(angle),
                         )
                     elif operation == "mirror":
-                        p1, p2, p3 = plane_from("normal", list(world_coords(plane_point, ucs)), plane_normal)
+                        p1, p2, p3 = plane_from(
+                            "normal", list(world_coords(plane_point, ucs)), world_direction(plane_normal, ucs)
+                        )
                         made = entity.Mirror3D(apoint(*p1), apoint(*p2), apoint(*p3))
                         copy = made[0] if isinstance(made, tuple) and made else made
                         if copy is not None:

@@ -128,3 +128,397 @@ def test_levels():
     assert risk_of("autocad_solid_properties") is Risk.READ
     # Only changes what is on screen, like autocad_zoom.
     assert risk_of("autocad_set_3d_view") is Risk.VIEW
+
+
+# ---------------------------------------------------------------------------
+# Against fake solids (2026-10-28, AutoCAD 2027)
+# ---------------------------------------------------------------------------
+
+
+class FakeSolid:
+    def __init__(self, handle, volume, kind="AcDb3dSolid"):
+        self.Handle, self.Volume, self.ObjectName = handle, volume, kind
+        self.cut = []
+
+    def Boolean(self, code, other):
+        self.cut.append((code, other.Handle))
+        self.Volume -= other.Volume
+
+    def GetBoundingBox(self):
+        return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+
+
+class FakeViewport:
+    Direction = None
+
+
+class FakeApp:
+    def ZoomExtents(self):
+        pass
+
+
+class Fake3dDoc:
+    def __init__(self, *entities):
+        self.by_handle = {e.Handle: e for e in entities}
+        self.ActiveViewport = FakeViewport()
+        self.Application = FakeApp()
+        self.sent: list[str] = []
+        self.set_variables: list[tuple[str, object]] = []
+
+    def HandleToObject(self, handle):
+        return self.by_handle[handle]
+
+    def SendCommand(self, text):
+        self.sent.append(text)
+
+    def SetVariable(self, name, value):
+        # VSCURRENT is a command, not a system variable: AutoCAD 2027 refuses it.
+        if name == "VSCURRENT":
+            raise ValueError("Error setting system variable")
+        self.set_variables.append((name, value))
+
+    def GetVariable(self, name):
+        raise ValueError(f"no system variable {name}")
+
+    def Regen(self, which):
+        pass
+
+    def StartUndoMark(self):
+        pass
+
+    def EndUndoMark(self):
+        pass
+
+
+def _patch(monkeypatch, doc):
+    from autocad_mcp.tools import solids
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(solids, "run", run)
+    monkeypatch.setattr(solids, "get_doc", lambda: doc)
+    monkeypatch.setattr(solids, "require_idle", lambda d: None)
+
+
+def test_a_real_3d_solid_is_called_a_3dsolid():
+    """AutoCAD names a 3D solid AcDb3dSolid; with no entry it was never matched as one."""
+    from autocad_mcp.acad.entities import short_type
+
+    assert short_type(FakeSolid("2E1", 1.0)) == "3dsolid"
+
+
+def test_boolean_takes_real_solids(monkeypatch):
+    """2026-10-28: '2E1 is a AcDb3dSolid, not a 3D solid or a region'."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    plate, hole = FakeSolid("2E1", 1000.0), FakeSolid("2E2", 100.0)
+    _patch(monkeypatch, Fake3dDoc(plate, hole))
+    answer = asyncio.run(solids.autocad_solid_boolean(operation="subtract", handle="2E1", others=["2E2"]))
+    assert not answer.startswith("Error"), answer
+    result = json.loads(answer)
+    assert result["consumed"] == ["2E2"]
+    assert result["volume_after"] == pytest.approx(900.0)
+
+
+def test_boolean_still_refuses_a_line_before_consuming_anything(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    plate, line = FakeSolid("2E1", 1000.0), FakeSolid("2E3", 0.0, kind="AcDbLine")
+    _patch(monkeypatch, Fake3dDoc(plate, line))
+    answer = asyncio.run(solids.autocad_solid_boolean(operation="subtract", handle="2E1", others=["2E3"]))
+    assert answer.startswith("Error") and "2E3 is a line" in answer
+    assert plate.cut == []
+
+
+@pytest.mark.parametrize("style", VISUAL_STYLES)
+def test_every_visual_style_has_a_vscurrent_option(style):
+    from autocad_mcp.tools.solids import VISUAL_STYLE_OPTIONS
+
+    assert VISUAL_STYLE_OPTIONS[style].startswith("_")
+
+
+def test_the_visual_style_is_set_with_the_vscurrent_command(monkeypatch):
+    """2026-10-28: 'not_set: visual_style (Error setting system variable)' — VSCURRENT is a command."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    doc = Fake3dDoc()
+    _patch(monkeypatch, doc)
+    answer = asyncio.run(solids.autocad_set_3d_view(visual_style="realistic", zoom_extents=False))
+    result = json.loads(answer)
+    assert "not_set" not in result, result
+    assert doc.sent == ["_.VSCURRENT _Realistic\n"]
+    assert result["visual_style"] == "realistic"
+
+
+def test_a_visual_style_option_autocad_does_not_take_is_cancelled_and_reported(monkeypatch):
+    """If VSCURRENT is still asking after its answer, it must not be left waiting for the next tool."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    class StillAsking(Fake3dDoc):
+        def GetVariable(self, name):
+            if name == "CMDACTIVE":
+                return 0 if self.sent and self.sent[-1].startswith("\x1b") else 1
+            return super().GetVariable(name)
+
+    monkeypatch.setattr(solids, "VSCURRENT_WAIT_S", 0.05)
+    monkeypatch.setattr(solids, "VSCURRENT_POLL_S", 0.0)
+    doc = StillAsking()
+    _patch(monkeypatch, doc)
+    result = json.loads(asyncio.run(solids.autocad_set_3d_view(visual_style="shaded with edges", zoom_extents=False)))
+    assert doc.sent[-1].startswith("\x1b")
+    assert any("visual_style" in item for item in result["not_set"]), result
+
+
+def test_a_visual_style_that_takes_a_moment_is_not_cancelled(monkeypatch):
+    """CMDACTIVE can still read 1 just after SendCommand while VSCURRENT finishes; that is not a refusal."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    class Finishing(Fake3dDoc):
+        reads = 0
+
+        def GetVariable(self, name):
+            if name == "CMDACTIVE":
+                self.reads += 1
+                return 1 if self.reads < 3 else 0
+            return super().GetVariable(name)
+
+    monkeypatch.setattr(solids, "VSCURRENT_POLL_S", 0.0)
+    doc = Finishing()
+    _patch(monkeypatch, doc)
+    result = json.loads(asyncio.run(solids.autocad_set_3d_view(visual_style="hidden", zoom_extents=False)))
+    assert "not_set" not in result, result
+    assert doc.sent == ["_.VSCURRENT _Hidden\n"]
+
+
+# ---------------------------------------------------------------------------
+# Oval solids (found 2026-10-28: they fell through to AddTorus and always failed)
+# ---------------------------------------------------------------------------
+
+
+class OvalSpace:
+    def __init__(self):
+        self.calls = []
+
+    def _made(self, *args):
+        self.calls.append(args)
+        solid = FakeSolid("3A0", 1.0)
+        solid.turned = None
+        solid.Rotate = lambda base, angle: setattr(solid, "turned", (tuple(base.value), angle))
+        solid.Layer = "0"
+        self.solid = solid
+        return solid
+
+    def AddEllipticalCylinder(self, centre, major, minor, height):
+        return self._made("cylinder", tuple(centre.value), major, minor, height)
+
+    def AddEllipticalCone(self, centre, major, minor, height):
+        return self._made("cone", tuple(centre.value), major, minor, height)
+
+    def AddTorus(self, *args):
+        raise AssertionError("an oval is not a torus")
+
+
+def _oval(monkeypatch, **kwargs):
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    space = OvalSpace()
+    doc = Fake3dDoc()
+    doc.ModelSpace = space
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    answer = asyncio.run(solids.autocad_add_solid(**kwargs))
+    assert not answer.startswith("Error"), answer
+    return space, json.loads(answer)
+
+
+def test_an_oval_duct_is_an_elliptical_cylinder_of_half_sizes(monkeypatch):
+    """400 x 200 overall is radii 200 and 100, centred half the height up."""
+    space, _ = _oval(monkeypatch, shape="elliptical_cylinder", base=[0, 0, 0], length=400, width=200, height=2000)
+    assert space.calls == [("cylinder", (0.0, 0.0, 1000.0), 200.0, 100.0, 2000.0)]
+    assert space.solid.turned is None
+
+
+def test_an_oval_wider_than_long_is_made_long_way_then_turned(monkeypatch):
+    """The major radius always goes first; a 200 x 400 oval is a 400 x 200 one turned 90 degrees."""
+    space, _ = _oval(monkeypatch, shape="elliptical_cone", base=[50, 60, 0], length=200, width=400, height=900)
+    assert space.calls == [("cone", (50.0, 60.0, 450.0), 200.0, 100.0, 900.0)]
+    centre, angle = space.solid.turned
+    assert centre == (50.0, 60.0, 450.0) and angle == pytest.approx(math.pi / 2)
+
+
+# ---------------------------------------------------------------------------
+# Directions on a turned UCS (found 2026-10-28: points were converted, directions not)
+# ---------------------------------------------------------------------------
+
+
+class TurnedDoc(Fake3dDoc):
+    """A plan UCS turned 90 degrees: its X runs up world Y, its Y runs along world -X."""
+
+    def GetVariable(self, name):
+        turned = {"UCSORG": (0.0, 0.0, 0.0), "UCSXDIR": (0.0, 1.0, 0.0), "UCSYDIR": (-1.0, 0.0, 0.0)}
+        if name in turned:
+            return turned[name]
+        return super().GetVariable(name)
+
+
+class Movable(FakeSolid):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.calls = []
+
+    def Move(self, a, b):
+        self.calls.append(("Move", tuple(a.value), tuple(b.value)))
+
+    def Rotate3D(self, a, b, angle):
+        self.calls.append(("Rotate3D", tuple(a.value), tuple(b.value), angle))
+
+    def Mirror3D(self, a, b, c):
+        self.calls.append(("Mirror3D", tuple(a.value), tuple(b.value), tuple(c.value)))
+        return Movable("2F0", 1.0)
+
+    def SliceSolid(self, a, b, c, both):
+        self.calls.append(("SliceSolid", tuple(a.value), tuple(b.value), tuple(c.value)))
+        return None
+
+
+def _turned(monkeypatch, solid):
+    doc = TurnedDoc(solid)
+    _patch(monkeypatch, doc)
+    return doc
+
+
+def test_a_move_along_ucs_x_goes_along_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(handles=["2E1"], operation="move", displacement=[1000, 0, 0], coords="ucs"))
+    (_, start, end), = solid.calls
+    assert [e - s for s, e in zip(start, end, strict=True)] == pytest.approx([0.0, 1000.0, 0.0])
+
+
+def test_a_rotate_about_ucs_x_turns_about_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(
+        handles=["2E1"], operation="rotate", axis_point=[0, 0, 0], axis_direction=[1, 0, 0], angle=90, coords="ucs"
+    ))
+    (_, a, b, _), = solid.calls
+    assert [q - p for p, q in zip(a, b, strict=True)] == pytest.approx([0.0, 1.0, 0.0])
+
+
+def test_a_mirror_facing_ucs_x_faces_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(
+        handles=["2E1"], operation="mirror", plane_point=[0, 0, 0], plane_normal=[1, 0, 0], coords="ucs"
+    ))
+    (_, *points), = solid.calls
+    # A plane facing UCS X (world Y) through the origin holds world y = 0.
+    assert [p[1] for p in points] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_vertical_x_slice_follows_the_ucs_x_axis(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_slice_solid(handles=["2E1"], through=[0, 0, 0], plane="vertical_x", coords="ucs"))
+    (_, *points), = solid.calls
+    # The plane holding UCS X (world Y) and Z through the origin is world x = 0.
+    assert [p[0] for p in points] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_revolve_about_ucs_x_revolves_about_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    class Profile:
+        Handle, ObjectName = "2D0", "AcDbPolyline"
+
+        def Delete(self):
+            pass
+
+    class Space:
+        axis = None
+
+        def AddRegion(self, curves):
+            return (Profile(),)
+
+        def AddRevolvedSolid(self, region, point, direction, angle):
+            Space.axis = tuple(direction.value)
+            return Movable("2F1", 1.0)
+
+    doc = TurnedDoc(Profile())
+    doc.ModelSpace = Space()
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    asyncio.run(solids.autocad_extrude_profile(
+        handles=["2D0"], revolve_angle=360, axis_point=[0, 0, 0], axis_direction=[1, 0, 0], coords="ucs"
+    ))
+    assert Space.axis == pytest.approx((0.0, 1.0, 0.0))
+
+
+class TurnedOvalSpace(OvalSpace):
+    def AddBox(self, centre, length, width, height):
+        return self._made("box", tuple(centre.value), length, width, height)
+
+
+def _turned_solid(monkeypatch, **kwargs):
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    space = TurnedOvalSpace()
+    doc = TurnedDoc()
+    doc.ModelSpace = space
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    answer = asyncio.run(solids.autocad_add_solid(coords="ucs", **kwargs))
+    assert not answer.startswith("Error"), answer
+    return space, json.loads(answer)
+
+
+def test_a_box_on_a_turned_ucs_is_square_to_the_ucs(monkeypatch):
+    """AddBox makes a box square to the world; on a UCS turned 90 degrees it is turned to match."""
+    space, _ = _turned_solid(monkeypatch, shape="box", base=[0, 0, 0], length=1000, width=600, height=20)
+    centre, angle = space.solid.turned
+    assert centre == (0.0, 0.0, 10.0) and angle == pytest.approx(math.pi / 2)
+
+
+def test_an_oval_wider_than_long_on_a_turned_ucs_turns_once_by_both(monkeypatch):
+    space, _ = _turned_solid(monkeypatch, shape="elliptical_cylinder", base=[0, 0, 0], length=200, width=400, height=100)
+    _, angle = space.solid.turned
+    assert angle == pytest.approx(math.pi)

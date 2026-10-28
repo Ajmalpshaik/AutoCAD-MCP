@@ -1037,6 +1037,9 @@ async def autocad_insert_block(
     return dumps(await run(work))
 
 
+AC_HATCH_PREDEFINED = 1
+
+
 @mcp.tool(
     name="autocad_add_hatch",
     **tool_meta("Add Hatch"),
@@ -1144,8 +1147,9 @@ async def autocad_add_hatch(
             boundaries.append(obj)
 
         with undo_mark(doc):
-            # AcHatchPatternTypePredefined == 0
-            entity = get_space(doc, space).AddHatch(0, pattern_name, associative)
+            # AcPatternType: 0 user-defined, 1 predefined (a name from acad.pat,
+            # SOLID included). Type 0 with 'ANSI31' is refused as a bad name.
+            entity = get_space(doc, space).AddHatch(AC_HATCH_PREDEFINED, pattern_name, associative)
             entity.AppendOuterLoop(object_array(boundaries))
             if pattern_name != "SOLID":
                 entity.PatternScale = float(scale)

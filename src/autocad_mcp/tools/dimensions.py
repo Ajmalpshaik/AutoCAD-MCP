@@ -31,7 +31,15 @@ from ..acad.units import rad
 from ..core.connection import get_doc, get_space, require_idle, run
 from ..core.errors import AutocadError, com_message
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta, undo_mark
-from ._shared import COORDS_OPT, LAYER_OPT, point, ucs_for
+from ._shared import (
+    COORDS_OPT,
+    LAYER_OPT,
+    current_ucs,
+    point,
+    ucs_for,
+    world_angle,
+    world_coords,
+)
 from .batch import draw_operations
 
 Point = tuple[float, float]
@@ -275,6 +283,30 @@ def _dim_scale(doc: Any) -> float:
         return 0.0
 
 
+def ordinate_refusal(datum_world: Sequence[float], now: Any, coords: str) -> str | None:
+    """Why an ordinate run cannot be drawn as asked, or None when it can.
+
+    AddDimOrdinate measures from the current UCS origin along the UCS axes;
+    it takes no origin of its own. A datum anywhere else, or world points on a
+    turned UCS, would put dimensions on the drawing that read the wrong values.
+    """
+    gap = math.hypot(float(datum_world[0]) - now.origin[0], float(datum_world[1]) - now.origin[1])
+    if gap > 1e-6 * max(1.0, abs(now.origin[0]) + abs(now.origin[1])):
+        at = ", ".join(f"{float(v):g}" for v in datum_world[:2])
+        origin = ", ".join(f"{v:g}" for v in now.origin[:2])
+        return (
+            f"AutoCAD measures ordinate dimensions from the UCS origin, which is at "
+            f"[{origin}], not from the datum at [{at}]. Move the UCS origin to the datum "
+            f"first - autocad_set_ucs(mode='origin', origin=[{at}]) - then run this again."
+        )
+    if str(coords).strip().lower() != "ucs" and now.rotated:
+        return (
+            "The UCS is turned, and AutoCAD measures ordinates along the UCS axes. Give the "
+            "points in UCS coordinates (coords='ucs'), or set the UCS back to World first."
+        )
+    return None
+
+
 def _make_one(space: Any, entry: dict[str, Any], axis: str, ucs: Any) -> Any:
     """One dimension from a planned entry."""
     p1 = point(entry["point1"], "point1", ucs)
@@ -285,7 +317,8 @@ def _make_one(space: Any, entry: dict[str, Any], axis: str, ucs: Any) -> Any:
         return space.AddDimOrdinate(p1, text, axis != "vertical")
     if axis == "aligned":
         return space.AddDimAligned(p1, p2, text)
-    return space.AddDimRotated(p1, p2, text, rad(AXIS_ANGLE[axis]))
+    # 'Horizontal' on a turned UCS is along its X axis, as the points are.
+    return space.AddDimRotated(p1, p2, text, rad(world_angle(AXIS_ANGLE[axis], ucs)))
 
 
 @mcp.tool(name="autocad_dimension_run", **tool_meta("Dimension A Run Of Features"))
@@ -358,7 +391,7 @@ async def autocad_dimension_run(
     ] = False,
     datum: Annotated[
         list[float] | None,
-        Field(default=None, description="For 'ordinate': the origin to measure from. Defaults to the first point."),
+        Field(default=None, description="For 'ordinate': the origin to measure from. Defaults to the first point. AutoCAD measures ordinates from the UCS origin, so the datum must be there: move it first with autocad_set_ucs(mode='origin')."),
     ] = None,
     sort: Annotated[
         bool,
@@ -428,6 +461,8 @@ async def autocad_dimension_run(
           rather than making a zero dimension; if none are left, that is said.
         - A dimension AutoCAD rejects is reported in "failed" with its index;
           the rest of the run still lands.
+        - An ordinate run whose datum is not the UCS origin is refused before
+          anything is drawn, naming the autocad_set_ucs call that fixes it.
     """
     try:
         plan = plan_run(points, mode, axis, offset, spacing, include_overall, sort, datum)
@@ -453,6 +488,10 @@ async def autocad_dimension_run(
         doc = get_doc()
         require_idle(doc)
         ucs = ucs_for(doc, coords)
+        if mode == "ordinate":
+            refusal = ordinate_refusal(world_coords(plan[0]["datum"], ucs), current_ucs(doc), coords)
+            if refusal:
+                raise AutocadError(refusal)
         target = get_space(doc, space)
         scale = _dim_scale(doc)
         rows: list[dict[str, Any]] = []

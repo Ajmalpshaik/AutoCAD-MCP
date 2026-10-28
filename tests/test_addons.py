@@ -106,3 +106,51 @@ def test_total_length_reads_curves_only():
     assert takeoff.is_curve("AcDbLine") and takeoff.is_curve("AcDbSpline") and takeoff.is_curve("AcDbPolyline")
     for kind in ("AcDbLeader", "AcDbMLeader", "AcDbMText", "AcDbBlockReference", "AcDbRotatedDimension", "AcDbHatch"):
         assert not takeoff.is_curve(kind)
+
+
+def test_a_named_hatch_pattern_is_asked_for_as_predefined(monkeypatch):
+    """AcPatternType: 0 is user-defined, 1 is predefined (acad.pat). With 0, AutoCAD
+    refuses 'ANSI31' as a bad pattern name; the code passed 0 believing it predefined."""
+    from autocad_mcp.tools import draw
+
+    class Hatch:
+        Handle, ObjectName, Layer, PatternName, Area = "2B0", "AcDbHatch", "0", "ANSI31", 12.0
+
+        def AppendOuterLoop(self, loops):
+            pass
+
+        def Evaluate(self):
+            pass
+
+    class Space:
+        asked = None
+
+        def AddHatch(self, pattern_type, name, associative):
+            Space.asked = (pattern_type, name)
+            return Hatch()
+
+    class Boundary:
+        ObjectName, Closed = "AcDbPolyline", True
+
+    class Doc:
+        ModelSpace = PaperSpace = Space()
+
+        def HandleToObject(self, handle):
+            return Boundary()
+
+        def StartUndoMark(self):
+            pass
+
+        def EndUndoMark(self):
+            pass
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(draw, "run", run)
+    monkeypatch.setattr(draw, "get_doc", lambda: Doc())
+    monkeypatch.setattr(draw, "require_idle", lambda d: None)
+    monkeypatch.setattr(draw, "apply_properties", lambda *a, **k: {})
+    answer = asyncio.run(draw.autocad_add_hatch(boundary_handles=["2A0"], pattern="ansi31"))
+    assert not answer.startswith("Error"), answer
+    assert Space.asked == (1, "ANSI31")
