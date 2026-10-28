@@ -4,6 +4,15 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased
 
+- Seven new tools, 115 in all, each with offline tests (live rows group G, NOT RUN):
+  `autocad_draw_spline` (fit points, ends along the first and last segments, closed, UCS),
+  `autocad_draw_multiline` (MLINE walls and double-line ducts: thickness, justification, style),
+  `autocad_add_wipeout` (from corners or a closed polyline; typed, as Automation has none - D-38),
+  `autocad_attach_xref` and `autocad_manage_xref` (reload, unload, detach, bind, insert),
+  `autocad_create_hatch_pattern` and `autocad_create_linetype` (NAME.pat / NAME.lin written in
+  Heron's support folder, including ---- CHWS ---- service lines; Publish level - D-39).
+  `autocad_add_hatch` now also hatches with a custom pattern. Super hatch and the 3D commands with
+  no Automation call (loft, fillet, shell, press-pull) are on the ROADMAP for the plug-in.
 - Fixed five tools that failed live in AutoCAD 2027 on 2026-10-28, each with a test that failed
   first:
   - `autocad_drawing_setup(scale='1:10')` failed `could not convert string to float: ':'`, and a dim

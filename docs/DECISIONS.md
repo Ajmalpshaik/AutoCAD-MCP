@@ -129,6 +129,32 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-39 - Pattern and linetype files go in Heron's support folder, which goes on the support path
+
+**Decided:** 2026-10-28, with `autocad_create_hatch_pattern` and `autocad_create_linetype`.
+**Status:** in force. AutoCAD finds a custom hatch pattern only as its own NAME.pat on the support
+search path; Automation has no "hatch from this file". So the files are written to
+`%LOCALAPPDATA%\Heron\autocad\support` (or a folder the modeller names), and that folder is added
+to `Preferences.Files.SupportPath` once - a change to the AutoCAD profile that stays, reported in
+`support_path_added`, and refused with `add_to_support_path=false`. A linetype needs no path: it is
+loaded straight from its file with `Linetypes.Load`. Both tools write files, so they sit at
+**Publish**, like save and export. Rejected: writing into AutoCAD's own Support folder (Program Files
+needs administrator rights and is replaced by an update) and appending to acad.pat / acadiso.lin
+(an update overwrites them, and a mistake there breaks every standard pattern).
+
+## D-38 - A wipeout is typed, because Automation cannot make one
+
+**Decided:** 2026-10-28, with `autocad_add_wipeout`. **Status:** in force. There is no AddWipeout:
+a wipeout is not among the objects ActiveX can create. So the tool types `_.WIPEOUT` with each
+corner as `_non *x,y` - `*` takes the point in world coordinates whatever the UCS or dynamic input
+says, `_non` keeps a running snap off it - and a blank line to close. It then checks that the newest
+object in the current space is an AcDbWipeout, and if AutoCAD is still asking two seconds later it
+cancels with Esc and refuses, so nothing is left half made. It goes over COM `SendCommand`, not the
+plug-in's quiet input, because that one is asynchronous and the new object has to be read straight
+after. Rejected: entmake from LISP (a wipeout needs its image definition and clip boundary built by
+hand, unproven here) and WIPEOUT's Polyline option (it wants the polyline picked at its prompt;
+corners typed as points need no pick, so a closed polyline is read for its corners instead).
+
 ## D-37 - Ordinates are refused when the datum is not the UCS origin
 
 **Decided:** 2026-10-28, checking the code for faults like the five that failed live. **Status:** in

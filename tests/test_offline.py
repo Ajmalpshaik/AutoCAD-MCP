@@ -108,6 +108,9 @@ COLOR_TOOLS = (
     "autocad_draw_3d_path",
     "autocad_extrude_profile",
     "autocad_make_shape",
+    "autocad_draw_spline",
+    "autocad_draw_multiline",
+    "autocad_add_wipeout",
 )
 
 
@@ -304,7 +307,7 @@ class TestToolSurface:
     asserted rather than assumed."""
 
     async def test_all_tools_registered(self, tools):
-        assert len(tools) == 108
+        assert len(tools) == 115
 
     async def test_every_name_is_namespaced(self, tools):
         assert all(tool.name.startswith("autocad_") for tool in tools)
