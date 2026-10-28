@@ -9,6 +9,11 @@ import pytest
 from autocad_mcp.acad import geometry as g
 
 
+def flat(pieces):
+    """Pieces as one list of coordinates: pytest 9 approx refuses nested lists."""
+    return [value for piece in pieces for point in piece for value in point]
+
+
 def test_straight_and_arc_segments():
     segs = g.segments([(0, 0), (10, 0), (12, 0)], [0.0, 1.0], closed=False)
     assert segs[0].length == pytest.approx(10)
@@ -48,7 +53,8 @@ def test_distance_along_path_for_sorting():
 
 def test_segment_outside_a_box():
     box = (4, -1, 6, 1)
-    assert g.outside_pieces((0, 0), (10, 0), box) == pytest.approx([((0, 0), (4, 0)), ((6, 0), (10, 0))])
+    got = g.outside_pieces((0, 0), (10, 0), box)
+    assert len(got) == 2 and flat(got) == pytest.approx(flat([((0, 0), (4, 0)), ((6, 0), (10, 0))]))
     assert g.outside_pieces((0, 5), (10, 5), box) == [((0, 5), (10, 5))]
     assert g.outside_pieces((5, 0), (5.5, 0), box) == []
 
@@ -76,8 +82,9 @@ def test_polygon_centroid_and_area():
 
 
 def test_pieces_between_cuts():
-    assert g.pieces((0, 0), (10, 0), [(7, 0), (3, 0)]) == pytest.approx(
-        [((0, 0), (3, 0)), ((3, 0), (7, 0)), ((7, 0), (10, 0))])
+    got = g.pieces((0, 0), (10, 0), [(7, 0), (3, 0)])
+    assert len(got) == 3 and flat(got) == pytest.approx(
+        flat([((0, 0), (3, 0)), ((3, 0), (7, 0)), ((7, 0), (10, 0))]))
 
 
 def test_nurbs_length_of_a_straight_spline_and_a_quarter_circle():

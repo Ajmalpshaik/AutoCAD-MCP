@@ -26,6 +26,8 @@ Newest first. Dates are when the change was made.
     (`0.0`), which AutoCAD refuses for a whole-number variable. Now whole numbers.
   - After a dim style with an `arrow_block`, the drawing's default arrow is put back with `.`, the
     way AutoCAD sets it.
+- Tests: two geometry tests used a nested `pytest.approx`, which pytest 9 refuses, and CI turned
+  red when it picked pytest 9 up. Same values and tolerance, compared as flat coordinate lists.
 - Live rows D23, D32, E18, E28, E34: NOT RUN.
 - New `autocad_batch_labels`: a whole column of TLD labels in one call and one undo step, checked
   before drawing, with `arrow_scale` per view and a `crossing` report. 108 tools. Live check A30.

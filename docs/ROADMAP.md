@@ -35,9 +35,9 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   rows D23, D32, E18, E28, E34 NOT RUN ([D-35](DECISIONS.md), [D-36](DECISIONS.md)).
 - [ ] Read the current visual style back (the VPORT table's visual style, through the plug-in), so
   `autocad_set_3d_view` can prove the style took instead of relying on `autocad_preview`.
-- [ ] `tests/test_geometry.py`: two tests compare lists of point pairs with `pytest.approx`, which
-  pytest 9 refuses ("does not support nested data structures"). CI is green today on an older
-  pytest; the next pytest upgrade turns it red. Compare point by point.
+- [x] `tests/test_geometry.py`: two tests compared lists of point pairs with `pytest.approx`, which
+  pytest 9 refuses ("does not support nested data structures"); CI turned red on 2026-10-28 when
+  it picked up pytest 9. Now compared as flat coordinate lists, same values and tolerance.
 
 ## Server
 
