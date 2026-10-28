@@ -223,7 +223,7 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 | `autocad_dimension_run` | A whole run in one call: `chain`, `baseline` (stepped clear of each other), `overall`, `ordinate`. Horizontal, vertical or aligned; the points are put in order first; `include_overall` adds the overall above. Reports both its own arithmetic and AutoCAD's measurement |
 | `autocad_add_centre_marks` | The cross on every circle and arc, by handle or by layer; `extend` makes full centre lines |
 | `autocad_add_multileader` | One note with **as many arrows as it needs**; text or block content |
-| `autocad_add_table` | A schedule as a real AutoCAD table, with title and headings |
+| `autocad_add_table` | A schedule as a real AutoCAD table, with title and headings; `text_height` and `text_style` on every row |
 | `autocad_add_revision_cloud` | A cloud round a boundary, a rectangle, or an object's own extents. One polyline with bulges, like REVCLOUD |
 
 ## 3D (Change; reading is Read, the view is View)
@@ -238,7 +238,7 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 | `autocad_slice_solid` | Change | Cut solids with a plane — a real section through a model. The plane is given the way a drafter says it ("horizontally at 1500"); the three points AutoCAD wants are worked out here |
 | `autocad_check_interference` | Change | **Clash check.** Every solid in one set against every solid in another, with the overlap volume so the worst comes first. `create_solids` draws the overlaps. Needs Changes because AutoCAD builds the overlap as a real solid to measure it, even to report |
 | `autocad_transform_3d` | Change | move with Z, rotate about **any** axis, mirror in a plane, array up in levels. The flat tools only do XY and Z-axis rotation |
-| `autocad_set_3d_view` | View | A named direction (top, front, sw_iso …) and a visual style. Changes only what is on screen ([D-31](DECISIONS.md)) |
+| `autocad_set_3d_view` | View | A named direction (top, front, sw_iso …) and a visual style, typed as the VSCURRENT command. Changes only what is on screen ([D-31](DECISIONS.md), [D-35](DECISIONS.md)) |
 
 `SectionSolid` is deliberately **not** here: no documented ActiveX signature for it could be
 found, and guessing one would risk the model ([D-33](DECISIONS.md)).

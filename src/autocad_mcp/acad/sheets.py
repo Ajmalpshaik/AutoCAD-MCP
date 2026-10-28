@@ -115,6 +115,27 @@ def parse_scale(value: str | float) -> float:
     return ratio
 
 
+def parse_typed_scale(value: str | float) -> float:
+    """parse_scale for a scale the modeller typed: a bare number above 1 is refused.
+
+    A bare number is a ratio, so 10 reads as 10:1 - but a modeller who types 10
+    almost always means 1:10, and the wrong reading makes every dimension ten
+    times too small. Rather than guess, it asks for the scale as on the sheet.
+    Inside the server a 2:1 detail travels as 2.0, so parse_scale keeps reading it.
+    """
+    ratio = parse_scale(value)
+    bare = isinstance(value, (int, float)) or not _SCALE_TEXT.match(
+        str(value).strip().lower().removeprefix("scale").strip()
+    )
+    if bare and ratio > 1.0:
+        size = _tidy(ratio)
+        raise ValueError(
+            f"'{value}' could mean 1:{size} or {size}:1. Write the scale the way it goes on "
+            f"the sheet: '1:{size}', or '{size}:1' for an enlargement."
+        )
+    return ratio
+
+
 def scale_text(ratio: float) -> str:
     """A ratio back as the text that belongs on the sheet: 0.02 -> '1:50'."""
     ratio = float(ratio)

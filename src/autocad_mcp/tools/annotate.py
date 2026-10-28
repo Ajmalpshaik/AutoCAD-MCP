@@ -318,6 +318,11 @@ async def autocad_add_multileader(
 # Tables
 # ---------------------------------------------------------------------------
 
+# AcRowType: acDataRow 1 + acTitleRow 2 + acHeaderRow 4. An AcadTable sets text
+# height and style per row type with SetTextHeight / SetTextStyle; it has no
+# TitleTextHeight-style properties (AutoCAD 2027 refused them, 2026-10-28).
+TABLE_ALL_ROWS = 1 + 2 + 4
+
 
 @mcp.tool(name="autocad_add_table", **tool_meta("Add A Table"))
 @tool_errors
@@ -357,6 +362,10 @@ async def autocad_add_table(
         float | None,
         Field(default=None, gt=0, description="Text height in drawing units. Omit to keep the table style's own."),
     ] = None,
+    text_style: Annotated[
+        str | None,
+        Field(default=None, description="Text style for the title, headings and data, already in the drawing, e.g. 'ROMANS'. Omit to keep the table style's own."),
+    ] = None,
     style: Annotated[
         str | None,
         Field(default=None, description="Table style name, already in the drawing. There is no Automation call to create one; copy yours in with autocad_import_from_drawing."),
@@ -380,7 +389,8 @@ async def autocad_add_table(
         title (Optional[str]): a title across the top.
         column_widths (Optional[list[float]]): per column, or one for all.
         row_height (Optional[float]): row height.
-        text_height (Optional[float]): text height.
+        text_height (Optional[float]): text height, on every row.
+        text_style (Optional[str]): text style, on every row.
         style (Optional[str]): table style, already in the drawing.
         layer (Optional[str]): target layer, created if missing.
         space (str): 'model' or 'paper'.
@@ -401,6 +411,8 @@ async def autocad_add_table(
         - A table style the drawing does not have is named.
         - Cells AutoCAD refuses are counted and the row and column are reported;
           the table itself still lands.
+        - A text height or text style AutoCAD refuses is in "not_set" with
+          its reason; the table keeps its style's own.
     """
     if len(position) < 2:
         raise AutocadError("position needs [x, y].")
@@ -469,7 +481,7 @@ async def autocad_add_table(
                 except BaseException:  # noqa: BLE001 - the column keeps the default width
                     not_set.append(f"width of column {index}")
 
-            if height:
+            if height or text_style:
                 try:
                     table.RegenerateTableSuppressed = True
                 except BaseException:  # noqa: BLE001 - only a speed-up
@@ -496,12 +508,17 @@ async def autocad_add_table(
                     put(at, column, value)
                 at += 1
 
+            if text_style:
+                try:
+                    table.SetTextStyle(TABLE_ALL_ROWS, str(text_style).strip())
+                except BaseException as exc:  # noqa: BLE001 - the style keeps its own
+                    not_set.append(f"text_style ({com_message(exc)})")
             if height:
-                for prop in ("TitleTextHeight", "HeaderTextHeight", "DataTextHeight"):
-                    try:
-                        setattr(table, prop, height)
-                    except BaseException:  # noqa: BLE001 - the style keeps its own
-                        not_set.append(prop)
+                try:
+                    table.SetTextHeight(TABLE_ALL_ROWS, height)
+                except BaseException as exc:  # noqa: BLE001 - the style keeps its own
+                    not_set.append(f"text_height ({com_message(exc)})")
+            if height or text_style:
                 try:
                     table.RegenerateTableSuppressed = False
                 except BaseException:  # noqa: BLE001

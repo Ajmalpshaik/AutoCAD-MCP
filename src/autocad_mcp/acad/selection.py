@@ -24,8 +24,8 @@ DXF_COLOR = 62
 # AutoCAD AcSelect modes.
 SELECT_WINDOW = 0
 SELECT_CROSSING = 1
-SELECT_LAST = 3
-SELECT_PREVIOUS = 4
+SELECT_PREVIOUS = 3
+SELECT_LAST = 4
 SELECT_ALL = 5
 
 # Friendly names an agent may use -> the DXF type string AutoCAD filters on.

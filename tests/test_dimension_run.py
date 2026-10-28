@@ -203,3 +203,111 @@ class TestCentreMarks:
 def test_levels():
     assert risk_of("autocad_dimension_run") is Risk.CHANGE
     assert risk_of("autocad_add_centre_marks") is Risk.CHANGE
+
+
+class TestOrdinateDatum:
+    """AutoCAD's AddDimOrdinate measures from the current UCS origin, along its axes.
+
+    A datum anywhere else would draw dimensions that read the wrong values, so
+    the run is refused before anything is drawn, saying how to move the UCS.
+    """
+
+    def test_a_datum_on_the_ucs_origin_is_fine(self):
+        from autocad_mcp.acad.coords import Ucs
+        from autocad_mcp.tools.dimensions import ordinate_refusal
+
+        assert ordinate_refusal((0.0, 0.0, 0.0), Ucs(), "world") is None
+        moved = Ucs.from_rotation((1000.0, 500.0, 0.0), 0.0)
+        assert ordinate_refusal((1000.0, 500.0, 0.0), moved, "world") is None
+
+    def test_a_datum_off_the_ucs_origin_is_refused_with_the_call_that_fixes_it(self):
+        from autocad_mcp.acad.coords import Ucs
+        from autocad_mcp.tools.dimensions import ordinate_refusal
+
+        message = ordinate_refusal((1000.0, 0.0, 0.0), Ucs(), "world")
+        assert message and "UCS origin" in message
+        assert "autocad_set_ucs" in message and "[1000, 0]" in message
+
+    def test_a_turned_ucs_needs_ucs_coordinates(self):
+        from autocad_mcp.acad.coords import Ucs
+        from autocad_mcp.tools.dimensions import ordinate_refusal
+
+        turned = Ucs.from_rotation((0.0, 0.0, 0.0), 23.0)
+        message = ordinate_refusal((0.0, 0.0, 0.0), turned, "world")
+        assert message and "coords='ucs'" in message
+        assert ordinate_refusal((0.0, 0.0, 0.0), turned, "ucs") is None
+
+
+def test_an_ordinate_run_off_the_ucs_origin_draws_nothing(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import dimensions
+
+    class Space:
+        made = 0
+
+        def AddDimOrdinate(self, *args):
+            Space.made += 1
+            raise AssertionError("nothing may be drawn")
+
+    class Doc:
+        ModelSpace = PaperSpace = Space()
+
+        def GetVariable(self, name):
+            return {"UCSORG": (0.0, 0.0, 0.0), "UCSXDIR": (1.0, 0.0, 0.0),
+                    "UCSYDIR": (0.0, 1.0, 0.0), "DIMSCALE": 1.0}[name]
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(dimensions, "run", run)
+    monkeypatch.setattr(dimensions, "get_doc", lambda: Doc())
+    monkeypatch.setattr(dimensions, "require_idle", lambda d: None)
+    answer = asyncio.run(dimensions.autocad_dimension_run(
+        points=[[1000, 0], [2500, 0]], mode="ordinate", axis="horizontal", offset=300
+    ))
+    assert answer.startswith("Error") and "UCS origin" in answer
+    assert Space.made == 0
+
+
+def test_a_horizontal_run_on_a_turned_ucs_runs_along_ucs_x(monkeypatch):
+    """The points were turned into the world, the dimension angle was not: it measured world X."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import dimensions
+
+    class Dim:
+        Handle, Measurement = "2A0", 3000.0
+
+    class Space:
+        angles = []
+
+        def AddDimRotated(self, p1, p2, text, angle):
+            Space.angles.append(angle)
+            return Dim()
+
+    class Doc:
+        ModelSpace = PaperSpace = Space()
+
+        def GetVariable(self, name):
+            return {"UCSORG": (0.0, 0.0, 0.0), "UCSXDIR": (0.0, 1.0, 0.0),
+                    "UCSYDIR": (-1.0, 0.0, 0.0), "DIMSCALE": 1.0}[name]
+
+        def StartUndoMark(self):
+            pass
+
+        def EndUndoMark(self):
+            pass
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(dimensions, "run", run)
+    monkeypatch.setattr(dimensions, "get_doc", lambda: Doc())
+    monkeypatch.setattr(dimensions, "require_idle", lambda d: None)
+    answer = asyncio.run(dimensions.autocad_dimension_run(
+        points=[[0, 0], [3000, 0]], mode="chain", axis="horizontal", offset=300, coords="ucs"
+    ))
+    assert "warning" not in json.loads(answer), answer
+    assert Space.angles == [pytest.approx(math.pi / 2)]

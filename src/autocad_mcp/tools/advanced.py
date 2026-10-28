@@ -338,6 +338,19 @@ async def autocad_run_lisp(
     return dumps(await run(work))
 
 
+# What to answer -PURGE's "Enter type of unused objects to purge" with. The
+# leading underscore keeps the English option in any language of AutoCAD. Text
+# styles are "textSTyles" on the prompt, so the answer is its capitals, ST.
+PURGE_OPTIONS: dict[str, str] = {
+    "all": "_All",
+    "blocks": "_Blocks",
+    "layers": "_LAyers",
+    "linetypes": "_LTypes",
+    "text_styles": "_ST",
+    "dim_styles": "_DImstyles",
+}
+
+
 @mcp.tool(
     name="autocad_purge",
     **tool_meta("Purge Unused Items", destructive=True, idempotent=True),
@@ -372,14 +385,7 @@ async def autocad_purge(
     Examples:
         - Use when: "clean this drawing up before I send it".
     """
-    keyword = {
-        "all": "_All",
-        "blocks": "_Blocks",
-        "layers": "_LAyers",
-        "linetypes": "_LTypes",
-        "text_styles": "_STyles",
-        "dim_styles": "_DImstyles",
-    }[target]
+    keyword = PURGE_OPTIONS[target]
 
     def work() -> dict[str, Any]:
         doc = get_doc()

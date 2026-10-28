@@ -4,6 +4,51 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased
 
+- Fixed five tools that failed live in AutoCAD 2027 on 2026-10-28, each with a test that failed
+  first:
+  - `autocad_drawing_setup(scale='1:10')` failed `could not convert string to float: ':'`, and a dim
+    style with `"text_style"` in `autocad_create_styles` failed the same way on `'S'`. A text value
+    read from the drawing (CANNOSCALE `1:10`, DIMTXSTY `Standard`) was split into letters and each
+    turned into a number. Text now stays text.
+  - `autocad_add_table` text height came back `not_set` and the text was tiny: a table has no
+    `TitleTextHeight` properties. Now `SetTextHeight` on the title, header and data rows, and a new
+    `text_style` option (`SetTextStyle`).
+  - `autocad_solid_boolean` refused real solids (`AcDb3dSolid`). The type table had no entry for a
+    3D solid; adding it also fixes `autocad_slice_solid`, `autocad_check_interference` and
+    `autocad_apply_material(solids_only=true)`, which had the same fault.
+  - `autocad_set_3d_view(visual_style=...)` was refused: VSCURRENT is a command, not a variable. It
+    is now typed as the command ([D-35](docs/DECISIONS.md)).
+- Found by checking for the same faults elsewhere:
+  - `scale=10` read as 10:1 (DIMSCALE 0.1). A bare number above 1 is now refused with "write '1:10'
+    or '10:1'" in drawing setup, viewports, page setup, PDF export and the scale bar
+    ([D-36](docs/DECISIONS.md)).
+  - A dim style's precision, unit format, zero suppression and colours were sent as decimals
+    (`0.0`), which AutoCAD refuses for a whole-number variable. Now whole numbers.
+  - After a dim style with an `arrow_block`, the drawing's default arrow is put back with `.`, the
+    way AutoCAD sets it.
+- A second check of the whole server, for the same kinds of fault, found and fixed:
+  - `autocad_add_solid` oval shapes (`elliptical_cylinder`, `elliptical_cone`) had no AutoCAD
+    call: they fell through to the torus and always failed. Now `AddEllipticalCylinder` /
+    `AddEllipticalCone` with half the length and width, made the long way and turned when wider
+    than long.
+  - `autocad_add_hatch` sent pattern type 0 (user-defined), which AutoCAD refuses for a named
+    pattern like ANSI31. Now 1, predefined.
+  - `autocad_dimension_run` ordinates: AutoCAD measures from the UCS origin, so a datum elsewhere
+    drew wrong values. Now refused before drawing, naming the `autocad_set_ucs` call
+    ([D-37](docs/DECISIONS.md)).
+  - On a turned UCS with `coords="ucs"`: `autocad_transform_3d` (move, rotate axis, mirror),
+    `autocad_slice_solid` (cut direction and the vertical planes), the revolve axis in
+    `autocad_extrude_profile`, the angle of `autocad_dimension_run`, and the box, wedge and oval of
+    `autocad_add_solid` now follow the UCS; the points were turned, the directions were not.
+  - Point variables (`LIMMIN`, `LIMMAX` in drawing setup, any point in `autocad_set_variable`) go
+    as an array of doubles; `autocad_set_variable` takes "x,y".
+  - `autocad_purge(target="text_styles")` answered `_STyles`, which is not an answer the prompt's
+    "textSTyles" takes; now `_ST`.
+  - The selection-mode codes for Previous and Last were swapped (not used yet).
+  - Live rows E13, F1, S4-S7: NOT RUN.
+- Tests: two geometry tests used a nested `pytest.approx`, which pytest 9 refuses, and CI turned
+  red when it picked pytest 9 up. Same values and tolerance, compared as flat coordinate lists.
+- Live rows D23, D32, E18, E28, E34: NOT RUN.
 - New `autocad_batch_labels`: a whole column of TLD labels in one call and one undo step, checked
   before drawing, with `arrow_scale` per view and a `crossing` report. 108 tools. Live check A30.
 - Plug-in: a read (list, variable, preview and every other Read tool) no longer leaves an undo step,

@@ -27,6 +27,22 @@
 
 ## Next, in order
 
+0. **2026-10-28: five tools that failed live are fixed** (branch `claude/wonderful-fermi-w5otnd`).
+   Hit while drawing a chilled water roof pipe support in AutoCAD 2027, and worked round with
+   `autocad_run_lisp`: `drawing_setup(scale='1:10')`, a dim style with `text_style`, table text
+   height, booleans on real solids, `visual_style='realistic'`. Checking for the same faults found
+   three more: `scale=10` read as 10:1 (now refused, D-36), dim-style whole numbers sent as
+   decimals, and slice / clash check / `solids_only` materials refusing real solids. The visual
+   style is now typed as the VSCURRENT command (D-35). Offline gates green; rows D23, D32, E18, E28
+   and E34 are NOT RUN. To prove: merge, stop every `autocad-mcp` server before reinstalling, start
+   a fresh one, then `tools/live_check.py --group all --write`. Watch E34's 'shaded with edges' and
+   'shades of gray' by hand (known limit 15).
+   **A second check of the whole server** (same day, same branch) found seven more: oval solids
+   never made (no AutoCAD call), hatch pattern type 0 instead of 1, ordinates measured from the UCS
+   origin not the datum (now refused, D-37), directions not turned on a UCS in four 3D / dimension
+   tools, point variables sent as plain pairs, the purge text-style answer, and two swapped
+   selection codes. Rows E13, F1 and S4-S7 are NOT RUN; E13 and F1 are in `live_check.py`, S4-S7
+   are by hand.
 0. **2026-10-27: reads leave no undo step** (branch `claude/read-calls-no-undo-step`, D-34). Found in
    A30: a U after list / variable / preview removed nothing. The plug-in now pauses undo recording
    for Read jobs. Offline gates green; live row A31 is NOT RUN: merge, rebuild and install the

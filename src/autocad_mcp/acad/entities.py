@@ -33,6 +33,7 @@ OBJECT_NAME_MAP = {
     "AcDbHatch": "hatch",
     "AcDbSolid": "solid",
     "AcDbRegion": "region",
+    "AcDb3dSolid": "3dsolid",
     "AcDbRay": "ray",
     "AcDbXline": "xline",
     "AcDbLeader": "leader",

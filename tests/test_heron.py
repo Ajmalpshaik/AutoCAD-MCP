@@ -127,3 +127,68 @@ async def test_preview_image_survives_the_mcp_layer(preview_doc):
     blocks = result.content
     assert [type(b).__name__ for b in blocks] == ["ImageContent", "TextContent"]
     assert blocks[0].mime_type == "image/png"
+
+
+class PointVariableDoc:
+    def __init__(self):
+        self.variables = {"LIMMAX": (420.0, 297.0), "UCSORG": (0.0, 0.0, 0.0)}
+        self.sent = {}
+
+    def GetVariable(self, name):
+        return self.variables[name]
+
+    def SetVariable(self, name, value):
+        self.sent[name] = value
+        self.variables[name] = tuple(value.value)
+
+
+@pytest.fixture
+def point_doc(monkeypatch):
+    fake = PointVariableDoc()
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(document, "run", run)
+    monkeypatch.setattr(document, "get_doc", lambda: fake)
+    return fake
+
+
+async def test_set_variable_takes_a_point_as_x_comma_y(point_doc):
+    """A point variable was sent the typed text itself, which AutoCAD cannot take."""
+    import json
+
+    import pythoncom
+
+    result = json.loads(await document.autocad_set_variable(name="LIMMAX", value="42000,29700"))
+    sent = point_doc.sent["LIMMAX"]
+    assert sent.varianttype == pythoncom.VT_ARRAY | pythoncom.VT_R8
+    assert tuple(sent.value) == (42000.0, 29700.0)
+    assert result["value"] == [42000.0, 29700.0]
+
+
+async def test_set_variable_refuses_a_point_with_the_wrong_number_of_values(point_doc):
+    answer = await document.autocad_set_variable(name="UCSORG", value="10,20")
+    assert answer.startswith("Error") and "3 numbers" in answer
+    assert point_doc.sent == {}
+
+
+# The -PURGE prompt's words, capitals as AutoCAD shows them. An answer is taken
+# when it is the capitals, or the start of the whole word that holds them.
+PURGE_PROMPT = {
+    "blocks": "Blocks", "layers": "LAyers", "linetypes": "LTypes",
+    "text_styles": "textSTyles", "dim_styles": "Dimstyles", "all": "All",
+}
+
+
+@pytest.mark.parametrize("target", sorted(PURGE_PROMPT))
+def test_every_purge_answer_is_one_the_prompt_takes(target):
+    """'_STyles' is neither the capitals of 'textSTyles' nor the start of the word."""
+    from autocad_mcp.tools.advanced import PURGE_OPTIONS
+
+    word = PURGE_PROMPT[target]
+    typed = PURGE_OPTIONS[target].removeprefix("_")
+    capitals = "".join(c for c in word if c.isupper())
+    assert typed.upper() == capitals or (
+        word.upper().startswith(typed.upper()) and len(typed) >= len(capitals)
+    ), f"{typed!r} is not an answer the prompt word {word!r} takes"
