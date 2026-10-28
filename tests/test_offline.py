@@ -462,3 +462,11 @@ class TestDialogGuard:
 
     def test_undo_commands_are_not_also_blocked_as_dialogs(self):
         assert not (UNDO_STACK_COMMANDS & set(DIALOG_COMMANDS))
+
+
+def test_selection_modes_are_autocads_acselect_values():
+    """AcSelect: Window 0, Crossing 1, Fence 2, Previous 3, Last 4, All 5. Previous and Last were swapped."""
+    from autocad_mcp.acad import selection
+
+    assert (selection.SELECT_WINDOW, selection.SELECT_CROSSING, selection.SELECT_PREVIOUS,
+            selection.SELECT_LAST, selection.SELECT_ALL) == (0, 1, 3, 4, 5)

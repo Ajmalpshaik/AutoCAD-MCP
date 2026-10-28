@@ -119,6 +119,13 @@ def world_coords(value: Sequence[float], ucs: Ucs | None) -> list[float]:
     return list(ucs.to_world(value))
 
 
+def world_direction(value: Sequence[float], ucs: Ucs | None) -> list[float]:
+    """A caller's direction (not a position) as a world direction, turned when a UCS applies."""
+    if ucs is None:
+        return list(as_vec3(value))
+    return list(ucs.direction_to_world(value))
+
+
 def world_angle(degrees: float | None, ucs: Ucs | None) -> float | None:
     """A caller's angle as a world angle.
 

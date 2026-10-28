@@ -37,6 +37,12 @@
    and E34 are NOT RUN. To prove: merge, stop every `autocad-mcp` server before reinstalling, start
    a fresh one, then `tools/live_check.py --group all --write`. Watch E34's 'shaded with edges' and
    'shades of gray' by hand (known limit 15).
+   **A second check of the whole server** (same day, same branch) found seven more: oval solids
+   never made (no AutoCAD call), hatch pattern type 0 instead of 1, ordinates measured from the UCS
+   origin not the datum (now refused, D-37), directions not turned on a UCS in four 3D / dimension
+   tools, point variables sent as plain pairs, the purge text-style answer, and two swapped
+   selection codes. Rows E13, F1 and S4-S7 are NOT RUN; E13 and F1 are in `live_check.py`, S4-S7
+   are by hand.
 0. **2026-10-27: reads leave no undo step** (branch `claude/read-calls-no-undo-step`, D-34). Found in
    A30: a U after list / variable / preview removed nothing. The plug-in now pauses undo recording
    for Read jobs. Offline gates green; live row A31 is NOT RUN: merge, rebuild and install the

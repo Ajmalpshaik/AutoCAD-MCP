@@ -28,6 +28,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, StrictInt
 
+from ..acad.coords import as_vec3
 from ..acad.entities import describe, resolve_handle, resolve_handles, short_type
 from ..acad.tables import apply_properties, ensure_layer
 from ..acad.units import rad
@@ -42,6 +43,7 @@ from ._shared import (
     created_payload,
     ucs_for,
     world_coords,
+    world_direction,
 )
 
 # AcBooleanType: the Boolean method's operation. The first object is the one
@@ -286,6 +288,10 @@ async def autocad_add_solid(
         lift = 0.0 if shape in ("sphere", "torus") else float(height) / 2.0
         cx, cy, cz = bx, by, bz + lift
         centre = apoint(cx, cy, cz)
+        # AutoCAD makes a box, a wedge and an oval square to the world. On a
+        # turned UCS they are turned to match, as a batch rectangle is.
+        turn = rad(ucs.rotation_degrees) if ucs is not None and shape in (
+            "box", "wedge", "elliptical_cylinder", "elliptical_cone") else 0.0
 
         with undo_mark(doc):
             try:
@@ -299,8 +305,20 @@ async def autocad_add_solid(
                     solid = target.AddCone(centre, r, float(height))
                 elif shape == "sphere":
                     solid = target.AddSphere(centre, r)
+                elif shape in ("elliptical_cylinder", "elliptical_cone"):
+                    # AutoCAD takes radii, major one first along X: length and
+                    # width are overall sizes, so halve them, and make a shape
+                    # wider than long the long way, then turn it 90 degrees.
+                    across, deep = float(length) / 2.0, float(width) / 2.0
+                    add = (target.AddEllipticalCylinder if shape == "elliptical_cylinder"
+                           else target.AddEllipticalCone)
+                    solid = add(centre, max(across, deep), min(across, deep), float(height))
+                    if deep > across:
+                        turn += math.pi / 2.0
                 else:
                     solid = target.AddTorus(centre, r, float(tube_radius))
+                if abs(turn) > 1e-12:
+                    solid.Rotate(centre, turn)
             except BaseException as exc:  # noqa: BLE001
                 raise AutocadError(
                     f"AutoCAD would not make that {shape} ({com_message(exc)}). Check the sizes "
@@ -492,7 +510,7 @@ async def autocad_extrude_profile(
                     solid = target.AddRevolvedSolid(
                         region,
                         apoint(*world_coords(axis_point, ucs)),
-                        apoint(*(float(v) for v in axis_direction[:3])),
+                        apoint(*world_direction(axis_direction, ucs)),
                         rad(revolve_angle),
                     )
                     operation = "revolve"
@@ -1162,8 +1180,11 @@ async def autocad_slice_solid(
         ucs = ucs_for(doc, coords)
         if layer:
             ensure_layer(doc, layer)
-        point = list(world_coords(through, ucs))
-        p1, p2, p3 = plane_from(points_spec, point, with_normal)
+        # Worked out in the caller's terms, then each point taken to the world:
+        # on a turned UCS 'vertical_x' holds the UCS X axis and 'normal' faces
+        # the way the modeller means.
+        plane_points = plane_from(points_spec, list(as_vec3(through)), with_normal)
+        p1, p2, p3 = (tuple(world_coords(p, ucs)) for p in plane_points)
 
         results: list[dict[str, Any]] = []
         failed: list[dict[str, Any]] = []
@@ -1476,18 +1497,20 @@ async def autocad_transform_3d(
                 handle = str(entity.Handle)
                 try:
                     if operation == "move":
-                        dx, dy, dz = (float(v) for v in displacement[:3])
+                        dx, dy, dz = world_direction(displacement, ucs)
                         entity.Move(apoint(0.0, 0.0, 0.0), apoint(dx, dy, dz))
                     elif operation == "rotate":
                         ax, ay, az = world_coords(axis_point, ucs)
-                        dx, dy, dz = (float(v) for v in axis_direction[:3])
+                        dx, dy, dz = world_direction(axis_direction, ucs)
                         entity.Rotate3D(
                             apoint(ax, ay, az),
                             apoint(ax + dx, ay + dy, az + dz),
                             rad(angle),
                         )
                     elif operation == "mirror":
-                        p1, p2, p3 = plane_from("normal", list(world_coords(plane_point, ucs)), plane_normal)
+                        p1, p2, p3 = plane_from(
+                            "normal", list(world_coords(plane_point, ucs)), world_direction(plane_normal, ucs)
+                        )
                         made = entity.Mirror3D(apoint(*p1), apoint(*p2), apoint(*p3))
                         copy = made[0] if isinstance(made, tuple) and made else made
                         if copy is not None:

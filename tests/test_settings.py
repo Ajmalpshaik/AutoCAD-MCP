@@ -232,7 +232,7 @@ class FakeDrawing:
         self.variables = {
             "CANNOSCALE": "1:1", "DIMSCALE": 1.0, "LTSCALE": 1.0, "TEXTSIZE": 2.5,
             "DIMTXSTY": "Standard", "DIMTXT": 2.5, "DIMDEC": 4, "DIMBLK": "",
-            "OSMODE": 4133, "LIMMIN": (0.0, 0.0),
+            "OSMODE": 4133, "LIMMIN": (0.0, 0.0), "LIMMAX": (420.0, 297.0),
         }
         self.variables.update(variables)
         self.written: list[tuple[str, object]] = []
@@ -362,3 +362,19 @@ class TestWholeNumberDimVariables:
     def test_lengths_stay_decimals(self, option):
         value = next(iter(plan_dim_style({option: 2}).values()))
         assert type(value) is float
+
+
+class TestLimitsGoAsAnArrayOfDoubles:
+    def test_limits_are_sent_the_way_autocad_takes_a_point(self, drawing):
+        """A plain Python pair crosses COM as an array of variants; AutoCAD wants doubles."""
+        import asyncio
+
+        import pythoncom
+
+        from autocad_mcp.tools import settings
+
+        answer = asyncio.run(settings.autocad_drawing_setup(limits=[[0, 0], [42000, 29700]]))
+        assert not answer.startswith("Error"), answer
+        sent = dict(drawing.written)["LIMMAX"]
+        assert sent.varianttype == pythoncom.VT_ARRAY | pythoncom.VT_R8
+        assert tuple(sent.value) == (42000.0, 29700.0)

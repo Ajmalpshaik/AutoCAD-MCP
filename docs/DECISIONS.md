@@ -129,6 +129,18 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-37 - Ordinates are refused when the datum is not the UCS origin
+
+**Decided:** 2026-10-28, checking the code for faults like the five that failed live. **Status:** in
+force. `AddDimOrdinate` takes no origin: AutoCAD measures every ordinate from the current UCS origin,
+along the UCS axes. `autocad_dimension_run` promised "the datum to measure from", so with the datum
+anywhere else it drew dimensions that read the wrong values (its own measured-versus-expected
+check then warned, after the fact). Now an ordinate run whose datum is not the UCS origin - or world
+points on a turned UCS - is refused before anything is drawn, naming the
+`autocad_set_ucs(mode='origin', origin=[...])` call that fixes it. Rejected: moving the UCS for the
+modeller and putting it back, which leaves a named UCS behind and rests on UCS calls not yet proven
+live (rows D4, D15); the refusal costs one extra call and cannot draw a wrong number.
+
 ## D-36 - A typed scale that is a bare number above 1 is refused, not guessed
 
 **Decided:** 2026-10-28, after `autocad_drawing_setup(scale=10)` in AutoCAD 2027. **Status:** in

@@ -29,6 +29,7 @@ from ..acad.units import INSUNITS, rad
 from ..core.connection import get_doc, require_idle, run
 from ..core.errors import AutocadError, com_message
 from ..core.registry import dumps, mcp, tool_errors, tool_meta, undo_mark
+from ..core.variants import double_array
 
 # ---------------------------------------------------------------------------
 # Plain words to system variables (pure: no AutoCAD below this line)
@@ -508,7 +509,9 @@ async def autocad_drawing_setup(
                     changed.append({"variable": variable, "from": before, "to": after})
                     continue
                 try:
-                    doc.SetVariable(variable, value)
+                    # A point (LIMMIN, LIMMAX) goes as an array of doubles: a plain
+                    # Python pair crosses COM as an array of variants.
+                    doc.SetVariable(variable, double_array(value) if isinstance(value, tuple) else value)
                 except BaseException as exc:  # noqa: BLE001 - one refusal, not the batch
                     failed.append({"variable": variable, "to": after, "reason": com_message(exc)})
                     continue

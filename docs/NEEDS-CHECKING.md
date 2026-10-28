@@ -131,7 +131,7 @@ marked.
 | E10 | `autocad_make_shape(..., dry_run=true)` | Operations come back, nothing is drawn | NOT RUN |
 | E11 | `autocad_dimension_run` chain along 4 grid points, offset 500, `include_overall=true` | 4 dimensions; the three gaps on one line, the overall above; **each "measured" equals its "expected"** | NOT RUN |
 | E12 | The same as `mode="baseline"` | Each dimension back to the first point, each on its own line stepped 500 clear | NOT RUN |
-| E13 | `mode="ordinate"` with a datum | **AddDimOrdinate: never called from here before.** Ordinate dimensions with leaders, reading the distance from the datum | NOT RUN |
+| E13 | `mode="ordinate"` with a datum, first with the UCS origin elsewhere, then after `autocad_set_ucs(mode="origin", origin=<datum>)` | **AddDimOrdinate: never called from here before.** The first is **refused** before drawing, naming the `autocad_set_ucs` call; the second gives ordinate dimensions with leaders, each `measured` equal to its `expected` (the distance from the datum). AutoCAD measures ordinates from the UCS origin, so before 2026-10-28 a datum elsewhere drew wrong values; re-run NOT RUN | NOT RUN |
 | E14 | `axis="aligned"` on a sloping run | The true length, text offset perpendicular to the run | NOT RUN |
 | E15 | `autocad_add_centre_marks(layer_filter=..., extend=...)` | A cross on every circle, centre lines running past, all on the layer asked for; `min_radius` skips the small ones | NOT RUN |
 | E16 | `autocad_add_multileader` with **three** arrow points | One MULTILEADER, three leader lines, one note. **AddLeader / AddLeaderLine: never called from here before** | NOT RUN |
@@ -166,7 +166,7 @@ from a run. `SectionSolid` is deliberately **not** built: no documented signatur
 
 | Row | Do | Pass looks like | Result |
 |---|---|---|---|
-| F1 | `autocad_add_solid(shape="elliptical_cylinder", length=400, width=200, height=2000)` | Bounding box measures 400 x 200 x 2000. **Length and width are overall sizes, not half axes** - if it comes out 800 x 400, drop the `/2.0` in `tools/solids.py` | NOT RUN |
+| F1 | `autocad_add_solid(shape="elliptical_cylinder", length=400, width=200, height=2000)` | Bounding box measures 400 x 200 x 2000. **Length and width are overall sizes, not half axes** - if it comes out 800 x 400, drop the `/2.0` in `tools/solids.py`. Before 2026-10-28 there was no AutoCAD call for the oval shapes at all (they fell through to the torus and always failed); re-run NOT RUN | NOT RUN |
 | F2 | The same with `shape="elliptical_cone"` | Base 400 x 200, coming to a point 2000 up | NOT RUN |
 | F3 | `elliptical_cylinder` with length and width equal | Refused, telling you to use `cylinder` with a radius | NOT RUN |
 | F4 | `autocad_extrude_profile(handles=[a 100 dia circle], path_handle=a 3000 long polyline)` | One solid following the route; volume about pi x 50^2 x 3000 | NOT RUN |
@@ -207,3 +207,7 @@ AssemblyResolve fallback), so a missing-DLL error would show there, in the add-i
 | S1 | Make AutoCAD busy mid-batch (open a dialog during a large `autocad_batch_draw`) | `Outcome unknown...` and no duplicate geometry | NOT RUN |
 | S2 | `autocad_check_standards` on a real project drawing with a rules file | Findings match a manual check of 5 random layers | NOT RUN |
 | S3 | `autocad_extract_attributes` on the CCTV package (CAM blocks), CSV | One row per camera, tags as columns | NOT RUN |
+| S4 | `autocad_add_hatch` with `pattern="ANSI31"`, then `"AR-CONC"` and `"SOLID"`, round a closed polyline | Each is a real hatch of that pattern (LIST shows the name). Before 2026-10-28 the pattern type sent was 0 (user-defined), which AutoCAD refuses for a named pattern | NOT RUN |
+| S5 | `autocad_set_variable(name="LIMMAX", value="42000,29700")` with Admin on; `autocad_drawing_setup(limits=[[0,0],[42000,29700]])` | Both land: LIMMAX reads 42000,29700 in SETVAR. Points now go as an array of doubles; before, the text or a plain pair was sent | NOT RUN |
+| S6 | `autocad_purge(target="text_styles")` on a drawing with an unused text style | The style is gone and AutoCAD is back at `Command:`. The answer is now `_ST` (the capitals of "textSTyles"); it was `_STyles` | NOT RUN |
+| S7 | On a UCS turned 23 degrees, with `coords="ucs"`: `autocad_transform_3d` move `[1000,0,0]`, `autocad_slice_solid` `plane="vertical_x"`, `autocad_extrude_profile` revolve about `[1,0,0]`, `autocad_dimension_run` horizontal, `autocad_add_solid` box 1000 x 600 | Each follows the **UCS** X axis (the box's 1000 side runs along it), not the world one. Before 2026-10-28 the points were turned into the world but the directions and the dimension angle were not | NOT RUN |

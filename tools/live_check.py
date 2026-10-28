@@ -666,17 +666,29 @@ async def e11_a_dimension_run_measures_what_it_says(ctx: Context) -> str:
 
 
 async def e13_ordinate_dimensions_work(ctx: Context) -> str:
-    """AddDimOrdinate: never called from this server before today."""
-    out = parse(await dimensions.autocad_dimension_run(
-        points=[[0, 44000], [1200, 44000], [3600, 44000]],
-        mode="ordinate", axis="horizontal", offset=800, datum=[0, 44000], layer="LC-DIMS",
+    """AddDimOrdinate measures from the UCS origin, so the datum has to be there.
+
+    A datum off the UCS origin must be refused before anything is drawn; with
+    the origin moved to it, each ordinate must read its distance from it.
+    """
+    points = [[0, 44000], [1200, 44000], [3600, 44000]]
+    refused = refusal(await dimensions.autocad_dimension_run(
+        points=points, mode="ordinate", axis="horizontal", offset=800, datum=[0, 44000],
     ))
+    expect("UCS origin" in refused, f"a datum off the UCS origin was not refused for that: {refused[:120]}")
+    parse(await coordinates.autocad_set_ucs(mode="origin", origin=[0, 44000]))
+    try:
+        out = parse(await dimensions.autocad_dimension_run(
+            points=points, mode="ordinate", axis="horizontal", offset=800, datum=[0, 44000],
+            layer="LC-DIMS",
+        ))
+    finally:
+        parse(await coordinates.autocad_set_ucs(mode="world"))
     expect(out["count"] == 3, f"it made {out['count']} ordinates, not 3")
     expect(not out.get("failed"), f"AddDimOrdinate was refused: {out.get('failed')}")
-    for handle in out["handles"]:
-        got = parse(await query.autocad_get_entity(handle=handle))
-        expect(got["type"] == "dimension", f"an ordinate came out as {got['type']}")
-    return "3 ordinate dimensions made - AddDimOrdinate works from here"
+    read = [d["measured"] for d in out["dimensions"]]
+    expect(read == [d["expected"] for d in out["dimensions"]], f"the ordinates read {read}, not 0, 1200, 3600")
+    return f"a datum off the UCS origin was refused; with the origin on it the ordinates read {read}"
 
 
 async def e15_centre_marks_land_on_every_circle(ctx: Context) -> str:

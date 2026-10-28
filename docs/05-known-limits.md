@@ -92,3 +92,9 @@ the tool cancels the command and says so in `not_set`.
 
 `scale=10` is refused: it could be 1:10 or 10:1 ([D-36](DECISIONS.md)). Write `'1:10'`, or `'10:1'`
 for an enlargement. A plain ratio of 1 or less (0.02 for 1:50) still works.
+
+## 17. Ordinates measure from the UCS origin
+
+`autocad_dimension_run(mode="ordinate")` needs the datum at the UCS origin, because that is where
+AutoCAD measures ordinates from ([D-37](DECISIONS.md)). A datum elsewhere is refused with the
+`autocad_set_ucs(mode="origin", ...)` call that moves it.

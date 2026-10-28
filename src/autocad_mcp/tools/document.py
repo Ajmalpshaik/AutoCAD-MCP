@@ -19,7 +19,7 @@ from ..acad.units import unit_name
 from ..core.connection import get_app, get_doc, run
 from ..core.errors import AutocadError, com_message, is_retryable
 from ..core.registry import dumps, mcp, tool_errors, tool_meta, undo_mark
-from ..core.variants import apoint, point_to_list
+from ..core.variants import apoint, double_array, point_to_list
 from ._shared import current_ucs
 
 # Formats doc.Export writes directly. PDF goes through the plotter instead.
@@ -1034,6 +1034,8 @@ async def autocad_set_variable(
     Error Handling:
         - Returns a type error rather than a COM failure when a numeric
           variable is given non-numeric text.
+        - A point variable (LIMMAX, UCSORG) takes "x,y" or "x,y,z"; the wrong
+          count of numbers is refused before anything is written.
 
     Examples:
         - Use when: a variable is needed that autocad_drawing_setup does not
@@ -1069,6 +1071,20 @@ async def autocad_set_variable(
                 raise AutocadError(
                     f"'{var}' holds a number, but '{value}' is not numeric."
                 ) from None
+        elif isinstance(previous, tuple):
+            # A point: "x,y" (or "x,y,z") as an array of doubles, which is the
+            # only form AutoCAD takes for one.
+            parts = [p for p in value.replace("[", " ").replace("]", " ").replace(",", " ").split() if p]
+            try:
+                numbers = [float(p) for p in parts]
+            except ValueError:
+                numbers = []
+            if len(numbers) != len(previous):
+                raise AutocadError(
+                    f"'{var}' is a point of {len(previous)} numbers; give them as "
+                    f"'{','.join(['0'] * len(previous))}', not '{value}'."
+                )
+            new_value = double_array(numbers)
         else:
             new_value = value
 

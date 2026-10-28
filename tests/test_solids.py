@@ -303,3 +303,222 @@ def test_a_visual_style_that_takes_a_moment_is_not_cancelled(monkeypatch):
     result = json.loads(asyncio.run(solids.autocad_set_3d_view(visual_style="hidden", zoom_extents=False)))
     assert "not_set" not in result, result
     assert doc.sent == ["_.VSCURRENT _Hidden\n"]
+
+
+# ---------------------------------------------------------------------------
+# Oval solids (found 2026-10-28: they fell through to AddTorus and always failed)
+# ---------------------------------------------------------------------------
+
+
+class OvalSpace:
+    def __init__(self):
+        self.calls = []
+
+    def _made(self, *args):
+        self.calls.append(args)
+        solid = FakeSolid("3A0", 1.0)
+        solid.turned = None
+        solid.Rotate = lambda base, angle: setattr(solid, "turned", (tuple(base.value), angle))
+        solid.Layer = "0"
+        self.solid = solid
+        return solid
+
+    def AddEllipticalCylinder(self, centre, major, minor, height):
+        return self._made("cylinder", tuple(centre.value), major, minor, height)
+
+    def AddEllipticalCone(self, centre, major, minor, height):
+        return self._made("cone", tuple(centre.value), major, minor, height)
+
+    def AddTorus(self, *args):
+        raise AssertionError("an oval is not a torus")
+
+
+def _oval(monkeypatch, **kwargs):
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    space = OvalSpace()
+    doc = Fake3dDoc()
+    doc.ModelSpace = space
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    answer = asyncio.run(solids.autocad_add_solid(**kwargs))
+    assert not answer.startswith("Error"), answer
+    return space, json.loads(answer)
+
+
+def test_an_oval_duct_is_an_elliptical_cylinder_of_half_sizes(monkeypatch):
+    """400 x 200 overall is radii 200 and 100, centred half the height up."""
+    space, _ = _oval(monkeypatch, shape="elliptical_cylinder", base=[0, 0, 0], length=400, width=200, height=2000)
+    assert space.calls == [("cylinder", (0.0, 0.0, 1000.0), 200.0, 100.0, 2000.0)]
+    assert space.solid.turned is None
+
+
+def test_an_oval_wider_than_long_is_made_long_way_then_turned(monkeypatch):
+    """The major radius always goes first; a 200 x 400 oval is a 400 x 200 one turned 90 degrees."""
+    space, _ = _oval(monkeypatch, shape="elliptical_cone", base=[50, 60, 0], length=200, width=400, height=900)
+    assert space.calls == [("cone", (50.0, 60.0, 450.0), 200.0, 100.0, 900.0)]
+    centre, angle = space.solid.turned
+    assert centre == (50.0, 60.0, 450.0) and angle == pytest.approx(math.pi / 2)
+
+
+# ---------------------------------------------------------------------------
+# Directions on a turned UCS (found 2026-10-28: points were converted, directions not)
+# ---------------------------------------------------------------------------
+
+
+class TurnedDoc(Fake3dDoc):
+    """A plan UCS turned 90 degrees: its X runs up world Y, its Y runs along world -X."""
+
+    def GetVariable(self, name):
+        turned = {"UCSORG": (0.0, 0.0, 0.0), "UCSXDIR": (0.0, 1.0, 0.0), "UCSYDIR": (-1.0, 0.0, 0.0)}
+        if name in turned:
+            return turned[name]
+        return super().GetVariable(name)
+
+
+class Movable(FakeSolid):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.calls = []
+
+    def Move(self, a, b):
+        self.calls.append(("Move", tuple(a.value), tuple(b.value)))
+
+    def Rotate3D(self, a, b, angle):
+        self.calls.append(("Rotate3D", tuple(a.value), tuple(b.value), angle))
+
+    def Mirror3D(self, a, b, c):
+        self.calls.append(("Mirror3D", tuple(a.value), tuple(b.value), tuple(c.value)))
+        return Movable("2F0", 1.0)
+
+    def SliceSolid(self, a, b, c, both):
+        self.calls.append(("SliceSolid", tuple(a.value), tuple(b.value), tuple(c.value)))
+        return None
+
+
+def _turned(monkeypatch, solid):
+    doc = TurnedDoc(solid)
+    _patch(monkeypatch, doc)
+    return doc
+
+
+def test_a_move_along_ucs_x_goes_along_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(handles=["2E1"], operation="move", displacement=[1000, 0, 0], coords="ucs"))
+    (_, start, end), = solid.calls
+    assert [e - s for s, e in zip(start, end, strict=True)] == pytest.approx([0.0, 1000.0, 0.0])
+
+
+def test_a_rotate_about_ucs_x_turns_about_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(
+        handles=["2E1"], operation="rotate", axis_point=[0, 0, 0], axis_direction=[1, 0, 0], angle=90, coords="ucs"
+    ))
+    (_, a, b, _), = solid.calls
+    assert [q - p for p, q in zip(a, b, strict=True)] == pytest.approx([0.0, 1.0, 0.0])
+
+
+def test_a_mirror_facing_ucs_x_faces_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_transform_3d(
+        handles=["2E1"], operation="mirror", plane_point=[0, 0, 0], plane_normal=[1, 0, 0], coords="ucs"
+    ))
+    (_, *points), = solid.calls
+    # A plane facing UCS X (world Y) through the origin holds world y = 0.
+    assert [p[1] for p in points] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_vertical_x_slice_follows_the_ucs_x_axis(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    solid = Movable("2E1", 1.0)
+    _turned(monkeypatch, solid)
+    asyncio.run(solids.autocad_slice_solid(handles=["2E1"], through=[0, 0, 0], plane="vertical_x", coords="ucs"))
+    (_, *points), = solid.calls
+    # The plane holding UCS X (world Y) and Z through the origin is world x = 0.
+    assert [p[0] for p in points] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_revolve_about_ucs_x_revolves_about_ucs_x(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    class Profile:
+        Handle, ObjectName = "2D0", "AcDbPolyline"
+
+        def Delete(self):
+            pass
+
+    class Space:
+        axis = None
+
+        def AddRegion(self, curves):
+            return (Profile(),)
+
+        def AddRevolvedSolid(self, region, point, direction, angle):
+            Space.axis = tuple(direction.value)
+            return Movable("2F1", 1.0)
+
+    doc = TurnedDoc(Profile())
+    doc.ModelSpace = Space()
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    asyncio.run(solids.autocad_extrude_profile(
+        handles=["2D0"], revolve_angle=360, axis_point=[0, 0, 0], axis_direction=[1, 0, 0], coords="ucs"
+    ))
+    assert Space.axis == pytest.approx((0.0, 1.0, 0.0))
+
+
+class TurnedOvalSpace(OvalSpace):
+    def AddBox(self, centre, length, width, height):
+        return self._made("box", tuple(centre.value), length, width, height)
+
+
+def _turned_solid(monkeypatch, **kwargs):
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    space = TurnedOvalSpace()
+    doc = TurnedDoc()
+    doc.ModelSpace = space
+    _patch(monkeypatch, doc)
+    monkeypatch.setattr(solids, "apply_properties", lambda *a, **k: {})
+    answer = asyncio.run(solids.autocad_add_solid(coords="ucs", **kwargs))
+    assert not answer.startswith("Error"), answer
+    return space, json.loads(answer)
+
+
+def test_a_box_on_a_turned_ucs_is_square_to_the_ucs(monkeypatch):
+    """AddBox makes a box square to the world; on a UCS turned 90 degrees it is turned to match."""
+    space, _ = _turned_solid(monkeypatch, shape="box", base=[0, 0, 0], length=1000, width=600, height=20)
+    centre, angle = space.solid.turned
+    assert centre == (0.0, 0.0, 10.0) and angle == pytest.approx(math.pi / 2)
+
+
+def test_an_oval_wider_than_long_on_a_turned_ucs_turns_once_by_both(monkeypatch):
+    space, _ = _turned_solid(monkeypatch, shape="elliptical_cylinder", base=[0, 0, 0], length=200, width=400, height=100)
+    _, angle = space.solid.turned
+    assert angle == pytest.approx(math.pi)

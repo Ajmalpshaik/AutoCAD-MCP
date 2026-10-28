@@ -26,6 +26,26 @@ Newest first. Dates are when the change was made.
     (`0.0`), which AutoCAD refuses for a whole-number variable. Now whole numbers.
   - After a dim style with an `arrow_block`, the drawing's default arrow is put back with `.`, the
     way AutoCAD sets it.
+- A second check of the whole server, for the same kinds of fault, found and fixed:
+  - `autocad_add_solid` oval shapes (`elliptical_cylinder`, `elliptical_cone`) had no AutoCAD
+    call: they fell through to the torus and always failed. Now `AddEllipticalCylinder` /
+    `AddEllipticalCone` with half the length and width, made the long way and turned when wider
+    than long.
+  - `autocad_add_hatch` sent pattern type 0 (user-defined), which AutoCAD refuses for a named
+    pattern like ANSI31. Now 1, predefined.
+  - `autocad_dimension_run` ordinates: AutoCAD measures from the UCS origin, so a datum elsewhere
+    drew wrong values. Now refused before drawing, naming the `autocad_set_ucs` call
+    ([D-37](docs/DECISIONS.md)).
+  - On a turned UCS with `coords="ucs"`: `autocad_transform_3d` (move, rotate axis, mirror),
+    `autocad_slice_solid` (cut direction and the vertical planes), the revolve axis in
+    `autocad_extrude_profile`, the angle of `autocad_dimension_run`, and the box, wedge and oval of
+    `autocad_add_solid` now follow the UCS; the points were turned, the directions were not.
+  - Point variables (`LIMMIN`, `LIMMAX` in drawing setup, any point in `autocad_set_variable`) go
+    as an array of doubles; `autocad_set_variable` takes "x,y".
+  - `autocad_purge(target="text_styles")` answered `_STyles`, which is not an answer the prompt's
+    "textSTyles" takes; now `_ST`.
+  - The selection-mode codes for Previous and Last were swapped (not used yet).
+  - Live rows E13, F1, S4-S7: NOT RUN.
 - Tests: two geometry tests used a nested `pytest.approx`, which pytest 9 refuses, and CI turned
   red when it picked pytest 9 up. Same values and tolerance, compared as flat coordinate lists.
 - Live rows D23, D32, E18, E28, E34: NOT RUN.
