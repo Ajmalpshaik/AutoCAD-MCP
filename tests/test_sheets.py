@@ -250,3 +250,31 @@ def test_levels():
     assert risk_of("autocad_add_viewport") is Risk.CHANGE
     assert risk_of("autocad_list_views") is Risk.READ
     assert risk_of("autocad_save_view") is Risk.CHANGE
+
+
+class TestScaleTheModellerTyped:
+    """A bare number above 1 could be 1:10 or 10:1, so a scale the modeller typed refuses it.
+
+    2026-10-28: scale=10 was meant as 1:10 but reads as 10:1 — DIMSCALE 0.1, tiny dimensions.
+    """
+
+    @pytest.mark.parametrize("given", [10, 10.0, "10", 50, "2", 2.5])
+    def test_a_bare_number_above_one_is_refused_with_both_readings(self, given):
+        from autocad_mcp.acad.sheets import parse_typed_scale
+
+        with pytest.raises(ValueError) as exc:
+            parse_typed_scale(given)
+        assert ":1" in str(exc.value) and "1:" in str(exc.value)
+
+    @pytest.mark.parametrize(
+        ("given", "expected"),
+        [("1:10", 0.1), ("10:1", 10.0), ("2:1", 2.0), (0.02, 0.02), (1, 1.0), ("0.5", 0.5)],
+    )
+    def test_everything_unambiguous_still_reads(self, given, expected):
+        from autocad_mcp.acad.sheets import parse_typed_scale
+
+        assert parse_typed_scale(given) == pytest.approx(expected)
+
+    def test_a_ratio_handed_back_in_still_reads(self):
+        """Inside the server a 2:1 detail travels as 2.0; that must keep working."""
+        assert parse_scale(2.0) == pytest.approx(2.0)

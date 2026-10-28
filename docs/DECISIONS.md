@@ -129,6 +129,33 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
 
+## D-36 - A typed scale that is a bare number above 1 is refused, not guessed
+
+**Decided:** 2026-10-28, after `autocad_drawing_setup(scale=10)` in AutoCAD 2027. **Status:** in
+force. A bare number has always been a ratio (0.02 = 1:50), so `10` read as **10:1** and set
+DIMSCALE 0.1: every dimension ten times too small, with no error. A modeller who types 10 means 1:10
+nearly every time, but a detail at 2:1 is real, so the server cannot know. Now every tool that takes
+a scale the modeller typed (`autocad_drawing_setup`, `autocad_add_viewport`, `autocad_page_setup`,
+`autocad_export`, the scale bar shape) goes through `sheets.parse_typed_scale`, which refuses a bare
+number above 1 and asks for '1:10' or '10:1'. Nothing is written first. A bare ratio of 1 or less
+(0.02, 1) and every written form ('1:10', '2:1') still read. Inside the server a 2:1 detail travels
+as 2.0, so `parse_scale` itself is unchanged. Rejected: reading a bare 10 as 1:10 (a guess that is
+wrong for every enlargement, and silent).
+
+## D-35 - The visual style is set with the VSCURRENT command
+
+**Decided:** 2026-10-28, after `autocad_set_3d_view(visual_style="realistic")` came back
+`not_set: visual_style (Error setting system variable)` in AutoCAD 2027. **Status:** in force; it
+corrects the "written with SetVariable (VSCURRENT)" in D-31, whose level (View) still stands.
+VSCURRENT is a **command**, not a system variable: Autodesk documents no VSCURRENT variable, and COM
+has no visual style on a model-space viewport. So the tool types `_.VSCURRENT _Realistic` (and so on)
+with COM `SendCommand`, from a fixed table of ten answers, and still cannot be talked into anything
+else. (Not the plug-in's quiet input: that is taken only inside a Change job, and this is View.) If
+AutoCAD is still asking a second later (CMDACTIVE), the option was not taken: the tool cancels with
+Esc so the next tool does not find AutoCAD waiting, and says so in `not_set`. The style cannot be read back, so the result no longer carries
+`current_visual_style`; `autocad_preview` is the proof. The answers for 'shaded with edges' and
+'shades of gray' (`_E`, `_G`) come from the prompt's capital letters, not from a run (row E34).
+
 ## D-34 - A read leaves no undo step: the plug-in pauses undo recording
 
 **Decided:** 2026-10-27, after live check A30. **Status:** in force. A U typed after Claude ran

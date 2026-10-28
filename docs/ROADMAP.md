@@ -28,6 +28,17 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 - [x] "Object invoked has disconnected" (RPC_E_DISCONNECTED) is now treated as a dead pointer:
   re-dispatch and retry. The live export test no longer fails in the full suite.
 
+## Found on 2026-10-28 (chilled water roof pipe support, AutoCAD 2027)
+
+- [x] `autocad_drawing_setup(scale='1:10')`, a dim style with a `text_style`, table text height,
+  booleans on real solids and `visual_style='realistic'` all failed live; fixed with tests, re-run
+  rows D23, D32, E18, E28, E34 NOT RUN ([D-35](DECISIONS.md), [D-36](DECISIONS.md)).
+- [ ] Read the current visual style back (the VPORT table's visual style, through the plug-in), so
+  `autocad_set_3d_view` can prove the style took instead of relying on `autocad_preview`.
+- [ ] `tests/test_geometry.py`: two tests compare lists of point pairs with `pytest.approx`, which
+  pytest 9 refuses ("does not support nested data structures"). CI is green today on an older
+  pytest; the next pytest upgrade turns it red. Compare point by point.
+
 ## Server
 
 - [x] Dynamic blocks: read and set properties (`autocad_get/set_dynamic_properties`). Authoring

@@ -79,3 +79,16 @@ Reads should leave no undo step: the plug-in turns undo recording off for the le
 while AutoCAD was mid-command (the pause waits 2 s for AutoCAD to be idle, then goes ahead without
 it), can still leave steps: the U then undoes the look, not the change. Press U again, or check the
 object count.
+
+## 15. A visual style cannot be read back
+
+`autocad_set_3d_view` types the VSCURRENT command ([D-35](DECISIONS.md)); there is no VSCURRENT
+system variable and COM has no visual style on a model viewport, so the tool cannot report which
+style is current. `autocad_preview` shows it. The answers for 'shaded with edges' and 'shades of
+gray' are from the prompt's capital letters and are not yet proven (row E34): if one is not taken,
+the tool cancels the command and says so in `not_set`.
+
+## 16. A scale is written as on the sheet
+
+`scale=10` is refused: it could be 1:10 or 10:1 ([D-36](DECISIONS.md)). Write `'1:10'`, or `'10:1'`
+for an enlargement. A plain ratio of 1 or less (0.02 for 1:50) still works.

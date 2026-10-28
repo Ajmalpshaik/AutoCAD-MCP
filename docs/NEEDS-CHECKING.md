@@ -94,7 +94,7 @@ Nothing below may be called working until its row says PASS with a date and a ve
 | D20 | `autocad_export(area="layout", scale="1:1")` on the D-101 sheet | The PDF is the sheet, title block and all, at full size; the layout's page setup is put back | NOT RUN |
 | D21 | `autocad_drawing_setup(units="millimeters", scale="1:50", paper_text_height=2.5, osnaps=[...])` with `dry_run=true`, then false | The dry run writes nothing; the real run sets INSUNITS, DIMSCALE 50, LTSCALE 50, CANNOSCALE 1:50, TEXTSIZE 125, OSMODE; each `from`/`to` matches what SETVAR reports | NOT RUN |
 | D22 | `autocad_drawing_setup` on a drawing where one variable is read-only for that release | That one is in `failed`; the rest still land | NOT RUN |
-| D23 | `autocad_create_styles` with a text style and a dim style, then dimension something | The dim uses the new style at the right size; **the drawing's own DIM variables are back where they were** (check DIMSCALE and DIMTXT with SETVAR) | NOT RUN |
+| D23 | `autocad_create_styles` with a text style and a dim style that has a `text_style` and a `precision`, then dimension something | The dim uses the new style at the right size; no notes on the style; **the drawing's own DIM variables are back where they were** (check DIMSCALE, DIMTXT, DIMTXSTY and DIMDEC with SETVAR). On 2026-10-28 a dim style with `"text_style": "ROMANS"` failed outright (`could not convert string to float: 'S'`); fixed, re-run NOT RUN | NOT RUN |
 | D24 | `autocad_remap_layers(preset="ifc", dry_run=true)` on a real IFC or Revit export | `counts` and `by_rule` match a hand count of 3 sampled layers; nothing changed | NOT RUN |
 | D25 | The same with `dry_run=false, set_bylayer=true` | Objects moved, the layers exist with the right colours, the drawing now plots in those colours; a locked layer appears in `failed` and the rest still land | NOT RUN |
 | D26 | `autocad_tidy_entities(flatten_z=0, off_layer_0=..., dry_run=false)` on that import | Z is 0 throughout (check with LIST), layer 0 is empty of geometry, the plan now hatches and trims | NOT RUN |
@@ -103,6 +103,7 @@ Nothing below may be called working until its row says PASS with a date and a ve
 | D29 | `autocad_sequence` with a step that fails at run time (a locked layer) | Steps 1-2 are in the drawing, that step reports the refusal, the rest are skipped, and the hint names the step | NOT RUN |
 | D30 | `autocad_sequence` containing `autocad_save_drawing`, and one containing `autocad_run_lisp` | Both refused, naming the level; nothing ran. **This is the padlock ceiling (D-29) and must be re-run whenever a tool is added** | NOT RUN |
 | D31 | After the whole set, `autocad_preview` and `autocad_check_standards` | The sheet looks right and the standard passes | NOT RUN |
+| D32 | `autocad_drawing_setup(scale="1:10")`, then `autocad_drawing_setup(scale=10)` | The first sets CANNOSCALE 1:10 and DIMSCALE 10 with nothing in `failed`; the second is **refused**, asking for '1:10' or '10:1', and DIMSCALE is still 10. On 2026-10-28 both failed with `could not convert string to float: ':'`; fixed, re-run NOT RUN | NOT RUN |
 
 ## Group E - Geometry, annotation and 3D (AutoCAD 2027, this PC)
 
@@ -135,7 +136,7 @@ marked.
 | E15 | `autocad_add_centre_marks(layer_filter=..., extend=...)` | A cross on every circle, centre lines running past, all on the layer asked for; `min_radius` skips the small ones | NOT RUN |
 | E16 | `autocad_add_multileader` with **three** arrow points | One MULTILEADER, three leader lines, one note. **AddLeader / AddLeaderLine: never called from here before** | NOT RUN |
 | E17 | `autocad_add_multileader(block=...)` | The block is carried at the end of the leader | NOT RUN |
-| E18 | `autocad_add_table` with a title, headers and 5 rows | A real TABLE object, editable, title and header rows filled, column widths as asked. **AddTable / SetText / SetColumnWidth: never called from here before** | NOT RUN |
+| E18 | `autocad_add_table` with a title, headers and 5 rows, `text_height` and `text_style` | A real TABLE object, editable, title and header rows filled, column widths as asked, text at the height asked on every row and nothing in `not_set`. **AddTable / SetText / SetColumnWidth: never called from here before.** On 2026-10-28 the height came back `not_set: TitleTextHeight, HeaderTextHeight, DataTextHeight` and the text was tiny; now `SetTextHeight` / `SetTextStyle` on all three row types, re-run NOT RUN | NOT RUN |
 | E19 | `autocad_extract_attributes` then `autocad_add_table` with those rows | The schedule appears as a table with one row per block | NOT RUN |
 | E20 | `autocad_add_revision_cloud(handle=...)` with a margin | One polyline round the object, arcs bulging **outward**, even size, no stub arc | NOT RUN |
 | E21 | The same on a boundary traced clockwise | Arcs still bulge outward, not inward | NOT RUN |
@@ -145,13 +146,13 @@ marked.
 | E25 | The same with a taper | The sides draw in as it rises | NOT RUN |
 | E26 | `autocad_extrude_profile` with `revolve_angle=360` and an axis | A solid of revolution. **AddRevolvedSolid: never called from here before** | NOT RUN |
 | E27 | `autocad_extrude_profile` on curves with a gap in them | Refused in plain words, naming what to check; nothing left behind | NOT RUN |
-| E28 | `autocad_solid_boolean` subtract: 4 cylinders out of a plate | Holes through the plate; the cylinders gone; **volume_after is less than volume_before** | NOT RUN |
+| E28 | `autocad_solid_boolean` subtract: 4 cylinders out of a plate | Holes through the plate; the cylinders gone; **volume_after is less than volume_before**. On 2026-10-28 every real solid was refused (`2E1 is a AcDb3dSolid, not a 3D solid`), and slice, clash check and `solids_only` materials had the same fault; fixed, re-run NOT RUN | NOT RUN |
 | E29 | `autocad_solid_boolean` with a handle that is a line | Refused **before anything is consumed** - the other solids must all still be there | NOT RUN |
 | E30 | `autocad_solid_boolean` subtract two solids that do not touch | The warning about the volume not changing appears | NOT RUN |
 | E31 | `autocad_solid_properties` on that plate | Volume matches 2400x1200x200 less the holes; centroid sensible; bounding box right | NOT RUN |
 | E32 | `autocad_draw_3d_path` with helix r100, 3 turns, rise 600 | One 3D polyline; starts at (100,0,0), ends at (100,0,600) | NOT RUN |
 | E33 | `autocad_draw_3d_path` with points through a building | One 3D polyline following them | NOT RUN |
-| E34 | `autocad_set_3d_view(direction="sw_iso", visual_style="hidden")` then `autocad_preview` | The model is shown from the south-west with hidden lines; **no padlock was needed** | NOT RUN |
+| E34 | `autocad_set_3d_view(direction="sw_iso", visual_style="hidden")` then `autocad_preview`; then `visual_style="realistic"` | The model is shown from the south-west with hidden lines, then shaded; nothing in `not_set`; AutoCAD not left at a prompt; **no padlock was needed**. On 2026-10-28 `realistic` came back `not_set: visual_style (Error setting system variable)`: VSCURRENT is a command, not a variable, and is now typed as one. Also try 'shaded with edges' and 'shades of gray': their options (`_E`, `_G`) are from the prompt's capitals, not from a run. Re-run NOT RUN | NOT RUN |
 | E35 | `autocad_set_3d_view(direction="top", visual_style="2dwireframe")` | Back to plan and normal drafting | NOT RUN |
 | E36 | `autocad_batch_draw` with `bulges` on a polyline and `align` on a text | The arc is part of the polyline; the text is justified. These two are what every shape depends on | NOT RUN |
 

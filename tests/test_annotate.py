@@ -138,3 +138,97 @@ def test_levels():
     assert risk_of("autocad_add_multileader") is Risk.CHANGE
     assert risk_of("autocad_add_table") is Risk.CHANGE
     assert risk_of("autocad_add_revision_cloud") is Risk.CHANGE
+
+
+# ---------------------------------------------------------------------------
+# autocad_add_table against a fake drawing (2026-10-28, AutoCAD 2027)
+# ---------------------------------------------------------------------------
+
+
+class FakeTable:
+    """An AcadTable has no TitleTextHeight-style properties: text height is a method per row type."""
+
+    __slots__ = ("Handle", "Layer", "RegenerateTableSuppressed", "StyleName", "calls")
+
+    def __init__(self):
+        self.Handle, self.Layer, self.StyleName = "2F", "0", "Standard"
+        self.RegenerateTableSuppressed = False
+        self.calls = []
+
+    def SetColumnWidth(self, index, width):
+        pass
+
+    def SetText(self, row, column, value):
+        pass
+
+    def SetTextHeight(self, row_types, height):
+        self.calls.append(("SetTextHeight", row_types, height))
+
+    def SetTextStyle(self, row_types, name):
+        self.calls.append(("SetTextStyle", row_types, name))
+
+
+class FakeSpace:
+    def __init__(self):
+        self.table = FakeTable()
+
+    def AddTable(self, point, rows, columns, row_height, column_width):
+        return self.table
+
+
+class FakeDoc:
+    def __init__(self):
+        self.ModelSpace = self.PaperSpace = FakeSpace()
+
+    def StartUndoMark(self):
+        pass
+
+    def EndUndoMark(self):
+        pass
+
+
+@pytest.fixture
+def table(monkeypatch):
+    from autocad_mcp.tools import annotate
+
+    doc = FakeDoc()
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(annotate, "run", run)
+    monkeypatch.setattr(annotate, "get_doc", lambda: doc)
+    monkeypatch.setattr(annotate, "require_idle", lambda d: None)
+    return doc.ModelSpace.table
+
+
+TITLE_HEADER_DATA = 2 + 4 + 1  # AcRowType: acTitleRow + acHeaderRow + acDataRow
+
+
+def test_table_text_height_is_set_on_every_row_type(table):
+    """2026-10-28: 'not_set: TitleTextHeight, HeaderTextHeight, DataTextHeight' and tiny text."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import annotate
+
+    answer = asyncio.run(annotate.autocad_add_table(
+        position=[0, 0], rows=[["A", "B"]], headers=["X", "Y"], title="T", text_height=25.0
+    ))
+    result = json.loads(answer)
+    assert "not_set" not in result, result
+    assert ("SetTextHeight", TITLE_HEADER_DATA, 25.0) in table.calls
+
+
+def test_table_text_style_is_set_on_every_row_type(table):
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import annotate
+
+    answer = asyncio.run(annotate.autocad_add_table(
+        position=[0, 0], rows=[["A"]], text_style="ROMANS"
+    ))
+    result = json.loads(answer)
+    assert "not_set" not in result, result
+    assert ("SetTextStyle", TITLE_HEADER_DATA, "ROMANS") in table.calls

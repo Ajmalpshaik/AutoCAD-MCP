@@ -191,7 +191,7 @@ def _plot_pdf(
             layout.StandardScale = AC_SCALE_TO_FIT
         else:
             layout.UseStandardScale = False
-            layout.CustomScale = sheet_plan.parse_scale(scale)
+            layout.CustomScale = sheet_plan.parse_typed_scale(scale)
         layout.CenterPlot = True
         paper = str(layout.GetLocaleMediaName(layout.CanonicalMediaName))
 
@@ -834,7 +834,7 @@ async def autocad_export(
         )
     if scale is not None:
         try:
-            sheet_plan.parse_scale(scale)
+            sheet_plan.parse_typed_scale(scale)
         except ValueError as exc:
             raise AutocadError(str(exc)) from exc
 

@@ -128,3 +128,178 @@ def test_levels():
     assert risk_of("autocad_solid_properties") is Risk.READ
     # Only changes what is on screen, like autocad_zoom.
     assert risk_of("autocad_set_3d_view") is Risk.VIEW
+
+
+# ---------------------------------------------------------------------------
+# Against fake solids (2026-10-28, AutoCAD 2027)
+# ---------------------------------------------------------------------------
+
+
+class FakeSolid:
+    def __init__(self, handle, volume, kind="AcDb3dSolid"):
+        self.Handle, self.Volume, self.ObjectName = handle, volume, kind
+        self.cut = []
+
+    def Boolean(self, code, other):
+        self.cut.append((code, other.Handle))
+        self.Volume -= other.Volume
+
+    def GetBoundingBox(self):
+        return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
+
+
+class FakeViewport:
+    Direction = None
+
+
+class FakeApp:
+    def ZoomExtents(self):
+        pass
+
+
+class Fake3dDoc:
+    def __init__(self, *entities):
+        self.by_handle = {e.Handle: e for e in entities}
+        self.ActiveViewport = FakeViewport()
+        self.Application = FakeApp()
+        self.sent: list[str] = []
+        self.set_variables: list[tuple[str, object]] = []
+
+    def HandleToObject(self, handle):
+        return self.by_handle[handle]
+
+    def SendCommand(self, text):
+        self.sent.append(text)
+
+    def SetVariable(self, name, value):
+        # VSCURRENT is a command, not a system variable: AutoCAD 2027 refuses it.
+        if name == "VSCURRENT":
+            raise ValueError("Error setting system variable")
+        self.set_variables.append((name, value))
+
+    def GetVariable(self, name):
+        raise ValueError(f"no system variable {name}")
+
+    def Regen(self, which):
+        pass
+
+    def StartUndoMark(self):
+        pass
+
+    def EndUndoMark(self):
+        pass
+
+
+def _patch(monkeypatch, doc):
+    from autocad_mcp.tools import solids
+
+    async def run(fn):
+        return fn()
+
+    monkeypatch.setattr(solids, "run", run)
+    monkeypatch.setattr(solids, "get_doc", lambda: doc)
+    monkeypatch.setattr(solids, "require_idle", lambda d: None)
+
+
+def test_a_real_3d_solid_is_called_a_3dsolid():
+    """AutoCAD names a 3D solid AcDb3dSolid; with no entry it was never matched as one."""
+    from autocad_mcp.acad.entities import short_type
+
+    assert short_type(FakeSolid("2E1", 1.0)) == "3dsolid"
+
+
+def test_boolean_takes_real_solids(monkeypatch):
+    """2026-10-28: '2E1 is a AcDb3dSolid, not a 3D solid or a region'."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    plate, hole = FakeSolid("2E1", 1000.0), FakeSolid("2E2", 100.0)
+    _patch(monkeypatch, Fake3dDoc(plate, hole))
+    answer = asyncio.run(solids.autocad_solid_boolean(operation="subtract", handle="2E1", others=["2E2"]))
+    assert not answer.startswith("Error"), answer
+    result = json.loads(answer)
+    assert result["consumed"] == ["2E2"]
+    assert result["volume_after"] == pytest.approx(900.0)
+
+
+def test_boolean_still_refuses_a_line_before_consuming_anything(monkeypatch):
+    import asyncio
+
+    from autocad_mcp.tools import solids
+
+    plate, line = FakeSolid("2E1", 1000.0), FakeSolid("2E3", 0.0, kind="AcDbLine")
+    _patch(monkeypatch, Fake3dDoc(plate, line))
+    answer = asyncio.run(solids.autocad_solid_boolean(operation="subtract", handle="2E1", others=["2E3"]))
+    assert answer.startswith("Error") and "2E3 is a line" in answer
+    assert plate.cut == []
+
+
+@pytest.mark.parametrize("style", VISUAL_STYLES)
+def test_every_visual_style_has_a_vscurrent_option(style):
+    from autocad_mcp.tools.solids import VISUAL_STYLE_OPTIONS
+
+    assert VISUAL_STYLE_OPTIONS[style].startswith("_")
+
+
+def test_the_visual_style_is_set_with_the_vscurrent_command(monkeypatch):
+    """2026-10-28: 'not_set: visual_style (Error setting system variable)' — VSCURRENT is a command."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    doc = Fake3dDoc()
+    _patch(monkeypatch, doc)
+    answer = asyncio.run(solids.autocad_set_3d_view(visual_style="realistic", zoom_extents=False))
+    result = json.loads(answer)
+    assert "not_set" not in result, result
+    assert doc.sent == ["_.VSCURRENT _Realistic\n"]
+    assert result["visual_style"] == "realistic"
+
+
+def test_a_visual_style_option_autocad_does_not_take_is_cancelled_and_reported(monkeypatch):
+    """If VSCURRENT is still asking after its answer, it must not be left waiting for the next tool."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    class StillAsking(Fake3dDoc):
+        def GetVariable(self, name):
+            if name == "CMDACTIVE":
+                return 0 if self.sent and self.sent[-1].startswith("\x1b") else 1
+            return super().GetVariable(name)
+
+    monkeypatch.setattr(solids, "VSCURRENT_WAIT_S", 0.05)
+    monkeypatch.setattr(solids, "VSCURRENT_POLL_S", 0.0)
+    doc = StillAsking()
+    _patch(monkeypatch, doc)
+    result = json.loads(asyncio.run(solids.autocad_set_3d_view(visual_style="shaded with edges", zoom_extents=False)))
+    assert doc.sent[-1].startswith("\x1b")
+    assert any("visual_style" in item for item in result["not_set"]), result
+
+
+def test_a_visual_style_that_takes_a_moment_is_not_cancelled(monkeypatch):
+    """CMDACTIVE can still read 1 just after SendCommand while VSCURRENT finishes; that is not a refusal."""
+    import asyncio
+    import json
+
+    from autocad_mcp.tools import solids
+
+    class Finishing(Fake3dDoc):
+        reads = 0
+
+        def GetVariable(self, name):
+            if name == "CMDACTIVE":
+                self.reads += 1
+                return 1 if self.reads < 3 else 0
+            return super().GetVariable(name)
+
+    monkeypatch.setattr(solids, "VSCURRENT_POLL_S", 0.0)
+    doc = Finishing()
+    _patch(monkeypatch, doc)
+    result = json.loads(asyncio.run(solids.autocad_set_3d_view(visual_style="hidden", zoom_extents=False)))
+    assert "not_set" not in result, result
+    assert doc.sent == ["_.VSCURRENT _Hidden\n"]

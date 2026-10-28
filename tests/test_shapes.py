@@ -480,3 +480,9 @@ class TestOperationShape:
 
 def test_levels():
     assert risk_of("autocad_make_shape") is Risk.CHANGE
+
+
+def test_a_scale_bar_refuses_a_bare_scale_number():
+    """'scale': 50 could be 1:50 or 50:1; a scale bar labelled the wrong way is worse than none."""
+    with pytest.raises(ValueError, match="1:50"):
+        s.scale_bar(50, 100)

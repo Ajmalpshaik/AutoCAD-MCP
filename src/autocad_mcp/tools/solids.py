@@ -23,6 +23,7 @@ and work the rest out, and report both.
 from __future__ import annotations
 
 import math
+import time
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StrictInt
@@ -71,6 +72,31 @@ VISUAL_STYLES = (
     "2dwireframe", "wireframe", "hidden", "realistic", "conceptual",
     "shaded", "shaded with edges", "shades of gray", "sketchy", "x-ray",
 )
+
+# What to answer the VSCURRENT command with for each. VSCURRENT is a command,
+# not a system variable - SetVariable("VSCURRENT", ...) is refused (AutoCAD
+# 2027, 2026-10-28) - and COM has no visual style on a model viewport. The
+# leading underscore keeps the English option in any language of AutoCAD; the
+# two names with spaces go by their capital letter, as the prompt shows them
+# ("shaded with Edges", "shades of Gray").
+VISUAL_STYLE_OPTIONS: dict[str, str] = {
+    "2dwireframe": "_2dwireframe",
+    "wireframe": "_Wireframe",
+    "hidden": "_Hidden",
+    "realistic": "_Realistic",
+    "conceptual": "_Conceptual",
+    "shaded": "_Shaded",
+    "shaded with edges": "_E",
+    "shades of gray": "_G",
+    "sketchy": "_SKetchy",
+    "x-ray": "_X",
+}
+
+# How long VSCURRENT gets to finish before a prompt still open means its answer
+# was not taken. SendCommand normally returns with the command done; the wait
+# covers the times it does not.
+VSCURRENT_WAIT_S = 1.0
+VSCURRENT_POLL_S = 0.1
 
 Primitive = Literal[
     "box", "wedge", "cylinder", "cone", "sphere", "torus",
@@ -588,9 +614,7 @@ async def autocad_solid_boolean(
         # so a failure halfway would leave a mess that cannot be reasoned about.
         for entity, label in [(first, handle)] + list(zip(rest, others, strict=False)):
             kind = short_type(entity)
-            if kind not in ("3dsolid", "region") and "Solid3d" not in str(
-                _try(lambda e=entity: e.ObjectName, "")
-            ):
+            if kind not in ("3dsolid", "region"):
                 raise AutocadError(
                     f"{label} is a {kind}, not a 3D solid or a region, so it cannot take part "
                     "in a boolean. Make it a solid first with autocad_add_solid or "
@@ -918,7 +942,9 @@ async def autocad_set_3d_view(
     Error Handling:
         - An unknown direction or visual style is named, with the list of real
           ones, before anything changes.
-        - A visual style this AutoCAD does not have comes back in "not_set".
+        - The visual style is set by typing the VSCURRENT command (it is a
+          command, not a system variable). If AutoCAD does not take the
+          option, the command is cancelled and the style is in "not_set".
     """
     if direction and vector:
         raise AutocadError("Give a named 'direction' or a 'vector', not both.")
@@ -970,10 +996,22 @@ async def autocad_set_3d_view(
             result["direction"] = [round(v, 6) for v in aim]
 
         if style is not None:
+            option = VISUAL_STYLE_OPTIONS[style]
             try:
-                doc.SetVariable("VSCURRENT", style)
+                # Over COM, not the plug-in's quiet input: the plug-in takes
+                # typed input only inside a Change job, and this is a View tool.
+                doc.SendCommand(f"_.VSCURRENT {option}\n")
             except BaseException as exc:  # noqa: BLE001 - say so, change nothing else
                 not_set.append(f"visual_style ({com_message(exc)})")
+            else:
+                # Still asking means the option was not taken: cancel, so the
+                # next tool does not find AutoCAD waiting at the prompt.
+                if _still_asking(doc):
+                    _try(lambda: doc.SendCommand("\x1b\x1b"))
+                    not_set.append(
+                        f"visual_style (VSCURRENT did not take '{option}'; set it with "
+                        "the Visual Styles control at the top left of the drawing)"
+                    )
 
         if zoom_extents:
             try:
@@ -983,12 +1021,21 @@ async def autocad_set_3d_view(
                 not_set.append("zoom_extents")
 
         _try(lambda: doc.Regen(AC_ALL_VIEWPORTS))
-        result["current_visual_style"] = _try(lambda: str(doc.GetVariable("VSCURRENT")))
         if not_set:
             result["not_set"] = not_set
         return result
 
     return dumps(await run(work))
+
+
+def _still_asking(doc: Any) -> bool:
+    """Whether a command is still waiting once VSCURRENT has had its moment to finish."""
+    deadline = time.monotonic() + VSCURRENT_WAIT_S
+    while _try(lambda: int(doc.GetVariable("CMDACTIVE")), 0):
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(VSCURRENT_POLL_S)
+    return False
 
 
 # ---------------------------------------------------------------------------

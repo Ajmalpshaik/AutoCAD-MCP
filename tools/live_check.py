@@ -352,15 +352,23 @@ async def d21_the_scale_sets_everything_that_hangs_off_it(ctx: Context) -> str:
 
 
 async def d23_a_dim_style_leaves_the_drawing_as_it_found_it(ctx: Context) -> str:
-    """The row that proves CopyFrom: the style holds the settings, the drawing does not."""
-    before = {name: await variable(name) for name in ("DIMSCALE", "DIMTXT", "DIMASZ")}
+    """The row that proves CopyFrom: the style holds the settings, the drawing does not.
+
+    With a text style and a precision: on 2026-10-28 a text_style made the call
+    fail outright, and a precision sent as 0.0 is refused by a whole-number variable.
+    """
+    names = ("DIMSCALE", "DIMTXT", "DIMASZ", "DIMTXSTY", "DIMDEC")
+    before = {name: await variable(name) for name in names}
     out = parse(await settings.autocad_create_styles(dim_styles=[{
-        "name": "LC-DIM", "scale": 25, "text_height": 1.8, "arrow_size": 1.8, "replace": True,
+        "name": "LC-DIM", "scale": 25, "text_height": 1.8, "arrow_size": 1.8,
+        "text_style": "Standard", "precision": 0, "replace": True,
     }], replace=True))
     row = out["dim_styles"][0]
     expect(row.get("created") or row.get("variables"), f"the style was not made: {row}")
-    after = {name: await variable(name) for name in ("DIMSCALE", "DIMTXT", "DIMASZ")}
-    expect(all(near(after[k], before[k], 1e-6) for k in before),
+    expect(not row.get("notes"), f"part of the style was refused: {row.get('notes')}")
+    after = {name: await variable(name) for name in names}
+    expect(all(after[k] == before[k] if isinstance(before[k], str) else near(after[k], before[k], 1e-6)
+               for k in before),
            f"the drawing's own DIM variables changed: {before} -> {after}")
     styles = parse(await layers.autocad_list_styles())
     names = [str(n).upper() for n in styles.get("dimension_styles", styles.get("dim_styles", []))]
@@ -501,6 +509,19 @@ async def d30_a_sequence_cannot_spend_more_than_changes(ctx: Context) -> str:
     expect("admin" in lisped.lower(), f"run_lisp was refused for the wrong reason: {lisped[:100]}")
     expect("sequence" in nested.lower(), f"a nested sequence was refused for the wrong reason: {nested[:100]}")
     return "save_drawing refused (publish), run_lisp refused (admin), nested sequence refused"
+
+
+async def d32_a_scale_of_1_to_10_lands_and_a_bare_10_is_refused(ctx: Context) -> str:
+    """2026-10-28: scale='1:10' and scale=10 both failed 'could not convert string to float: ':''."""
+    out = parse(await settings.autocad_drawing_setup(scale="1:10"))
+    expect(not out.get("failed"), f"AutoCAD refused: {out.get('failed')}")
+    canno, dimscale = await variable("CANNOSCALE"), await variable("DIMSCALE")
+    expect(str(canno) == "1:10", f"CANNOSCALE is {canno!r}, not '1:10'")
+    expect(near(dimscale, 10.0, 1e-6), f"DIMSCALE is {dimscale}, not 10")
+    message = refusal(await settings.autocad_drawing_setup(scale=10))
+    expect("1:10" in message, f"scale=10 was refused without naming 1:10: {message[:120]}")
+    expect(near(await variable("DIMSCALE"), 10.0, 1e-6), "the refused scale=10 still changed DIMSCALE")
+    return "scale='1:10' set CANNOSCALE 1:10 and DIMSCALE 10; scale=10 was refused, asking for '1:10' or '10:1'"
 
 
 async def e1_a_slot_is_one_object(ctx: Context) -> str:
@@ -691,8 +712,11 @@ async def e18_a_schedule_becomes_a_table(ctx: Context) -> str:
     rows = [["CAM-01", "Dome", "Level 1"], ["CAM-02", "Bullet", "Level 1"], ["CAM-03", "Dome", "Level 2"]]
     out = parse(await annotate.autocad_add_table(
         position=[0, 50000], rows=rows, headers=["TAG", "TYPE", "LOCATION"],
-        title="CAMERA SCHEDULE", text_height=100, column_widths=[800, 800, 1200], layer="LC-ANNO",
+        title="CAMERA SCHEDULE", text_height=100, text_style="Standard",
+        column_widths=[800, 800, 1200], layer="LC-ANNO",
     ))
+    # 2026-10-28: the text height came back not_set and the text was tiny.
+    expect(not out.get("not_set"), f"AutoCAD refused part of it: {out.get('not_set')}")
     expect(out["rows"] == 5, f"the table has {out['rows']} rows; 1 title + 1 header + 3 data = 5")
     expect(out["columns"] == 3, f"it has {out['columns']} columns, not 3")
     expect(out["cells_written"] == 1 + 3 + 9, f"only {out['cells_written']} cells were written of 13")
@@ -822,7 +846,9 @@ async def e29_a_boolean_refuses_before_consuming(ctx: Context) -> str:
     message = refusal(await solids.autocad_solid_boolean(
         operation="union", handle=solid["handle"], others=[good["handle"], line["handle"]]
     ))
-    expect("not a 3D solid" in message, f"it was refused for the wrong reason: {message[:140]}")
+    # Naming the line, not the first solid: before 2026-10-28 every real solid was refused here.
+    expect("not a 3D solid" in message and message.startswith(line["handle"]),
+           f"it was refused for the wrong reason: {message[:140]}")
     for handle, label in ((solid["handle"], "the first solid"), (good["handle"], "the good solid")):
         still = parse(await query.autocad_get_entity(handle=handle))
         expect(still is not None, f"{label} was consumed by a call that failed")
@@ -859,14 +885,19 @@ async def e32_a_helix_comes_out(ctx: Context) -> str:
 
 
 async def e34_the_3d_view_and_style_take(ctx: Context) -> str:
+    # VSCURRENT is a command, not a variable, so the style is not read back here:
+    # the check is that AutoCAD took the option and is not left at the prompt.
+    # Whether it looks hidden is for autocad_preview.
     out = parse(await solids.autocad_set_3d_view(direction="sw_iso", visual_style="hidden"))
     expect(out.get("direction") == [-1.0, -1.0, 1.0], f"the direction reads {out.get('direction')}")
     expect(not out.get("not_set"), f"something was refused: {out.get('not_set')}")
-    vscurrent = str(await variable("VSCURRENT") or "")
-    expect("hidden" in vscurrent.lower(), f"VSCURRENT reads {vscurrent!r}, not Hidden")
+    expect(int(await variable("CMDACTIVE") or 0) == 0, "AutoCAD was left waiting at a prompt")
+    real = parse(await solids.autocad_set_3d_view(visual_style="realistic", zoom_extents=False))
+    expect(not real.get("not_set"), f"realistic was refused: {real.get('not_set')}")
     back = parse(await solids.autocad_set_3d_view(direction="top", visual_style="2dwireframe"))
     expect(back.get("direction") == [0.0, 0.0, 1.0], f"going back gave {back.get('direction')}")
-    return f"sw_iso + hidden took (VSCURRENT={vscurrent}), then back to plan"
+    expect(not back.get("not_set"), f"2dwireframe was refused: {back.get('not_set')}")
+    return "sw_iso + hidden, then realistic, then back to plan: VSCURRENT took each, nothing left waiting"
 
 
 async def e36_bulges_and_text_alignment_round_trip(ctx: Context) -> str:
@@ -1227,6 +1258,7 @@ CHECKS: tuple[Check, ...] = (
     Check("D29", "D", "a step that fails at run time stops the rest",
           d29_a_step_that_fails_at_run_time_stops_the_rest),
     Check("D30", "D", "a sequence cannot spend more than Changes", d30_a_sequence_cannot_spend_more_than_changes),
+    Check("D32", "D", "a 1:10 scale lands, a bare 10 is refused", d32_a_scale_of_1_to_10_lands_and_a_bare_10_is_refused),
     Check("E1", "E", "a slot is one object", e1_a_slot_is_one_object),
     Check("E2", "E", "a rounded rectangle keeps its size", e2_a_rounded_rectangle_keeps_its_size),
     Check("E3", "E", "a flange puts its holes on the PCD", e3_a_flange_puts_its_holes_on_the_pitch_circle),
