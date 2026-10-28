@@ -43,6 +43,29 @@ The group headings below give the level.
 `autocad_draw_arc`, `autocad_draw_ellipse`, `autocad_draw_point`, `autocad_add_text`,
 `autocad_add_mtext`, `autocad_add_dimension`, `autocad_insert_block`, `autocad_add_hatch`
 
+`autocad_add_hatch` takes a pattern from acad.pat, or a custom one written by
+`autocad_create_hatch_pattern` (it tries acad.pat first, then a NAME.pat on the support path).
+
+## Splines, multilines, wipeouts and xrefs (Change)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_draw_spline` | A smooth curve through fit points (flexible duct, a curved edge). The ends follow the first and last segments unless tangents are given; `closed` closes it smoothly; `coords="ucs"` |
+| `autocad_draw_multiline` | MLINE: a wall or double-line duct in one object. `scale` is the thickness with the STANDARD style; `justification` zero / top / bottom; `style` from the drawing (put back afterwards). `closed` repeats the first point, so that corner is not mitred |
+| `autocad_add_wipeout` | Mask an area, from corners or a closed straight-sided polyline (`erase_boundary`); `frames` sets WIPEOUTFRAME. No Automation call exists: it types WIPEOUT with world, unsnapped points (`_non *x,y`), in the current space ([D-38](DECISIONS.md)) |
+| `autocad_attach_xref` | XATTACH a .dwg: name from the file, insertion, scale, rotation, `overlay`. A name already in the drawing is refused. `autocad_list_blocks` lists xrefs with their paths |
+| `autocad_manage_xref` | `reload`, `unload`, `detach`, `bind` (names kept apart, NAME$0$...) or `insert` (names merged). Detach and both binds need `confirm=true` |
+
+## Custom hatch patterns and linetypes (Publish)
+
+| Tool | Purpose |
+|---|---|
+| `autocad_create_hatch_pattern` | Writes NAME.pat: `lines` or `cross` at an angle and spacing, optionally dashed, or `custom` families. The folder (Heron's own support folder by default) is put on AutoCAD's support path once, so HATCH and `autocad_add_hatch` find it ([D-39](DECISIONS.md)) |
+| `autocad_create_linetype` | Writes NAME.lin and loads it: a plain dash pattern, or a service line with its name in it (---- CHWS ---- CHWS ----), sized as it plots when LTSCALE is the drawing scale factor |
+
+Both check the file text first (AutoCAD's limits: six dashes and 80 characters a hatch line; 12
+dashes, 280 characters and a 47-character description for a linetype) and write nothing on `dry_run`.
+
 ## Labels (Change)
 
 `autocad_add_label` puts a label on something: MTEXT plus a leader with an arrow. Use it for every label.

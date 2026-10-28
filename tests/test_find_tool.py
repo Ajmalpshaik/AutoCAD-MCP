@@ -3,8 +3,8 @@
 Ajmal's doubt, in his words: *"still, I have doubt that it will find
 everything fast."* He was right to doubt it - the first version put the right
 tool first on 36 of 55 phrases and missed six altogether. This file is how
-that stopped being an opinion. It now stands at 55 of 67 first and 67 of 67
-in the top three, over all 107 tools.
+that stopped being an opinion. It now stands at 66 of 80 first and 80 of 80
+in the top three, over all 115 tools.
 
 **These phrases are our own**, so the score is a floor on a sample, not a
 promise about every phrase anyone will ever type. What it does catch is
@@ -30,13 +30,13 @@ from autocad_mcp.tools import register_all, resources
 
 register_all()
 
-# The floors. Current, over 107 tools: 55 of these put the right tool first
-# and all 67 find it in the top three. Set a little under, so ordinary
+# The floors. Current, over 115 tools: 66 of these put the right tool first
+# and all 80 find it in the top three. Set a little under, so ordinary
 # rewording does not fail the build but a real loss does. The top-three floor
 # is deliberately the full count minus one: a phrase that stops finding its
 # tool at all is the failure that costs someone time at the machine.
-FIRST_PLACE_FLOOR = 50
-TOP_THREE_FLOOR = 66
+FIRST_PLACE_FLOOR = 61
+TOP_THREE_FLOOR = 79
 
 
 CASES = [
@@ -110,6 +110,19 @@ CASES = [
     ("render this view for the client", "autocad_render"),
     ("run that duct section along the route I drew", "autocad_extrude_profile"),
     ("a 400 x 200 oval duct standing up", "autocad_add_solid"),
+    # The drafting objects added on 2026-10-28.
+    ("draw a spline through these points", "autocad_draw_spline"),
+    ("draw a flexible duct curve from the grille to the diffuser", "autocad_draw_spline"),
+    ("draw a 200 mm wall with a multiline", "autocad_draw_multiline"),
+    ("mline double line wall along these points", "autocad_draw_multiline"),
+    ("mask the hatch behind this tag with a wipeout", "autocad_add_wipeout"),
+    ("hide the wipeout frames", "autocad_add_wipeout"),
+    ("xref the architect's plan in at 0,0", "autocad_attach_xref"),
+    ("reload the xref after the new revision", "autocad_manage_xref"),
+    ("bind the xrefs before issue", "autocad_manage_xref"),
+    ("make a custom hatch pattern pat file for insulation", "autocad_create_hatch_pattern"),
+    ("create a CHWS linetype with the text in the line", "autocad_create_linetype"),
+    ("make a dash dot linetype lin file", "autocad_create_linetype"),
 ]
 
 def entries() -> list[Entry]:
