@@ -1327,6 +1327,7 @@ BY_EYE: dict[str, str] = {
     "D19": "needs the Publish padlock and a look at the PDF",
     "D20": "needs a look at the plotted sheet",
     "D31": "'the sheet looks right' is a judgement, not a measurement",
+    "D33": "the fault needs a sheet tab made active by hand after a Save As; not yet reproduced",
     "E5": "the stair profile is better judged by eye",
     "E6": "the steel section outlines are better judged by eye",
     "E8": "the scale bar's look is a judgement",

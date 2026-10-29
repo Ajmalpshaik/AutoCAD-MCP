@@ -105,3 +105,9 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 - [ ] Tag `v1.6.0` after NEEDS-CHECKING groups A, D, E and F pass - `tools/live_check.py --group all --write` does D, E and F.
 - [ ] Later: offer this repository to Heron AI as its AutoCAD adapter when Heron's capability registry is ready ([D-12](DECISIONS.md)).
+- [ ] With a sheet tab active, `autocad_status` and `autocad_add_table(space="paper")` raised a bare
+  `Exception occurred` (2026-10-28, row D33). Status is what the gate waits for, so every tool was
+  blocked until the Model tab was clicked. Reproduce live, find the call (suspect `doc.PaperSpace`),
+  and let status answer in paper space.
+- [ ] `autocad_create_layout` answered `Outcome unknown: AutoCAD went busy` on every call although
+  the tabs were made (2026-10-28, row D8). Find which step goes busy.
