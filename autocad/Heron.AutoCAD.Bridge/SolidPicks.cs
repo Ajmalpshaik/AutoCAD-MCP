@@ -16,6 +16,8 @@ namespace Heron.AutoCAD.Bridge
         public string Kind { get; set; } = "";
         public double[] Min { get; set; } = new double[3];
         public double[] Max { get; set; } = new double[3];
+        /// <summary>False when the kernel could not say where it is: picked by number only, never by a word.</summary>
+        public bool Known { get; set; } = true;
     }
 
     /// <summary>
@@ -24,8 +26,10 @@ namespace Heron.AutoCAD.Bridge
     ///
     /// The words go by the solid's world box, never by a face's normal: a flat
     /// face on the top of the box can only face up, whatever way the modelling
-    /// kernel stored it. Face words follow AutoCAD's view names (the front is
-    /// what the Front view looks at, the side towards -Y).
+    /// kernel stored it. Only flat faces answer to a face word: a cone's side
+    /// or a bowl's inside can have all its edges in one flat ring. Face words
+    /// follow AutoCAD's view names (the front is what the Front view looks at,
+    /// the side towards -Y).
     /// </summary>
     public static class SolidPicks
     {
@@ -34,8 +38,14 @@ namespace Heron.AutoCAD.Bridge
 
         private const string Lister = "autocad_list_solid_faces_and_edges";
 
-        /// <summary>Null and the numbers picked, or why nothing could be picked.</summary>
-        public static string? Choose(IList<TopologyPart> parts, JsonElement selector, PartKind kind, out int[] picked)
+        /// <summary>
+        /// Null and the numbers picked, or why nothing could be picked.
+        /// <paramref name="solidLow"/> / <paramref name="solidHigh"/> are the
+        /// solid's own extents; without them the box round the parts is used,
+        /// which misses a cone's apex or a dome's crown.
+        /// </summary>
+        public static string? Choose(IList<TopologyPart> parts, JsonElement selector, PartKind kind, out int[] picked,
+            double[]? solidLow = null, double[]? solidHigh = null)
         {
             picked = new int[0];
             var noun = kind == PartKind.Edge ? "edge" : "face";
@@ -67,21 +77,63 @@ namespace Heron.AutoCAD.Bridge
 
             var low = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
             var high = new[] { double.MinValue, double.MinValue, double.MinValue };
-            foreach (var part in parts)
-                for (var axis = 0; axis < 3; axis++)
+            if (solidLow != null && solidHigh != null)
+            {
+                low = solidLow;
+                high = solidHigh;
+            }
+            else
+            {
+                foreach (var part in parts)
                 {
-                    low[axis] = Math.Min(low[axis], Math.Min(part.Min[axis], part.Max[axis]));
-                    high[axis] = Math.Max(high[axis], Math.Max(part.Min[axis], part.Max[axis]));
+                    if (!part.Known) continue;
+                    for (var axis = 0; axis < 3; axis++)
+                    {
+                        low[axis] = Math.Min(low[axis], Math.Min(part.Min[axis], part.Max[axis]));
+                        high[axis] = Math.Max(high[axis], Math.Max(part.Min[axis], part.Max[axis]));
+                    }
                 }
+                if (low[0] == double.MaxValue) return "No " + noun + " of this solid could be read. Pick them by number from " + Lister + ".";
+            }
             var tolerance = Tolerance(low, high);
 
             var chosen = new List<int>();
             for (var i = 0; i < parts.Count; i++)
-                if (Matches(parts[i], word, kind, low, high, tolerance)) chosen.Add(i);
+                if (parts[i].Known && Matches(parts[i], word, kind, low, high, tolerance)) chosen.Add(i);
             if (chosen.Count == 0)
                 return "No " + noun + " of this solid is '" + word + "'. " + Lister + " lists them, with numbers to pick from.";
             picked = chosen.ToArray();
             return null;
+        }
+
+        /// <summary>
+        /// The solid's box for the words: the exact box round the parts, unless
+        /// AutoCAD's extents reach clearly further on a side (a cone's tip, a
+        /// dome's crown, where no edge goes). Extents can sit a hair outside the
+        /// true faces, which would lose a box's top face if taken as they are.
+        /// </summary>
+        public static void Box(IList<TopologyPart> parts, double[] extentsLow, double[] extentsHigh, out double[] low, out double[] high)
+        {
+            low = (double[])extentsLow.Clone();
+            high = (double[])extentsHigh.Clone();
+            var partLow = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
+            var partHigh = new[] { double.MinValue, double.MinValue, double.MinValue };
+            foreach (var part in parts)
+            {
+                if (!part.Known) continue;
+                for (var axis = 0; axis < 3; axis++)
+                {
+                    partLow[axis] = Math.Min(partLow[axis], Math.Min(part.Min[axis], part.Max[axis]));
+                    partHigh[axis] = Math.Max(partHigh[axis], Math.Max(part.Min[axis], part.Max[axis]));
+                }
+            }
+            if (partLow[0] == double.MaxValue) return;
+            var near = Tolerance(extentsLow, extentsHigh) * 1000;
+            for (var axis = 0; axis < 3; axis++)
+            {
+                if (Math.Abs(partLow[axis] - extentsLow[axis]) <= near) low[axis] = partLow[axis];
+                if (Math.Abs(partHigh[axis] - extentsHigh[axis]) <= near) high[axis] = partHigh[axis];
+            }
         }
 
         /// <summary>A millionth of the solid's size: flat is flat to the modeller, not to the last digit.</summary>
@@ -109,6 +161,7 @@ namespace Heron.AutoCAD.Bridge
                     default: return false;
                 }
             }
+            if (part.Kind != "plane") return false;
             switch (word)
             {
                 case "top": return Flat(2) && At(2, high);

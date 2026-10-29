@@ -274,8 +274,8 @@ Not proven in AutoCAD yet: [NEEDS-CHECKING group H](NEEDS-CHECKING.md).
 
 Edges and faces are picked by a **word** - edges `all`, `vertical`, `horizontal`, `top`, `bottom`;
 faces `top`, `bottom`, `front` (towards -Y, what the Front view looks at), `back`, `left`, `right`,
-going by the solid's box - or by **numbers** from the listing, which hold only until the solid
-changes.
+going by the solid's box, and flat faces only - or by **numbers** from the listing, which hold only
+until the solid changes.
 
 | Tool | Level | Purpose |
 |---|---|---|

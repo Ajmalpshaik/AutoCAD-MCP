@@ -316,3 +316,42 @@ def test_levels():
         "autocad_super_hatch",
     ):
         assert risk_of(tool) is Risk.CHANGE, tool
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (2026-10-29)
+# ---------------------------------------------------------------------------
+
+
+def test_a_pipe_that_cannot_be_opened_means_nothing_was_sent(pipe):
+    """Only a failure after the request went out is "outcome unknown"."""
+    pipe.error = bridge.PipeUnavailable("the pipe is gone")
+    with pytest.raises(bridge.BridgeRefused) as caught:
+        bridge.Bridge(1).run("j1", "loft", {})
+    assert str(caught.value).endswith(bridge.NOTHING_SENT)
+
+
+class TestMadeButNotReadBack:
+    """The plug-in made it; COM could not read it straight back (AutoCAD still busy).
+
+    Reporting an error would make the chat try again and make it twice.
+    """
+
+    @pytest.fixture
+    def busy(self, plugin):
+        def refuse(handle):
+            raise AutocadError("call was rejected by callee")
+
+        plugin.doc.HandleToObject = refuse
+        return plugin
+
+    def test_a_loft(self, busy):
+        busy.reply = {"created": True, "handle": "3F", "sections": 2}
+        out = call(solid_edits.autocad_loft(sections=["2A", "2B"]))
+        assert out["created"] is True and out["handle"] == "3F" and out["verified"] is False
+        assert "do not make it again" in out["warning"]
+
+    def test_a_super_hatch(self, busy):
+        busy.reply = {"created": True, "handle": "5D", "block": "SUPERHATCH-1", "tiles": 40}
+        out = call(superhatch.autocad_super_hatch(boundary="2A", block="PAVER"))
+        assert out["handle"] == "5D" and out["tiles"] == 40 and out["verified"] is False

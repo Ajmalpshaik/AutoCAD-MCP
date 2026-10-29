@@ -166,10 +166,11 @@ public class FakeHost : IJobHost
 
     public List<RunRequest> Runs { get; } = new();
     public RunResult RunAnswer { get; set; } = RunResult.Done(null);
+    public Func<RunRequest, RunResult>? OnRun { get; set; }
     public RunResult Run(RunRequest request)
     {
         Runs.Add(request);
-        return RunAnswer;
+        return OnRun != null ? OnRun(request) : RunAnswer;
     }
 }
 

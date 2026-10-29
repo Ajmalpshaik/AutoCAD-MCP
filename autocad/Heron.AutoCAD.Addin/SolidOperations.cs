@@ -111,7 +111,7 @@ namespace Heron.AutoCAD.Addin
             if (!(radius > 0)) throw new RunRefusal("The radius must be above zero.");
             var solid = RunDrawing.Open<Solid3d>(tr, db, handle, OpenMode.ForWrite, "a 3D solid");
             var topology = SolidTopology.Of(solid);
-            var picked = Pick(topology.Edges, args.Element("edges"), PartKind.Edge);
+            var picked = Pick(topology, PartKind.Edge, args.Element("edges"));
             var before = Volume(solid);
             var radii = new DoubleCollection();
             var setbacks = new DoubleCollection();
@@ -145,7 +145,7 @@ namespace Heron.AutoCAD.Addin
             if (!(distance > 0) || !(other > 0)) throw new RunRefusal("Both chamfer distances must be above zero.");
             var solid = RunDrawing.Open<Solid3d>(tr, db, handle, OpenMode.ForWrite, "a 3D solid");
             var topology = SolidTopology.Of(solid);
-            var faces = Pick(topology.Faces, args.Element("face"), PartKind.Face);
+            var faces = Pick(topology, PartKind.Face, args.Element("face"));
             if (faces.Length != 1)
                 throw new RunRefusal("A chamfer is measured from one face, and that picks " + faces.Length + ". Give the face's number from " + Lister + ".");
             var face = faces[0];
@@ -153,7 +153,7 @@ namespace Heron.AutoCAD.Addin
             int[] picked;
             if (args.Has("edges"))
             {
-                picked = Pick(topology.Edges, args.Element("edges"), PartKind.Edge);
+                picked = Pick(topology, PartKind.Edge, args.Element("edges"));
                 var stray = picked.Where(e => !onFace.Contains(e)).ToArray();
                 if (stray.Length > 0)
                     throw new RunRefusal("Edge " + string.Join(", ", stray) + " is not on face " + face + ". A chamfer's edges must be on the face it is "
@@ -189,7 +189,7 @@ namespace Heron.AutoCAD.Addin
             var outward = args.Flag("outward", false);
             var solid = RunDrawing.Open<Solid3d>(tr, db, handle, OpenMode.ForWrite, "a 3D solid");
             var topology = SolidTopology.Of(solid);
-            var removed = args.Has("remove") ? Pick(topology.Faces, args.Element("remove"), PartKind.Face) : new int[0];
+            var removed = args.Has("remove") ? Pick(topology, PartKind.Face, args.Element("remove")) : new int[0];
             if (removed.Length >= topology.Faces.Count) throw new RunRefusal("Removing every face would leave nothing to shell.");
             var before = Volume(solid);
             try
@@ -220,7 +220,7 @@ namespace Heron.AutoCAD.Addin
             if (Math.Abs(taper) >= Math.PI / 2) throw new RunRefusal("The taper must be less than 90 degrees either way.");
             var solid = RunDrawing.Open<Solid3d>(tr, db, handle, OpenMode.ForWrite, "a 3D solid");
             var topology = SolidTopology.Of(solid);
-            var picked = Pick(topology.Faces, args.Element("faces"), PartKind.Face);
+            var picked = Pick(topology, PartKind.Face, args.Element("faces"));
             var curved = picked.Where(i => topology.Faces[i].Kind != "plane").ToArray();
             if (curved.Length > 0)
                 throw new RunRefusal("Face " + string.Join(", ", curved) + " is not flat (" + topology.Faces[curved[0]].Kind
@@ -276,9 +276,10 @@ namespace Heron.AutoCAD.Addin
             });
         }
 
-        private static int[] Pick(IList<TopologyPart> parts, JsonElement selector, PartKind kind)
+        private static int[] Pick(SolidTopology topology, PartKind kind, JsonElement selector)
         {
-            var error = SolidPicks.Choose(parts, selector, kind, out var picked);
+            var parts = kind == PartKind.Edge ? topology.Edges : topology.Faces;
+            var error = SolidPicks.Choose(parts, selector, kind, out var picked, topology.Low, topology.High);
             if (error != null) throw new RunRefusal(error);
             return picked;
         }
@@ -343,6 +344,9 @@ namespace Heron.AutoCAD.Addin
         public List<double> FaceAreas { get; } = new List<double>();
         public List<double[]?> FaceNormals { get; } = new List<double[]?>();
         public List<int[]> FaceEdges { get; } = new List<int[]>();
+        /// <summary>The solid's box for the words (SolidPicks.Box); null when AutoCAD gave no extents.</summary>
+        public double[]? Low { get; private set; }
+        public double[]? High { get; private set; }
 
         public static SolidTopology Of(Solid3d solid)
         {
@@ -361,14 +365,36 @@ namespace Heron.AutoCAD.Addin
                 {
                     var index = topology.Faces.Count;
                     var edges = new List<int>();
-                    foreach (BoundaryLoop loop in face.Loops)
-                        foreach (Edge edge in loop.Edges)
-                            if (numbers.TryGetValue(Key(edge.SubentityPath.SubentId), out var number) && !edges.Contains(number))
-                                edges.Add(number);
+                    try
+                    {
+                        foreach (BoundaryLoop loop in face.Loops)
+                            foreach (Edge edge in loop.Edges)
+                                if (numbers.TryGetValue(Key(edge.SubentityPath.SubentId), out var number) && !edges.Contains(number))
+                                    edges.Add(number);
+                    }
+                    catch (System.Exception)
+                    {
+                        // A loop the kernel cannot walk (a cone's tip, a sphere's pole): the
+                        // face is still listed and picked by number.
+                    }
                     topology.FaceIds.Add(face.SubentityPath.SubentId);
                     topology.FaceEdges.Add(edges.ToArray());
                     topology.Faces.Add(topology.FacePart(face, index, edges));
                 }
+            }
+            try
+            {
+                var extents = solid.GeometricExtents;
+                // Edges only: they are sampled on the true curves, where a face's kernel box can be loose.
+                SolidPicks.Box(topology.Edges,
+                    new[] { extents.MinPoint.X, extents.MinPoint.Y, extents.MinPoint.Z },
+                    new[] { extents.MaxPoint.X, extents.MaxPoint.Y, extents.MaxPoint.Z }, out var low, out var high);
+                topology.Low = low;
+                topology.High = high;
+            }
+            catch (System.Exception)
+            {
+                // No extents: the words fall back to the box round the parts.
             }
             return topology;
         }
@@ -408,7 +434,11 @@ namespace Heron.AutoCAD.Addin
                 {
                 }
             }
-            if (low[0] == double.MaxValue) low = high = new double[3];
+            if (low[0] == double.MaxValue)
+            {
+                low = high = new double[3];
+                part.Known = false;
+            }
             part.Min = low;
             part.Max = high;
             Edges.Add(part);
@@ -419,11 +449,12 @@ namespace Heron.AutoCAD.Addin
         private TopologyPart FacePart(BrepFace face, int index, List<int> edges)
         {
             var part = new TopologyPart { Index = index, Kind = FaceKind(face) };
-            if (edges.Count > 0)
+            var known = edges.Where(e => Edges[e].Known).ToList();
+            if (known.Count > 0)
             {
                 var low = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
                 var high = new[] { double.MinValue, double.MinValue, double.MinValue };
-                foreach (var e in edges)
+                foreach (var e in known)
                     for (var axis = 0; axis < 3; axis++)
                     {
                         low[axis] = Math.Min(low[axis], Edges[e].Min[axis]);
@@ -445,6 +476,7 @@ namespace Heron.AutoCAD.Addin
                 }
                 catch (System.Exception)
                 {
+                    part.Known = false;
                 }
             }
             double area;

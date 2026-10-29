@@ -12,7 +12,6 @@ from typing import Annotated, Any
 
 from pydantic import Field, StrictInt
 
-from ..acad.entities import resolve_handle
 from ..acad.tables import validate_name
 from ..core.connection import get_doc, require_idle, run
 from ..core.errors import AutocadError
@@ -21,8 +20,8 @@ from ._shared import (
     COLOR_OPT,
     COORDS_OPT,
     LAYER_OPT,
-    created_payload,
     in_plugin,
+    plugin_created,
     ucs_for,
     world_angle,
     world_coords,
@@ -112,15 +111,6 @@ async def autocad_super_hatch(
             "layer": layer,
             "color": to_aci(color),
         }
-        report = in_plugin("super_hatch", args, "Super hatch")
-        handle = str(report.get("handle", ""))
-        if not handle:
-            raise AutocadError(
-                "Outcome unknown: Heron in AutoCAD made the super hatch but gave no handle back. Look "
-                "at the drawing before trying again."
-            )
-        entity = resolve_handle(doc, handle)
-        extra = {key: value for key, value in report.items() if key not in ("created", "handle")}
-        return created_payload(entity, {}, **extra)
+        return plugin_created(doc, in_plugin("super_hatch", args, "Super hatch"))
 
     return dumps(await run(work))

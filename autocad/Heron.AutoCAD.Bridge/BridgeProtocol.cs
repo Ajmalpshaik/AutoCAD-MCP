@@ -231,7 +231,9 @@ namespace Heron.AutoCAD.Bridge
         /// One of the plug-in's own operations (loft, fillet, super hatch...),
         /// which COM has no call for. Only one on the list, only inside this
         /// chat's running job, and only when the job's level covers it: a read
-        /// job can list a solid's faces but never fillet them.
+        /// job can list a solid's faces but never fillet them. The padlock is
+        /// checked again, and the one-chat hold is pinned while it runs, so a
+        /// long one never lets another chat in half way.
         /// </summary>
         private string Run(JsonElement root, string conversation)
         {
@@ -240,9 +242,21 @@ namespace Heron.AutoCAD.Bridge
             var operation = Str(root, "operation");
             if (!PluginOperations.TryLevel(operation, out var level)) return Refuse("BadRequest", Texts.UnknownOperation(operation));
             if (running.Risk < level) return Refuse("Job", Texts.NoRunJob);
+            // Checked again, not only at begin: a padlock turned off since then holds.
+            var refusal = Permissions.Refusal(level, _config());
+            if (refusal != null) return Refuse(refusal.RefusedBy, refusal.Message);
 
             var args = root.TryGetProperty("args", out var given) && given.ValueKind == JsonValueKind.Object ? given.GetRawText() : "{}";
-            var result = _host.Run(new RunRequest { Job = Str(root, "job"), Operation = operation, Drawing = running.Drawing, Args = args });
+            if (!_hold.TryPin(conversation, _clock())) return Refuse("InUse", Texts.InUse);
+            RunResult result;
+            try
+            {
+                result = _host.Run(new RunRequest { Job = Str(root, "job"), Operation = operation, Drawing = running.Drawing, Args = args });
+            }
+            finally
+            {
+                _hold.Unpin(_clock());
+            }
             if (result == null || !result.Ok)
                 return Refuse("Operation", string.IsNullOrWhiteSpace(result?.Message) ? Texts.UnreadableResult : result!.Message);
 

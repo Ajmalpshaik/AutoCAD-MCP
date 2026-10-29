@@ -60,6 +60,25 @@ namespace Heron.AutoCAD.Bridge
             return null;
         }
 
+        public const int MostArcSteps = 256;
+
+        /// <summary>
+        /// How many straight steps follow an arc of <paramref name="sweep"/>
+        /// radians and <paramref name="radius"/> to within
+        /// <paramref name="tolerance"/> (the gap between a step and the arc).
+        /// A clip is a polygon, so a big arc needs more steps than a small one.
+        /// </summary>
+        public static int ArcSteps(double sweep, double radius, double tolerance)
+        {
+            sweep = Math.Abs(sweep);
+            radius = Math.Abs(radius);
+            if (!(sweep > 0) || !(radius > 0)) return 4;
+            var ratio = tolerance > 0 ? Math.Min(1.0, tolerance / radius) : 1.0;
+            var step = 2 * Math.Acos(1 - ratio);
+            var steps = step > 0 ? (int)Math.Ceiling(Math.Min(sweep / step, MostArcSteps)) : MostArcSteps;
+            return Math.Max(4, Math.Min(MostArcSteps, steps));
+        }
+
         /// <summary>Rounding noise off, so a tile that ends exactly on the edge is not counted twice.</summary>
         private static double Clean(double value) => Math.Round(value, 9);
     }

@@ -379,3 +379,179 @@ public class DrawingNameTests
     [InlineData("Drawing2.dwg", "Drawing1.dwg")]
     public void Another_drawing(string active, string job) => Assert.False(DrawingNames.Same(active, job));
 }
+
+
+/// <summary>Fixes from the independent review of 2026-10-29: each test failed first.</summary>
+public class RunReviewTests
+{
+    private const string Token = "tok";
+    private readonly FakeHost _host = new();
+    private readonly HeronConfig _config = new() { WriteEnabled = true };
+    private DateTime _now = new(2026, 10, 29, 9, 0, 0, DateTimeKind.Utc);
+    private readonly BridgeProtocol _protocol;
+
+    public RunReviewTests() =>
+        _protocol = new BridgeProtocol(_host, () => _config, Token, new HeronHold(), () => _now);
+
+    private JsonElement Send(object request) => JsonDocument.Parse(_protocol.Handle(JsonSerializer.Serialize(request))).RootElement;
+
+    private JsonElement Begin(string conversation, string job) => Send(new
+    {
+        op = "begin", token = Token, conversation, job, tool = "autocad_shell_solid", risk = "change", summary = "Shell", drawing = "a.dwg",
+    });
+
+    private JsonElement Run(string conversation = "chat-a", string job = "j1") =>
+        Send(new { op = "run", token = Token, conversation, job, operation = "shell", args = new { handle = "2A" } });
+
+    [Fact]
+    public void Another_chat_cannot_take_AutoCAD_while_a_long_operation_runs()
+    {
+        Begin("chat-a", "j1");
+        JsonElement? othersBegin = null;
+        _host.OnRun = _ =>
+        {
+            // A shell on a big model: four minutes, past the three-minute hold.
+            _now = _now.AddMinutes(4);
+            othersBegin = Begin("chat-b", "j2");
+            return RunResult.Done(null);
+        };
+        Assert.True(Run().GetProperty("ok").GetBoolean());
+        Assert.False(othersBegin!.Value.GetProperty("ok").GetBoolean());
+        Assert.Equal(Texts.InUse, othersBegin.Value.GetProperty("message").GetString());
+        // Straight after, the hold still belongs to chat A: its Keep or Discard comes next.
+        Assert.False(Begin("chat-b", "j3").GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public void Changes_turned_off_during_the_job_stops_the_operation()
+    {
+        Begin("chat-a", "j1");
+        _config.WriteEnabled = false;
+        var reply = Run();
+        Assert.False(reply.GetProperty("ok").GetBoolean());
+        Assert.Equal(Texts.ChangesOff, reply.GetProperty("message").GetString());
+        Assert.Empty(_host.Runs);
+    }
+}
+
+public class HoldPinTests
+{
+    private static readonly DateTime T0 = new(2026, 10, 29, 9, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void A_pinned_hold_does_not_lapse()
+    {
+        var hold = new HeronHold();
+        Assert.True(hold.TryPin("chat-a", T0));
+        Assert.False(hold.TryTake("chat-b", T0.AddMinutes(10)));
+        hold.Unpin(T0.AddMinutes(10));
+        // Quiet time counts from the end of the operation, not its start.
+        Assert.False(hold.TryTake("chat-b", T0.AddMinutes(12)));
+        Assert.True(hold.TryTake("chat-b", T0.AddMinutes(13)));
+    }
+
+    [Fact]
+    public void A_pin_is_refused_to_another_chat()
+    {
+        var hold = new HeronHold();
+        hold.TryTake("chat-a", T0);
+        Assert.False(hold.TryPin("chat-b", T0.AddMinutes(1)));
+    }
+}
+
+public class SolidPickReviewTests
+{
+    private static TopologyPart Part(int i, string kind, double x0, double y0, double z0, double x1, double y1, double z1) =>
+        new() { Index = i, Kind = kind, Min = new[] { x0, y0, z0 }, Max = new[] { x1, y1, z1 } };
+
+    private static JsonElement J(string json) => JsonDocument.Parse(json).RootElement;
+
+    [Fact]
+    public void A_cones_side_is_never_its_top_or_bottom()
+    {
+        // A cone, 300 high: the side face's only edge is the base circle, so its box from edges is flat.
+        var faces = new List<TopologyPart> { Part(0, "plane", -50, -50, 0, 50, 50, 0), Part(1, "cone", -50, -50, 0, 50, 50, 0) };
+        double[] low = { -50, -50, 0 }, high = { 50, 50, 300 };
+        Assert.Null(SolidPicks.Choose(faces, J("\"bottom\""), PartKind.Face, out var bottom, low, high));
+        Assert.Equal(new[] { 0 }, bottom);
+        Assert.NotNull(SolidPicks.Choose(faces, J("\"top\""), PartKind.Face, out _, low, high));
+    }
+
+    [Fact]
+    public void A_cones_base_circle_is_a_bottom_edge_not_a_top_one()
+    {
+        var edges = new List<TopologyPart> { Part(0, "circle", -50, -50, 0, 50, 50, 0) };
+        double[] low = { -50, -50, 0 }, high = { 50, 50, 300 };
+        Assert.NotNull(SolidPicks.Choose(edges, J("\"top\""), PartKind.Edge, out _, low, high));
+        Assert.Null(SolidPicks.Choose(edges, J("\"bottom\""), PartKind.Edge, out var bottom, low, high));
+        Assert.Equal(new[] { 0 }, bottom);
+    }
+
+    [Fact]
+    public void A_bowl_cut_into_the_top_is_not_the_top_face()
+    {
+        var faces = new List<TopologyPart> { Part(0, "plane", 0, 0, 30, 10, 20, 30), Part(1, "sphere", 2, 2, 30, 8, 8, 30) };
+        Assert.Null(SolidPicks.Choose(faces, J("\"top\""), PartKind.Face, out var top, new[] { 0.0, 0, 0 }, new[] { 10.0, 20, 30 }));
+        Assert.Equal(new[] { 0 }, top);
+    }
+
+    [Fact]
+    public void A_part_that_could_not_be_read_is_never_picked_by_word()
+    {
+        var edges = new List<TopologyPart>
+        {
+            Part(0, "line", 0, 0, 0, 10, 0, 0),
+            new() { Index = 1, Kind = "curve", Known = false },
+        };
+        Assert.Null(SolidPicks.Choose(edges, J("\"all\""), PartKind.Edge, out var all, new[] { 0.0, 0, 0 }, new[] { 10.0, 20, 30 }));
+        Assert.Equal(new[] { 0 }, all);
+        // Still there by number.
+        Assert.Null(SolidPicks.Choose(edges, J("[1]"), PartKind.Edge, out var one));
+        Assert.Equal(new[] { 1 }, one);
+    }
+}
+
+public class ArcStepTests
+{
+    [Fact]
+    public void A_big_arc_is_followed_within_the_tolerance()
+    {
+        // A 10 m radius semicircle in a 20 m room: 16 fixed steps were 48 mm inside the arc.
+        var steps = TileGrid.ArcSteps(Math.PI, 10000, 2.0);
+        var sag = 10000 * (1 - Math.Cos(Math.PI / steps / 2));
+        Assert.True(sag <= 2.0, "sag " + sag + " with " + steps + " steps");
+    }
+
+    [Fact]
+    public void A_small_arc_still_gets_a_few_steps_and_a_huge_one_a_sane_number()
+    {
+        Assert.InRange(TileGrid.ArcSteps(Math.PI / 2, 5, 2.0), 4, 8);
+        Assert.InRange(TileGrid.ArcSteps(2 * Math.PI, 1e9, 1e-6), 4, TileGrid.MostArcSteps);
+    }
+}
+
+public class SolidBoxTests
+{
+    private static List<TopologyPart> Box() => new()
+    {
+        new() { Index = 0, Kind = "line", Min = new[] { 0.0, 0, 0 }, Max = new[] { 10.0, 0, 0 } },
+        new() { Index = 1, Kind = "line", Min = new[] { 0.0, 20, 30 }, Max = new[] { 10.0, 20, 30 } },
+    };
+
+    [Fact]
+    public void Extents_a_hair_loose_give_way_to_the_exact_parts()
+    {
+        SolidPicks.Box(Box(), new[] { -0.00001, -0.00001, -0.00001 }, new[] { 10.00001, 20.00001, 30.00001 }, out var low, out var high);
+        Assert.Equal(new[] { 0.0, 0, 0 }, low);
+        Assert.Equal(new[] { 10.0, 20, 30 }, high);
+    }
+
+    [Fact]
+    public void Extents_that_reach_further_win()
+    {
+        // A cone's tip: no edge goes up there, AutoCAD's extents do.
+        var cone = new List<TopologyPart> { new() { Index = 0, Kind = "circle", Min = new[] { -50.0, -50, 0 }, Max = new[] { 50.0, 50, 0 } } };
+        SolidPicks.Box(cone, new[] { -50.0, -50, 0 }, new[] { 50.0, 50, 300 }, out _, out var high);
+        Assert.Equal(300.0, high[2]);
+    }
+}

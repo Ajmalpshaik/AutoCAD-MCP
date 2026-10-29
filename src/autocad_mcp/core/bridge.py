@@ -66,6 +66,10 @@ class BridgeRefused(AutocadError):
     """The plug-in said no, or could not be asked. Nothing reached AutoCAD."""
 
 
+class PipeUnavailable(OSError):
+    """The plug-in's pipe could not be opened, so no request went out."""
+
+
 def bridge_enabled() -> bool:
     """False only when a developer switched the bridge off (HERON_AUTOCAD_BRIDGE=off)."""
     return os.environ.get("HERON_AUTOCAD_BRIDGE", "on").strip().lower() not in {
@@ -201,8 +205,8 @@ class Bridge:
 
         Three ways it can go wrong, each said differently:
 
-        - Not tried (no job, an older plug-in, not connected): BridgeRefused,
-          ending "Nothing was sent to AutoCAD."
+        - Not tried (no job, an older plug-in, not connected, the pipe would not
+          open): BridgeRefused, ending "Nothing was sent to AutoCAD."
         - Tried and refused by AutoCAD: AutocadError in the plug-in's words,
           which end "Nothing was changed." (it keeps nothing of a failed one).
         - No answer in time, or the pipe broke: the work may still have run, so
@@ -213,6 +217,11 @@ class Bridge:
             reply = _exchange(pipe, request, timeout)
         except TimeoutError:
             raise AutocadError(RUN_UNKNOWN.format(seconds=timeout, details="no answer")) from None
+        except PipeUnavailable as exc:
+            raise BridgeRefused(
+                f"Could not reach Heron in AutoCAD. Press the Heron button to connect again. (details: {exc}) "
+                + NOTHING_SENT
+            ) from exc
         except (pywintypes.error, OSError, ValueError) as exc:
             raise AutocadError(RUN_UNKNOWN.format(seconds=timeout, details=exc)) from exc
         if reply.get("ok") is True:
@@ -246,28 +255,10 @@ def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:
     path = rf"\\.\pipe\{pipe_name}"
     ms = max(1, int(timeout * 1000))
     try:
-        handle = win32file.CreateFile(
-            path,
-            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-            0,
-            None,
-            win32file.OPEN_EXISTING,
-            win32file.FILE_FLAG_OVERLAPPED,
-            None,
-        )
+        handle = _open(path, ms)
     except pywintypes.error as exc:
-        if exc.winerror != 231:  # ERROR_PIPE_BUSY
-            raise
-        win32pipe.WaitNamedPipe(path, ms)
-        handle = win32file.CreateFile(
-            path,
-            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-            0,
-            None,
-            win32file.OPEN_EXISTING,
-            win32file.FILE_FLAG_OVERLAPPED,
-            None,
-        )
+        # Nothing has gone out yet: the caller may say "nothing was sent".
+        raise PipeUnavailable(str(exc)) from exc
     event = win32event.CreateEvent(None, True, False, None)
     try:
         _overlapped_write(handle, event, (json.dumps(request) + "\n").encode("utf-8"), ms)
@@ -278,6 +269,27 @@ def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:
     finally:
         win32api.CloseHandle(event)
         win32file.CloseHandle(handle)
+
+
+def _open(path: str, ms: int) -> Any:
+    def create() -> Any:
+        return win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0,
+            None,
+            win32file.OPEN_EXISTING,
+            win32file.FILE_FLAG_OVERLAPPED,
+            None,
+        )
+
+    try:
+        return create()
+    except pywintypes.error as exc:
+        if exc.winerror != 231:  # ERROR_PIPE_BUSY
+            raise
+        win32pipe.WaitNamedPipe(path, ms)
+        return create()
 
 
 def _wait(handle: Any, overlapped: Any, ms: int) -> int:

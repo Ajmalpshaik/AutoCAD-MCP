@@ -23,8 +23,11 @@ namespace Heron.AutoCAD.Addin
         private const string SpatialFilterName = "SPATIAL";
         // ObjectARX's ACDB_INFINITE_XCLIP_DEPTH: no front or back clipping plane.
         private const double NoClipDepth = 1.0e+300;
-        private const int ArcSteps = 16;
+        // Steps along a heavy polyline's segment, and along a spline: fixed.
+        private const int SegmentSteps = 16;
         private const int CurveSteps = 128;
+        // An arc is followed to within this share of the outline's size (2 mm in a 20 m room).
+        private const double ArcTolerance = 1e-4;
         private const string NamePrefix = "SUPERHATCH-";
 
         public static RunResult Make(Database db, Transaction tr, RunArgs args)
@@ -153,13 +156,23 @@ namespace Heron.AutoCAD.Addin
             if (!plane.Normal.IsParallelTo(Vector3d.ZAxis))
                 throw new RunRefusal("Outline " + handle + " is tilted. A super hatch fills an outline drawn flat in plan (world XY).");
 
+            var tolerance = Size(curve) * ArcTolerance;
             var points = new List<Point2d>();
             if (curve is Polyline polyline)
             {
-                var segments = polyline.Closed ? polyline.NumberOfVertices : polyline.NumberOfVertices - 1;
+                var count = polyline.NumberOfVertices;
+                var segments = polyline.Closed ? count : count - 1;
                 for (var i = 0; i < segments; i++)
                 {
-                    var steps = Math.Abs(polyline.GetBulgeAt(i)) < 1e-12 ? 1 : ArcSteps;
+                    var bulge = polyline.GetBulgeAt(i);
+                    var steps = 1;
+                    if (Math.Abs(bulge) >= 1e-12)
+                    {
+                        // A bulge is tan(sweep / 4); the chord and the sweep give the radius.
+                        var sweep = 4 * Math.Atan(Math.Abs(bulge));
+                        var chord = polyline.GetPoint2dAt(i).GetDistanceTo(polyline.GetPoint2dAt((i + 1) % count));
+                        steps = TileGrid.ArcSteps(sweep, chord / (2 * Math.Sin(sweep / 2)), tolerance);
+                    }
                     for (var k = 0; k < steps; k++) Add(points, polyline.GetPointAtParameter(i + (double)k / steps));
                 }
             }
@@ -167,16 +180,33 @@ namespace Heron.AutoCAD.Addin
             {
                 // Whole parameters are the vertices: keep every corner.
                 for (var i = (int)Math.Round(curve.StartParam); i < (int)Math.Round(curve.EndParam); i++)
-                    for (var k = 0; k < ArcSteps; k++) Add(points, curve.GetPointAtParameter(i + (double)k / ArcSteps));
+                    for (var k = 0; k < SegmentSteps; k++) Add(points, curve.GetPointAtParameter(i + (double)k / SegmentSteps));
             }
             else
             {
+                var steps = CurveSteps;
+                if (curve is Circle circle) steps = TileGrid.ArcSteps(2 * Math.PI, circle.Radius, tolerance);
+                else if (curve is Ellipse ellipse) steps = TileGrid.ArcSteps(2 * Math.PI, ellipse.MajorRadius, tolerance);
                 double from = curve.StartParam, to = curve.EndParam;
-                for (var k = 0; k < CurveSteps; k++) Add(points, curve.GetPointAtParameter(from + (to - from) * k / CurveSteps));
+                for (var k = 0; k < steps; k++) Add(points, curve.GetPointAtParameter(from + (to - from) * k / steps));
             }
             while (points.Count > 1 && points[points.Count - 1].IsEqualTo(points[0])) points.RemoveAt(points.Count - 1);
             if (points.Count < 3) throw new RunRefusal("Outline " + handle + " encloses no area.");
             return points;
+        }
+
+        /// <summary>The outline's size across, for the arc tolerance.</summary>
+        private static double Size(Curve curve)
+        {
+            try
+            {
+                var box = curve.GeometricExtents;
+                return box.MinPoint.DistanceTo(box.MaxPoint);
+            }
+            catch (AcException)
+            {
+                return 0;
+            }
         }
 
         private static void Add(List<Point2d> points, Point3d p)

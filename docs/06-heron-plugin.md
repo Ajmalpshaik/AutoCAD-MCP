@@ -115,7 +115,8 @@ through AutoCAD's .NET API ([D-40](DECISIONS.md)). The server sends
 `run {job, operation, args}`; the plug-in:
 
 1. refuses unless `job` is this chat's running job and its level covers the operation (a Read job
-   may list a solid's faces and edges, nothing more);
+   may list a solid's faces and edges, nothing more), and checks the padlock again: one turned
+   off since `begin` holds. The one-chat hold stays with this chat while the operation runs;
 2. refuses any operation not on its list (`Heron.AutoCAD.Bridge/PluginOperations.cs`);
 3. waits up to 30 s for AutoCAD to be free, then on the main thread checks the active drawing is
    the one the job began on;

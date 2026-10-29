@@ -18,11 +18,10 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, StrictInt
 
-from ..acad.entities import resolve_handle
 from ..core.connection import get_doc, require_idle, run
 from ..core.errors import AutocadError
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta
-from ._shared import COLOR_OPT, LAYER_OPT, created_payload, in_plugin
+from ._shared import COLOR_OPT, LAYER_OPT, in_plugin, plugin_created
 
 EDGE_WORDS = ("all", "vertical", "horizontal", "top", "bottom")
 FACE_WORDS = ("top", "bottom", "front", "back", "left", "right")
@@ -60,16 +59,7 @@ def _created(operation: str, args: dict[str, Any], what: str) -> dict[str, Any]:
     """Something new: the plug-in's report, with the new object read back over COM."""
     doc = get_doc()
     require_idle(doc)
-    report = in_plugin(operation, args, what)
-    handle = str(report.get("handle", ""))
-    if not handle:
-        raise AutocadError(
-            "Outcome unknown: Heron in AutoCAD did it but gave no handle back. Look at the drawing "
-            "before trying again."
-        )
-    entity = resolve_handle(doc, handle)
-    extra = {key: value for key, value in report.items() if key not in ("created", "handle")}
-    return created_payload(entity, {}, **extra)
+    return plugin_created(doc, in_plugin(operation, args, what))
 
 
 @mcp.tool(
@@ -397,7 +387,10 @@ async def autocad_press_pull_faces(
 async def autocad_thicken_surface(
     handle: Annotated[str, Field(min_length=1, description="The surface, by handle.")],
     thickness: Annotated[float, Field(gt=0, description="Thickness, in drawing units.")],
-    both_sides: Annotated[bool, Field(default=False, description="Half each side of the surface instead of all to one side.")] = False,
+    both_sides: Annotated[
+        bool,
+        Field(default=False, description="Thicken to both sides of the surface instead of one. Check the reported volume: whether AutoCAD splits the thickness or adds it each side is not proven yet."),
+    ] = False,
     layer: Annotated[str | None, LAYER_OPT] = None,
     color: Annotated[str | StrictInt | None, COLOR_OPT] = None,
 ) -> str:
@@ -408,7 +401,7 @@ async def autocad_thicken_surface(
     Args:
         handle (str): the surface.
         thickness (float): the thickness.
-        both_sides (bool): half each side.
+        both_sides (bool): both sides of the surface (see the volume).
         layer (Optional[str]): layer for the solid, created if missing.
         color (Optional[str|int]): its colour.
 

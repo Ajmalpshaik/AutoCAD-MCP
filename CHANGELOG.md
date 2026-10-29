@@ -18,8 +18,10 @@ Newest first. Dates are when the change was made.
   `autocad_super_hatch` (a block tiled in a grid inside a closed outline, clipped like XCLIP, as
   one object). Edges and faces are picked by a word that goes by the solid's box ('top',
   'vertical', 'front') or by number. An older plug-in is told to update; no answer in time is
-  "Outcome unknown", never "nothing was sent". The add-in compiles for AutoCAD 2021-2024, 2025-2026
-  and 2027 with 0 warnings; none of it has run in AutoCAD yet.
+  "Outcome unknown", never "nothing was sent". An operation checks the padlock again when it starts
+  and keeps the one-chat hold while it runs; something made but not read back at once is reported
+  as made (`verified: false`), never as an error to retry. The add-in compiles for AutoCAD
+  2021-2024, 2025-2026 and 2027 with 0 warnings; none of it has run in AutoCAD yet.
 - Seven new tools, 115 in all, each with offline tests (live rows group G, NOT RUN):
   `autocad_draw_spline` (fit points, ends along the first and last segments, closed, UCS),
   `autocad_draw_multiline` (MLINE walls and double-line ducts: thickness, justification, style),

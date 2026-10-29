@@ -231,7 +231,7 @@ height=400)`.
 | H6 | `autocad_shell_solid(box, thickness=10, remove_faces="top")` | An open-top box, walls and floor 10 thick inside the old outline; volume 1000x600x400 - 980x580x390 = 18,324,000 | NOT RUN |
 | H7 | `autocad_press_pull_faces(box, faces="top", distance=150)` | The box 550 tall; volume up by 1000x600x150 = 90,000,000 | NOT RUN |
 | H8 | `autocad_loft(sections=[a 600 x 400 rectangle at z=0, a 450 circle at z=500])` | One solid, a rectangle-to-round transition 500 long; both outlines still there | NOT RUN |
-| H9 | `autocad_thicken_surface` on a 1000 x 1000 PLANESURF, `thickness=20` | A 20 thick solid (volume 20,000,000); the surface still there | NOT RUN |
+| H9 | `autocad_thicken_surface` on a 1000 x 1000 PLANESURF, `thickness=20`; then again with `both_sides=true` | A 20 thick solid (volume 20,000,000); the surface still there. With `both_sides`, write down whether it is 20 thick (split) or 40 (each side), and fix the tool's wording to match | NOT RUN |
 | H10 | `autocad_super_hatch(boundary=<an L-shaped closed polyline with one arc corner>, block=<a 600 x 300 rectangle block>)` | One block reference (LIST: SUPERHATCH-1). Tiles show only inside the outline, following the arc; ERASE takes it all; **one Ctrl+Z** takes it away. XCLIPFRAME 1 shows the clip frame | NOT RUN |
 | H11 | The same with `angle=45, origin=<the room centre>` | The grid and tiles turned 45 degrees, a tile's base point on the origin | NOT RUN |
 | H12 | Ask to keep on: fillet the box, answer Discard; super hatch, answer Discard | The sharp box back; the hatch reference gone, and PURGE finds no SUPERHATCH block left | NOT RUN |
