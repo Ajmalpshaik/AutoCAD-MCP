@@ -10,8 +10,9 @@ namespace Heron.AutoCAD.Bridge
     /// One request line in, one reply line out. No pipes and no AutoCAD here,
     /// so every rule the bridge enforces is tested offline.
     ///
-    /// Ops: ping, info, release, begin, end, ask_keep. Every op needs the
-    /// session token. begin is where the hold and the padlocks are checked.
+    /// Ops: ping, info, release, begin, end, ask_keep, send_quiet, run. Every
+    /// op needs the session token. begin is where the hold and the padlocks are
+    /// checked; send_quiet and run only work inside the job begin allowed.
     /// </summary>
     public sealed class BridgeProtocol
     {
@@ -25,7 +26,7 @@ namespace Heron.AutoCAD.Bridge
         private readonly Func<DateTime> _clock;
         private readonly object _grantGate = new object();
         private string? _grantConversation;
-        private readonly Dictionary<string, KeyValuePair<string, Risk>> _running = new Dictionary<string, KeyValuePair<string, Risk>>();
+        private readonly Dictionary<string, RunningJob> _running = new Dictionary<string, RunningJob>();
         private DateTime _grantLast;
 
         public BridgeProtocol(IJobHost host, Func<HeronConfig> config, string token, HeronHold hold, Func<DateTime> clock)
@@ -97,6 +98,8 @@ namespace Heron.AutoCAD.Bridge
                             return AskKeep(root, conversation);
                         case "send_quiet":
                             return SendQuiet(root, conversation);
+                        case "run":
+                            return Run(root, conversation);
                         default:
                             return Refuse("BadRequest", Texts.UnknownOp(op));
                     }
@@ -134,7 +137,7 @@ namespace Heron.AutoCAD.Bridge
                 Drawing = Str(root, "drawing"),
                 Conversation = conversation,
             };
-            lock (_running) _running[job.Job] = new KeyValuePair<string, Risk>(conversation, risk);
+            lock (_running) _running[job.Job] = new RunningJob(conversation, risk, job.Drawing);
             try
             {
                 _host.Begin(job);
@@ -213,10 +216,8 @@ namespace Heron.AutoCAD.Bridge
         /// </summary>
         private string SendQuiet(JsonElement root, string conversation)
         {
-            KeyValuePair<string, Risk> running;
-            bool found;
-            lock (_running) found = _running.TryGetValue(Str(root, "job"), out running);
-            if (!found || running.Key != conversation || running.Value == Risk.Read || running.Value == Risk.View)
+            var running = Running(root, conversation);
+            if (running == null || running.Risk == Risk.Read || running.Risk == Risk.View)
                 return Refuse("Job", Texts.NoJob);
             var lines = new List<string>();
             if (root.TryGetProperty("lines", out var list) && list.ValueKind == JsonValueKind.Array)
@@ -224,6 +225,67 @@ namespace Heron.AutoCAD.Bridge
                     if (item.ValueKind == JsonValueKind.String) lines.Add(item.GetString() ?? "");
             _host.SendQuiet(lines.ToArray());
             return Ok(null);
+        }
+
+        /// <summary>
+        /// One of the plug-in's own operations (loft, fillet, super hatch...),
+        /// which COM has no call for. Only one on the list, only inside this
+        /// chat's running job, and only when the job's level covers it: a read
+        /// job can list a solid's faces but never fillet them.
+        /// </summary>
+        private string Run(JsonElement root, string conversation)
+        {
+            var running = Running(root, conversation);
+            if (running == null) return Refuse("Job", Texts.NoRunJob);
+            var operation = Str(root, "operation");
+            if (!PluginOperations.TryLevel(operation, out var level)) return Refuse("BadRequest", Texts.UnknownOperation(operation));
+            if (running.Risk < level) return Refuse("Job", Texts.NoRunJob);
+
+            var args = root.TryGetProperty("args", out var given) && given.ValueKind == JsonValueKind.Object ? given.GetRawText() : "{}";
+            var result = _host.Run(new RunRequest { Job = Str(root, "job"), Operation = operation, Drawing = running.Drawing, Args = args });
+            if (result == null || !result.Ok)
+                return Refuse("Operation", string.IsNullOrWhiteSpace(result?.Message) ? Texts.UnreadableResult : result!.Message);
+
+            JsonDocument parsed;
+            try
+            {
+                parsed = JsonDocument.Parse(result.Json);
+            }
+            catch (JsonException)
+            {
+                return Refuse("Operation", Texts.UnreadableResult);
+            }
+            using (parsed)
+            {
+                if (parsed.RootElement.ValueKind != JsonValueKind.Object) return Refuse("Operation", Texts.UnreadableResult);
+                return Ok(w =>
+                {
+                    w.WritePropertyName("result");
+                    parsed.RootElement.WriteTo(w);
+                });
+            }
+        }
+
+        /// <summary>This chat's running job named in the request, or null.</summary>
+        private RunningJob? Running(JsonElement root, string conversation)
+        {
+            RunningJob? running;
+            lock (_running) _running.TryGetValue(Str(root, "job"), out running);
+            return running != null && running.Conversation == conversation ? running : null;
+        }
+
+        private sealed class RunningJob
+        {
+            public RunningJob(string conversation, Risk risk, string drawing)
+            {
+                Conversation = conversation;
+                Risk = risk;
+                Drawing = drawing;
+            }
+
+            public string Conversation { get; }
+            public Risk Risk { get; }
+            public string Drawing { get; }
         }
 
         private static string Str(JsonElement root, string name) =>

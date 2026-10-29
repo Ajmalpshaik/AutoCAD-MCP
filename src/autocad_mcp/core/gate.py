@@ -86,6 +86,19 @@ def quiet_sender() -> Callable[[list[str]], bool] | None:
     return lambda lines: job.bridge.send_quiet(job.id, lines)
 
 
+def plugin_runner() -> Callable[[str, dict[str, Any]], dict[str, Any]] | None:
+    """While a job runs with the plug-in: a way to have it do one of its own operations.
+
+    For what COM has no call for (D-40). None outside a job or with the bridge
+    off. The plug-in itself only runs an operation inside this chat's running
+    job, and only one the job's level covers.
+    """
+    job = _current
+    if job is None or job.bridge is None or job.id is None:
+        return None
+    return lambda operation, args: job.bridge.run(job.id, operation, args)
+
+
 def reset(looked_at: str | None = None) -> None:
     """Forget which drawing Heron checked (tests, and a fresh server start)."""
     global _last_drawing

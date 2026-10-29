@@ -4,6 +4,22 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased
 
+- **Plug-in 1.2.0: the plug-in does what COM has no call for** ([D-40](docs/DECISIONS.md)). A new
+  bridge request, `run`, asks it for one operation from a fixed list, only inside this chat's
+  running job, on the drawing that job began on, at a level that covers it. Each runs under a
+  document lock in one transaction, so a refusal changes nothing. Eight new tools, 123 in all (live
+  rows group H, NOT RUN):
+  `autocad_list_solid_faces_and_edges` (numbered faces and edges, Read),
+  `autocad_loft` (closed outlines in order, guides or a path, ruled, closed),
+  `autocad_fillet_solid_edges` and `autocad_chamfer_solid_edges`,
+  `autocad_shell_solid` (wall thickness, faces left open),
+  `autocad_press_pull_faces` (flat faces by a distance, optional taper),
+  `autocad_thicken_surface`, and
+  `autocad_super_hatch` (a block tiled in a grid inside a closed outline, clipped like XCLIP, as
+  one object). Edges and faces are picked by a word that goes by the solid's box ('top',
+  'vertical', 'front') or by number. An older plug-in is told to update; no answer in time is
+  "Outcome unknown", never "nothing was sent". The add-in compiles for AutoCAD 2021-2024, 2025-2026
+  and 2027 with 0 warnings; none of it has run in AutoCAD yet.
 - Seven new tools, 115 in all, each with offline tests (live rows group G, NOT RUN):
   `autocad_draw_spline` (fit points, ends along the first and last segments, closed, UCS),
   `autocad_draw_multiline` (MLINE walls and double-line ducts: thickness, justification, style),

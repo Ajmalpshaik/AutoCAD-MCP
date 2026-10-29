@@ -8,8 +8,9 @@ namespace Heron.AutoCAD.Addin
 {
     /// <summary>
     /// What a job looks like inside AutoCAD: the banner from begin, the
-    /// command-line line from end, and the Keep or Discard box. Called on
-    /// pipe threads; anything that touches AutoCAD goes through IdleQueue.
+    /// command-line line from end, the Keep or Discard box, and the plug-in's
+    /// own operations (PluginRunner). Called on pipe threads; anything that
+    /// touches AutoCAD goes through IdleQueue.
     /// </summary>
     internal sealed class AcadJobHost : IJobHost
     {
@@ -17,6 +18,10 @@ namespace Heron.AutoCAD.Addin
         // Longer than the box's own deadline (it closes as Discard first), shorter
         // than the server's wait, so a question can never outlive its chat.
         private static readonly TimeSpan KeepWait = HeronKeepQuestion.Deadline + TimeSpan.FromSeconds(30);
+        // How long an operation may wait for AutoCAD to be free. Not started by
+        // then, it never runs; once started it runs to the end (the server
+        // waits longer, and says "outcome unknown" if even that runs out).
+        private static readonly TimeSpan RunStartWait = TimeSpan.FromSeconds(30);
         private readonly HeronActivityBanner _banner;
         private readonly Func<HeronConfig> _config;
         // A read leaves no undo step, so one Ctrl+Z still undoes the last change.
@@ -72,6 +77,12 @@ namespace Heron.AutoCAD.Addin
                 if (doc == null) return;
                 foreach (var line in lines) doc.SendStringToExecute(line + "\n", true, false, false);
             });
+        }
+
+        public RunResult Run(RunRequest request)
+        {
+            var started = IdleQueue.TryInvoke(() => PluginRunner.Run(request), RunStartWait, out var result);
+            return started && result != null ? result : RunResult.Failed(Texts.NotStarted((int)RunStartWait.TotalSeconds));
         }
 
         /// <summary>Main thread. Select and zoom to what the job made, so the modeller sees it before choosing.</summary>

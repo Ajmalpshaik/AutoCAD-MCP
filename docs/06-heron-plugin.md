@@ -86,7 +86,7 @@ AutoCAD."* The hold frees itself after 3 quiet minutes, or when you disconnect.
 | Address file | `%LOCALAPPDATA%\Heron\autocad\bridges\<pid>.json`: pid, pipe, versions, token, start time. Written on connect, deleted on disconnect; a file whose AutoCAD is gone is deleted by the server |
 | Token | 24 random bytes, new on every connect, compared in constant time |
 | Message | one JSON line each way: `{op, token, client, conversation, ...}` |
-| Ops | `ping`, `info`, `release`, `begin`, `end`, `ask_keep`, `send_quiet` (batch input, echo off, only inside a running change job, [D-22](DECISIONS.md)) |
+| Ops | `ping`, `info`, `release`, `begin`, `end`, `ask_keep`, `send_quiet` (batch input, echo off, only inside a running change job, [D-22](DECISIONS.md)), `run` (one of the plug-in's own operations, below, [D-40](DECISIONS.md)) |
 
 **Units first ([D-19](DECISIONS.md)).** Nothing is changed in a drawing until Heron has run
 `autocad_status` on it, which reports its units. A switch to another drawing needs a new status check
@@ -99,13 +99,42 @@ For each tool call the server ([`core/gate.py`](../src/autocad_mcp/core/gate.py)
 3. sends `begin {tool, risk, summary, drawing}`: the plug-in checks token, hold and padlock, shows
    the banner and answers whether it will ask Keep or Discard (`askToKeep`), or refuses naming the
    padlock;
-4. runs the tool over COM, as one undo group;
+4. runs the tool over COM, as one undo group - or, for what COM has no call for, asks the plug-in
+   to do it with `run` (section 6a);
 5. if `begin` said it will ask and the call wrote something, sends `ask_keep`; on Discard, UNDO back to the mark put down before step 4;
 6. sends `end`, and writes the audit line.
 
 Every refusal ends with **"Nothing was sent to AutoCAD."**: refusals happen before anything in the
 drawing is read or changed. The one thing Heron does first is look up which AutoCAD and which
 drawing is active (for the guard and the audit line).
+
+## 6a. What the plug-in does itself (plug-in 1.2.0)
+
+Loft, solid edges and faces, thicken and super hatch have no COM call, so the plug-in does them
+through AutoCAD's .NET API ([D-40](DECISIONS.md)). The server sends
+`run {job, operation, args}`; the plug-in:
+
+1. refuses unless `job` is this chat's running job and its level covers the operation (a Read job
+   may list a solid's faces and edges, nothing more);
+2. refuses any operation not on its list (`Heron.AutoCAD.Bridge/PluginOperations.cs`);
+3. waits up to 30 s for AutoCAD to be free, then on the main thread checks the active drawing is
+   the one the job began on;
+4. does the operation under a document lock in one transaction, and answers what it did. A
+   refusal or an AutoCAD error drops the whole transaction: **"Nothing was changed."**
+
+| Operation | Tool | AutoCAD .NET call |
+|---|---|---|
+| `solid_topology` (Read) | `autocad_list_solid_faces_and_edges` | Brep faces and edges |
+| `loft` | `autocad_loft` | `Solid3d.CreateLoftedSolid` |
+| `fillet_edges` | `autocad_fillet_solid_edges` | `Solid3d.FilletEdges` |
+| `chamfer_edges` | `autocad_chamfer_solid_edges` | `Solid3d.ChamferEdges` |
+| `shell` | `autocad_shell_solid` | `Solid3d.ShellBody` |
+| `press_pull` | `autocad_press_pull_faces` | `Solid3d.ExtrudeFaces` |
+| `thicken` | `autocad_thicken_surface` | `Surface.Thicken` |
+| `super_hatch` | `autocad_super_hatch` | a block of tiles, one reference, a spatial filter (XCLIP) |
+
+An older plug-in answers that it does not know `run`; the tool then says to update the plug-in.
+If no answer comes within 300 s the result is "Outcome unknown": the operation may still have run.
 
 ## 7. Files on disk
 

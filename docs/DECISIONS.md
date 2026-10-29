@@ -112,7 +112,8 @@ until someone runs them; the docs never claim them as working before that.
 **Decided:** 2026-10-26, Ajmal chose this over rewriting every tool in C#. **Status:** in force.
 The plug-in owns connection, padlocks, banner and Keep or Discard; the Python server keeps its COM
 tools and asks the plug-in `begin` / `end` / `ask_keep` around every call, from one place
-(`tool_errors` -> `core/gate.py`). Tools can move into the plug-in later, one at a time.
+(`tool_errors` -> `core/gate.py`). Tools can move into the plug-in later, one at a time; since
+D-40 the plug-in does the operations COM has no call for.
 Known limit: COM stays reachable by other programs; the guard binds Heron, not the whole PC.
 
 ## D-15 - A write AutoCAD interrupted is never re-run
@@ -128,6 +129,29 @@ Gap: `send_command` / `run_lisp` paths that manage their own undo do not mark th
 **Decided:** 2026-10-26. **Status:** in force.
 An unreadable `heron-autocad.config` turns every padlock off (fail closed) but keeps the activity
 banner on, because the banner is what shows the modeller that Heron is working.
+
+## D-40 - The plug-in does what COM has no call for, one listed operation at a time
+
+**Decided:** 2026-10-29, on Ajmal's "start the super hatch and 3D tools in the plug-in".
+**Status:** in force; extends D-14. Loft, filleting, chamfering, shelling and press-pulling solid
+faces and edges, thickening a surface, and Express Tools' SUPERHATCH have no ActiveX call, so the
+plug-in does them through AutoCAD's .NET API. The server asks with a new bridge request, `run`,
+naming one operation from a fixed list in `Heron.AutoCAD.Bridge/PluginOperations.cs`; anything
+else is refused before AutoCAD is touched. `run` is allowed only inside this chat's running job,
+on the drawing that job began on, and only when the job's level covers the operation (a Read job
+may list a solid's faces, never fillet them): the padlock was already checked at `begin`. The
+operation runs on AutoCAD's main thread (through `IdleQueue`) under a document lock in **one
+transaction**: it all lands or none of it does, so every refusal can say "Nothing was changed."
+No answer in time is "Outcome unknown", never "nothing was sent", because the work may still
+have run. Edges and faces are picked by a word that goes by the solid's box ('top', 'vertical',
+'front' as in AutoCAD's Front view), never by a face normal, or by the numbers
+`autocad_list_solid_faces_and_edges` gives. The super hatch is one block of tiles inserted once and
+clipped the way XCLIP clips (a spatial filter), so it moves, erases and undoes as one object.
+Everything else stays on COM: a tool moves into the plug-in only when COM cannot do it. Rejected:
+typing LOFT / FILLETEDGE / SUPERHATCH as commands (each waits for picks on screen, which typed
+input cannot give reliably, and SUPERHATCH is an Express Tools LISP routine that may not be
+installed), and a general "run this .NET code" request (it would put the whole API behind the
+Changes padlock with nothing to check what it does).
 
 ## D-39 - Pattern and linetype files go in Heron's support folder, which goes on the support path
 

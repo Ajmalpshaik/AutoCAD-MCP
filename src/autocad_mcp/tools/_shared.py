@@ -14,7 +14,9 @@ from pydantic import Field
 
 from ..acad.coords import Ucs, as_vec3
 from ..acad.entities import describe
+from ..core.connection import mark_writing
 from ..core.errors import AutocadError
+from ..core.gate import plugin_runner
 from ..core.variants import apoint
 
 LAYER_OPT = Field(
@@ -180,3 +182,26 @@ def created_payload(
             "drawing. Check it with autocad_get_entity before building on it."
         )
     return payload
+
+
+PLUGIN_ONLY = (
+    "{what} is done by Heron's plug-in inside AutoCAD, because AutoCAD's COM interface has no "
+    "call for it, and this server is running with the plug-in switched off (--no-bridge). "
+    "Start it with the bridge on and press Heron in AutoCAD."
+)
+
+
+def in_plugin(operation: str, args: dict[str, Any], what: str, *, changes: bool = True) -> dict[str, Any]:
+    """Have the Heron plug-in do one of its own operations (D-40); what it did.
+
+    On the worker thread, inside the tool's job. Options left as None are not
+    sent. A change counts as a write before it is asked for, so a busy signal
+    after it is never retried into a second run (D-15) and Keep or Discard
+    asks about it.
+    """
+    runner = plugin_runner()
+    if runner is None:
+        raise AutocadError(PLUGIN_ONLY.format(what=what))
+    if changes:
+        mark_writing()
+    return runner(operation, {key: value for key, value in args.items() if value is not None})

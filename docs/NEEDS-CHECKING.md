@@ -211,13 +211,39 @@ below is NOT RUN**. By hand: Changes on, and Publish for G10-G12.
 | G11 | `autocad_create_linetype(name="CHWS", text="CHWS")` with `autocad_drawing_setup(scale="1:50")` set, on a long line | ---- CHWS ---- along the line, text upright on it and clear of the dashes, the right size on a 1:50 plot. If the text crowds the dashes, re-run with `text_width` and note the value | NOT RUN |
 | G12 | `autocad_create_linetype(name="DD-12", dashes=[12, -3, 0, -3])` | A dash-dot line, 12 dash, 3 gap, dot | NOT RUN |
 
+## Group H - Plug-in operations: loft, solid edges and faces, thicken, super hatch (AutoCAD 2027, this PC)
+
+The 8 tools added on 2026-10-29, done by the plug-in itself through the AutoCAD .NET API (D-40).
+The bridge's rules (which job, which level, which operations), the edge and face words and the
+tile grid are tested offline (`RunTests.cs`, `tests/test_plugin_tools.py`), and the add-in
+**compiles** against AutoCAD 2021-2024, 2025-2026 and 2027; **every row below is NOT RUN**. First
+install plug-in **1.2.0** (`tools/build_plugin.py`, close AutoCAD, `tools/install_plugin.py`). By
+hand: Changes on. For H3-H8, a box from `autocad_add_solid(shape="box", length=1000, width=600,
+height=400)`.
+
+| Row | Do | Pass looks like | Result |
+|---|---|---|---|
+| H1 | With plug-in 1.1.0 still installed, `autocad_fillet_solid_edges(box, radius=50, edges="vertical")` | Refused: "needs Heron's plug-in 1.2.0 or newer ... Nothing was sent"; the box unchanged | NOT RUN |
+| H2 | `autocad_list_solid_faces_and_edges(box)` | 6 faces, all `plane`, the top one centred at z=400 with normal [0,0,1]; 12 edges, all `line`, lengths 1000 / 600 / 400. Then one Ctrl+Z undoes the box, not a step the listing left | NOT RUN |
+| H3 | `autocad_fillet_solid_edges(box, radius=50, edges="vertical")`, look in Conceptual | The four upright corners rounded, R50; `volume_after` below `volume_before`. **One Ctrl+Z** puts the sharp box back (the plug-in's transaction is one undo step) | NOT RUN |
+| H4 | The same with `radius=5000` | Refused: "AutoCAD would not round ... Nothing was changed"; the box unchanged and no undo step added | NOT RUN |
+| H5 | `autocad_chamfer_solid_edges(box, face="top", distance=20)` | The four top edges bevelled 20 x 20; the bottom ones sharp | NOT RUN |
+| H6 | `autocad_shell_solid(box, thickness=10, remove_faces="top")` | An open-top box, walls and floor 10 thick inside the old outline; volume 1000x600x400 - 980x580x390 = 18,324,000 | NOT RUN |
+| H7 | `autocad_press_pull_faces(box, faces="top", distance=150)` | The box 550 tall; volume up by 1000x600x150 = 90,000,000 | NOT RUN |
+| H8 | `autocad_loft(sections=[a 600 x 400 rectangle at z=0, a 450 circle at z=500])` | One solid, a rectangle-to-round transition 500 long; both outlines still there | NOT RUN |
+| H9 | `autocad_thicken_surface` on a 1000 x 1000 PLANESURF, `thickness=20` | A 20 thick solid (volume 20,000,000); the surface still there | NOT RUN |
+| H10 | `autocad_super_hatch(boundary=<an L-shaped closed polyline with one arc corner>, block=<a 600 x 300 rectangle block>)` | One block reference (LIST: SUPERHATCH-1). Tiles show only inside the outline, following the arc; ERASE takes it all; **one Ctrl+Z** takes it away. XCLIPFRAME 1 shows the clip frame | NOT RUN |
+| H11 | The same with `angle=45, origin=<the room centre>` | The grid and tiles turned 45 degrees, a tile's base point on the origin | NOT RUN |
+| H12 | Ask to keep on: fillet the box, answer Discard; super hatch, answer Discard | The sharp box back; the hatch reference gone, and PURGE finds no SUPERHATCH block left | NOT RUN |
+| H13 | Put the box on a locked layer, then fillet it | Refused: "on a locked layer ... Nothing was changed" | NOT RUN |
+
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)
 
-Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026. **NO MACHINE.**
+Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026, and H1-H13 on each. **NO MACHINE.**
 
 ## Group C - AutoCAD 2021 to 2024 (.NET Framework 4.8 build)
 
-Rows C1-C19 = A1-A19 on each of 2021, 2022, 2023, 2024. **NO MACHINE.** Look first at C1 and C3:
+Rows C1-C19 = A1-A19 on each of 2021, 2022, 2023, 2024, and H1-H13 on each. **NO MACHINE.** Look first at C1 and C3:
 the .NET Framework build loads System.Text.Json and its helpers from the bundle folder (an
 AssemblyResolve fallback), so a missing-DLL error would show there, in the add-in log.
 

@@ -114,3 +114,22 @@ AutoCAD measures ordinates from ([D-37](DECISIONS.md)). A datum elsewhere is ref
 - `autocad_create_hatch_pattern` adds its folder to AutoCAD's support path, which stays in the
   profile ([D-39](DECISIONS.md)).
 - None of the seven is proven in AutoCAD yet ([NEEDS-CHECKING group G](NEEDS-CHECKING.md)).
+
+## 19. The plug-in operations (3D edits, super hatch) have their own limits
+
+- They need plug-in **1.2.0** or newer in AutoCAD; an older one is told to update, and nothing is
+  sent. With the server's `--no-bridge` they cannot run at all ([D-40](DECISIONS.md)).
+- Edge and face **numbers** from `autocad_list_solid_faces_and_edges` hold only while the solid is
+  unchanged: after a fillet, shell or press-pull the numbers move. List again. The words ('top',
+  'vertical', 'front'...) go by the solid's box, so a face on a step half way up is not 'top':
+  pick it by number.
+- A chamfer is measured from one face, as AutoCAD's own is: its edges must be on that face.
+- Press-pull moves flat faces only. Loft makes solids only: open outlines would make a surface, and
+  are refused. Loft and thicken keep their outlines and surfaces (as with DELOBJ off).
+- `autocad_super_hatch` fills an outline drawn flat in plan (world XY). Arcs in it are followed in
+  short straight steps (16 per arc, 128 round a circle or spline), as XCLIP stores any boundary. At
+  most 10,000 tiles. The tiles are placed over the outline's whole box and clipped, so a thin L
+  shape carries hidden tiles too.
+- Whether one Ctrl+Z undoes a plug-in operation as one step is the reason for row H3; until it
+  passes, treat that as unproven ([NEEDS-CHECKING group H](NEEDS-CHECKING.md)).
+- None of the eight is proven in AutoCAD yet.
