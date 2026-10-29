@@ -37,6 +37,13 @@
    prove: merge, stop every `autocad-mcp` server, rebuild and reinstall the plug-in with AutoCAD
    closed, start AutoCAD and a fresh server, then do H1-H13 by hand. H3 (one Ctrl+Z undoes a
    plug-in operation) and H10 (the super hatch clip shows) first: the rest rests on them.
+0. **2026-10-28/29: acoustic ceiling set drawn in AutoCAD 2027** (5 A1 sheets, 12 viewports;
+   drawing on this PC only, `drawings/ACOUSTIC`). Live results recorded: D12 and D16 PASS; D20
+   export of a layout FAIL, fixed in `_plot_pdf` (no `CenterPlot` on a layout plot, keep the
+   layout's sheet), re-run NOT RUN; D8 create_layout and the new D33 (status / table with a sheet
+   tab active) FAIL, causes not found, on the ROADMAP. Lesson: an AI must not write a `.lsp` and
+   load it through `autocad_run_lisp`; that is what brings back the SECURELOAD box (TROUBLESHOOTING
+   now says so).
 0. **2026-10-28: seven drafting tools built** (spline, multiline, wipeout, attach / manage xref,
    hatch pattern and linetype files; 115 tools). Offline gates green; group G of NEEDS-CHECKING is
    NOT RUN. Do G5 (wipeout lands in world coordinates, unsnapped, under a UCS) and G10 / G11 (the

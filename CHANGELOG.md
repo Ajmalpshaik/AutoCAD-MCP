@@ -22,6 +22,12 @@ Newest first. Dates are when the change was made.
   and keeps the one-chat hold while it runs; something made but not read back at once is reported
   as made (`verified: false`), never as an error to retry. The add-in compiles for AutoCAD
   2021-2024, 2025-2026 and 2027 with 0 warnings; none of it has run in AutoCAD yet.
+- `autocad_export(area="layout")` wrote no PDF in AutoCAD 2027 (2026-10-28, live row D20): it set
+  `CenterPlot`, which AutoCAD refuses on a layout plot, and choosing the DWG To PDF plotter dropped
+  an A1 sheet to ANSI A. A layout plot is no longer centred, and with no `paper_size` the layout's
+  own sheet is kept. Two tests that failed first. Live re-run NOT RUN.
+- `docs/TROUBLESHOOTING.md` no longer says the batch loads a `.lsp` from %TEMP% or tells users to
+  set SECURELOAD to 0 (stale since D-21); an "Unsigned Executable File" box never comes from Heron.
 - Seven new tools, 115 in all, each with offline tests (live rows group G, NOT RUN):
   `autocad_draw_spline` (fit points, ends along the first and last segments, closed, UCS),
   `autocad_draw_multiline` (MLINE walls and double-line ducts: thickness, justification, style),

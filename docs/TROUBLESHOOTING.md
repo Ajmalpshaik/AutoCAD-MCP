@@ -223,25 +223,29 @@ Ctrl+Z, not 500.
 
 ## `autocad_batch_draw` produces no output
 
-The batch tool writes a `.lsp` file to the Windows temp folder and asks AutoCAD
-to `(load ...)` it. AutoCAD can refuse that.
+The batch is sent to AutoCAD as a series of short AutoLISP expressions, as if
+typed at the command line ([D-21](DECISIONS.md)). Nothing is written to a file
+and nothing is `(load ...)`ed, so AutoCAD's `SECURELOAD` never comes into it.
+When a batch draws nothing, look at these instead:
 
-**AutoCAD is asking whether to load the file.** Look at its command line — the
-`SECURELOAD` system variable controls whether LISP files from untrusted paths
-are loaded. Either set it to 0:
+- **AutoCAD is mid-command.** A prompt on the command line swallows the
+  expressions. Press Esc in AutoCAD and run the batch again.
+- **Heron is not connected, or the Changes padlock is off.** The tool says so
+  in its refusal; press Heron on the Heron tab, then turn on Changes.
+- **The target layer is locked or frozen.** See the next section.
 
-> Set SECURELOAD to 0
+To confirm LISP evaluation works at all, ask Claude to run `autocad_run_lisp`
+with `(getvar "INSUNITS")`. If that returns a number, the LISP route is fine.
 
-...or add the temp folder to AutoCAD's Trusted Locations
-(Options → Files → Trusted Locations), which is the safer option.
+### AutoCAD shows "Unsigned Executable File"
 
-**Antivirus is holding the file.** Some scanners lock newly written `.lsp`
-files briefly. If batches fail intermittently but single draws work, this is
-the likely cause.
-
-To confirm the LISP path works at all, ask Claude to run
-`autocad_run_lisp` with `(getvar "INSUNITS")`. If that returns a number, LISP
-evaluation is fine and the problem is specifically file loading.
+Heron never loads a `.lsp` file, so this box does not come from a Heron tool.
+It means something loaded a LISP file from an untrusted folder: an office
+routine, or an AI that wrote its own `.lsp` and loaded it through
+`autocad_run_lisp`. Click **Do Not Load** unless you know the file, and tell the
+AI to send its LISP as expressions instead. Do not set `SECURELOAD` to 0 or add
+the temp folder to Trusted Locations to make the box go away: that would let
+any file there run unasked.
 
 ---
 
