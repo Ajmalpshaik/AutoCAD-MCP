@@ -114,3 +114,30 @@ AutoCAD measures ordinates from ([D-37](DECISIONS.md)). A datum elsewhere is ref
 - `autocad_create_hatch_pattern` adds its folder to AutoCAD's support path, which stays in the
   profile ([D-39](DECISIONS.md)).
 - None of the seven is proven in AutoCAD yet ([NEEDS-CHECKING group G](NEEDS-CHECKING.md)).
+
+## 19. The plug-in operations (3D edits, super hatch) have their own limits
+
+- They need plug-in **1.2.0** or newer in AutoCAD; an older one is told to update, and nothing is
+  sent. With the server's `--no-bridge` they cannot run at all ([D-40](DECISIONS.md)).
+- Edge and face **numbers** from `autocad_list_solid_faces_and_edges` hold only while the solid is
+  unchanged: after a fillet, shell or press-pull the numbers move. List again. The words ('top',
+  'vertical', 'front'...) go by the solid's box, so a face on a step half way up is not 'top':
+  pick it by number. A face word only ever picks a flat face: a cone's side or a bowl's inside is
+  picked by number.
+- A chamfer is measured from one face, as AutoCAD's own is: its edges must be on that face.
+- Press-pull moves flat faces only. Loft makes solids only: open outlines would make a surface, and
+  are refused. Loft and thicken keep their outlines and surfaces (as with DELOBJ off).
+- `autocad_super_hatch` fills an outline drawn flat in plan (world XY). Arcs in it are followed in
+  short straight steps, as XCLIP stores any boundary: within 1/10,000 of the outline's size for a
+  polyline's arcs and a circle (2 mm in a 20 m room), 16 steps per segment of an old-style 2D
+  polyline, 128 round a spline. At most 10,000 tiles. The tiles are placed over the outline's whole box and clipped, so a thin L
+  shape carries hidden tiles too.
+- Whether one Ctrl+Z undoes a plug-in operation as one step is the reason for row H3; until it
+  passes, treat that as unproven ([NEEDS-CHECKING group H](NEEDS-CHECKING.md)).
+- `autocad_thicken_surface(both_sides=true)`: AutoCAD's API does not say whether the thickness is
+  split between the two sides or added to each. Row H9 measures it; until then read the volume it
+  reports.
+- A plug-in operation keeps the one-chat hold for as long as it runs, and checks the padlock
+  again when it starts. It may wait up to 30 s for AutoCAD to be free; a disconnect in those
+  seconds does not stop it.
+- None of the eight is proven in AutoCAD yet.

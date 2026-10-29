@@ -163,6 +163,15 @@ public class FakeHost : IJobHost
 
     public List<string[]> Quiet { get; } = new();
     public void SendQuiet(string[] lines) => Quiet.Add(lines);
+
+    public List<RunRequest> Runs { get; } = new();
+    public RunResult RunAnswer { get; set; } = RunResult.Done(null);
+    public Func<RunRequest, RunResult>? OnRun { get; set; }
+    public RunResult Run(RunRequest request)
+    {
+        Runs.Add(request);
+        return OnRun != null ? OnRun(request) : RunAnswer;
+    }
 }
 
 public class ProtocolTests
@@ -722,6 +731,7 @@ public class ReadLeavesNoUndoStepTests
         public void End(JobEnd end) => _pause.End(end.Job);
         public string AskKeep(KeepRequest request) => "keep";
         public void SendQuiet(string[] lines) { }
+        public RunResult Run(RunRequest request) => RunResult.Done(null);
     }
 
     public ReadLeavesNoUndoStepTests() =>

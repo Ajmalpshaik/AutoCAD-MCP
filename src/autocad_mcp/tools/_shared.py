@@ -14,7 +14,9 @@ from pydantic import Field
 
 from ..acad.coords import Ucs, as_vec3
 from ..acad.entities import describe
+from ..core.connection import mark_writing
 from ..core.errors import AutocadError
+from ..core.gate import plugin_runner
 from ..core.variants import apoint
 
 LAYER_OPT = Field(
@@ -180,3 +182,55 @@ def created_payload(
             "drawing. Check it with autocad_get_entity before building on it."
         )
     return payload
+
+
+PLUGIN_ONLY = (
+    "{what} is done by Heron's plug-in inside AutoCAD, because AutoCAD's COM interface has no "
+    "call for it, and this server is running with the plug-in switched off (--no-bridge). "
+    "Start it with the bridge on and press Heron in AutoCAD."
+)
+
+
+def in_plugin(operation: str, args: dict[str, Any], what: str, *, changes: bool = True) -> dict[str, Any]:
+    """Have the Heron plug-in do one of its own operations (D-40); what it did.
+
+    On the worker thread, inside the tool's job. Options left as None are not
+    sent. A change counts as a write before it is asked for, so a busy signal
+    after it is never retried into a second run (D-15) and Keep or Discard
+    asks about it.
+    """
+    runner = plugin_runner()
+    if runner is None:
+        raise AutocadError(PLUGIN_ONLY.format(what=what))
+    if changes:
+        mark_writing()
+    return runner(operation, {key: value for key, value in args.items() if value is not None})
+
+
+def plugin_created(doc: Any, report: dict[str, Any]) -> dict[str, Any]:
+    """The payload for something the plug-in made, read back over COM.
+
+    Once the plug-in has said it made it, nothing here raises: an error would
+    send the chat round to make it a second time. A read-back that fails
+    (AutoCAD still busy redrawing) is ``verified: false`` with a warning.
+    """
+    handle = str(report.get("handle", ""))
+    if not handle:
+        raise AutocadError(
+            "Outcome unknown: Heron in AutoCAD did it but gave no handle back. Look at the drawing "
+            "before trying again."
+        )
+    extra = {key: value for key, value in report.items() if key not in ("created", "handle")}
+    try:
+        return created_payload(doc.HandleToObject(handle), {}, **extra)
+    except Exception:  # noqa: BLE001 - made is made; only the read-back failed
+        return {
+            "created": True,
+            "handle": handle,
+            **extra,
+            "verified": False,
+            "warning": (
+                f"Heron in AutoCAD made {handle}, but it could not be read back straight away "
+                "(AutoCAD may still be busy). Look at the drawing; do not make it again."
+            ),
+        }

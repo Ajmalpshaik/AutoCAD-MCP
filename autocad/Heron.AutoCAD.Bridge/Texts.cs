@@ -30,6 +30,24 @@ namespace Heron.AutoCAD.Bridge
 
         public const string BadRequest = "Heron in AutoCAD could not read the request. " + NothingSent;
 
+        public const string NoRunJob =
+            "Heron in AutoCAD only does its own operations inside a running job of this chat, at a level that covers them. " + NothingSent;
+
+        public static string UnknownOperation(string operation) =>
+            "Heron in AutoCAD does not have the operation '" + operation + "'. Update Heron so both sides match. " + NothingSent;
+
+        /// <summary>Ends every failed operation: the plug-in keeps nothing of one that failed.</summary>
+        public const string NothingChanged = "Nothing was changed.";
+
+        public const string UnreadableResult =
+            "Outcome unknown: Heron in AutoCAD did the operation but could not report what it did. Read the drawing back before trying again.";
+
+        public static string NotStarted(int seconds) =>
+            "AutoCAD did not get to the request within " + seconds + " s: a command or a dialog box may be open. Press Esc in AutoCAD and try again. " + NothingChanged;
+
+        public static string WrongDrawing(string active, string job) =>
+            "The active drawing is " + active + ", not " + job + " where this job began. Switch back to it, or call autocad_status on this one. " + NothingChanged;
+
         public static string UnknownOp(string op) =>
             "Heron in AutoCAD does not know the request '" + op + "'. Update Heron so both sides match. " + NothingSent;
     }

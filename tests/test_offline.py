@@ -111,6 +111,9 @@ COLOR_TOOLS = (
     "autocad_draw_spline",
     "autocad_draw_multiline",
     "autocad_add_wipeout",
+    "autocad_loft",
+    "autocad_thicken_surface",
+    "autocad_super_hatch",
 )
 
 
@@ -307,7 +310,7 @@ class TestToolSurface:
     asserted rather than assumed."""
 
     async def test_all_tools_registered(self, tools):
-        assert len(tools) == 115
+        assert len(tools) == 123
 
     async def test_every_name_is_namespaced(self, tools):
         assert all(tool.name.startswith("autocad_") for tool in tools)

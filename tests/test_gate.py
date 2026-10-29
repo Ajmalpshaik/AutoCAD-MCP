@@ -454,3 +454,41 @@ def test_quiet_sender_exists_only_inside_a_job(env):
     call(tool_errors(tool))
     assert seen == [("job1", ["(a)", "(b)"])]
     assert gate.quiet_sender() is None
+
+
+def test_a_plugin_operation_runs_in_its_job_and_keep_or_discard_covers_it(env, monkeypatch):
+    """The plug-in's own operations (D-40), through the real gate: the operation goes
+    to this call's job, counts as a write, and Discard takes away what it made."""
+    from autocad_mcp.tools import superhatch
+
+    FakeBridge.ask_to_keep = True
+    FakeBridge.answer = "discard"
+    runs = []
+
+    def run(self, job, operation, args):
+        runs.append((job, operation, args["block"]))
+        return {"created": True, "handle": "5D", "block": "SUPERHATCH-1", "tiles": 4}
+
+    class Made:
+        Handle, ObjectName, Layer = "5D", "AcDbBlockReference", "0"
+
+        @property
+        def Document(self):
+            return self
+
+        def HandleToObject(self, handle):
+            return Made()
+
+    async def now(fn):
+        return fn()
+
+    monkeypatch.setattr(FakeBridge, "run", run, raising=False)
+    monkeypatch.setattr(superhatch, "run", now)
+    monkeypatch.setattr(superhatch, "get_doc", Made)
+    monkeypatch.setattr(superhatch, "require_idle", lambda doc: None)
+
+    result = asyncio.run(superhatch.autocad_super_hatch(boundary="2A", block="PAVER"))
+    assert runs == [("job1", "super_hatch", "PAVER")]
+    assert env["marks"] == 1
+    assert ("ask_keep", "job1", ("5D",)) in FakeBridge.calls
+    assert env["discards"] == 1 and result == "Discarded: nothing was kept."

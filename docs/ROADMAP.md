@@ -54,11 +54,13 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
 
 ## Asked for on 2026-10-28, not buildable over COM
 
-- [ ] **Super hatch** (Express Tools SUPERHATCH: a block, image or xref repeated as a hatch). Express
-  Tools are LISP/ARX with no Automation; it would be the plug-in's job, through the .NET API.
-- [ ] **3D modelling commands** with no ActiveX call: loft, fillet / chamfer edges, shell, press-pull,
-  thicken, surfaces and meshes. Through the plug-in (`Solid3d.CreateLoftedSolid`,
-  `FilletEdges`, `ChamferEdges`, `ShellBody`...), each proven live before it is offered.
+- [x] **Super hatch** with a block: `autocad_super_hatch`, done by the plug-in (D-40, 2026-10-29).
+  Built and compiled for every version; live rows H10-H12 NOT RUN.
+- [ ] Super hatch with an image, an xref or a wipeout as the tile (Express Tools offers them).
+- [x] **3D modelling commands** with no ActiveX call: loft, fillet / chamfer edges, shell,
+  press-pull, thicken, and the face and edge listing they pick from - done by the plug-in (D-40,
+  2026-10-29). Built and compiled; live rows H1-H9 and H13 NOT RUN, so **not yet proven**.
+- [ ] Loft to a surface (open outlines), surfaces from curves (PLANESURF, NETWORK) and meshes.
 - [ ] `autocad_draw_multiline` close with a mitred corner (MLINE's own Close) - needs the plug-in.
 - [ ] `autocad_draw_spline` by control points, and editing a spline's fit points.
 

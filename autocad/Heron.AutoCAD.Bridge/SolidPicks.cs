@@ -1,0 +1,177 @@
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+
+namespace Heron.AutoCAD.Bridge
+{
+    public enum PartKind { Edge, Face }
+
+    /// <summary>
+    /// One edge or face of a solid, as far as picking needs it: its number
+    /// (its place in the list) and the world box round it.
+    /// </summary>
+    public sealed class TopologyPart
+    {
+        public int Index { get; set; }
+        public string Kind { get; set; } = "";
+        public double[] Min { get; set; } = new double[3];
+        public double[] Max { get; set; } = new double[3];
+        /// <summary>False when the kernel could not say where it is: picked by number only, never by a word.</summary>
+        public bool Known { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Which edges or faces the chat means: a word ("top", "vertical"...) or
+    /// numbers from the listing. Pure, so every rule is tested offline.
+    ///
+    /// The words go by the solid's world box, never by a face's normal: a flat
+    /// face on the top of the box can only face up, whatever way the modelling
+    /// kernel stored it. Only flat faces answer to a face word: a cone's side
+    /// or a bowl's inside can have all its edges in one flat ring. Face words
+    /// follow AutoCAD's view names (the front is what the Front view looks at,
+    /// the side towards -Y).
+    /// </summary>
+    public static class SolidPicks
+    {
+        public static readonly string[] EdgeWords = { "all", "vertical", "horizontal", "top", "bottom" };
+        public static readonly string[] FaceWords = { "top", "bottom", "front", "back", "left", "right" };
+
+        private const string Lister = "autocad_list_solid_faces_and_edges";
+
+        /// <summary>
+        /// Null and the numbers picked, or why nothing could be picked.
+        /// <paramref name="solidLow"/> / <paramref name="solidHigh"/> are the
+        /// solid's own extents; without them the box round the parts is used,
+        /// which misses a cone's apex or a dome's crown.
+        /// </summary>
+        public static string? Choose(IList<TopologyPart> parts, JsonElement selector, PartKind kind, out int[] picked,
+            double[]? solidLow = null, double[]? solidHigh = null)
+        {
+            picked = new int[0];
+            var noun = kind == PartKind.Edge ? "edge" : "face";
+            var words = kind == PartKind.Edge ? EdgeWords : FaceWords;
+            if (parts.Count == 0) return "This solid has no " + noun + "s to pick (a sphere has one face and no edges).";
+
+            if (selector.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<int>();
+                foreach (var item in selector.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Number || !item.TryGetInt32(out var number))
+                        return "Give the " + noun + "s as whole numbers from " + Lister + ".";
+                    if (number < 0 || number >= parts.Count)
+                        return "There is no " + noun + " " + number + ": this solid has " + parts.Count + " " + noun + "s, numbered 0-"
+                            + (parts.Count - 1) + ". " + Lister + " lists them.";
+                    if (!list.Contains(number)) list.Add(number);
+                }
+                if (list.Count == 0) return "Name at least one " + noun + ".";
+                picked = list.ToArray();
+                return null;
+            }
+
+            if (selector.ValueKind != JsonValueKind.String)
+                return "Name the " + noun + "s with a word (" + string.Join(", ", words) + ") or a list of numbers.";
+            var word = (selector.GetString() ?? "").Trim().ToLowerInvariant();
+            if (Array.IndexOf(words, word) < 0)
+                return "'" + word + "' is not a way to pick " + noun + "s. Use one of: " + string.Join(", ", words) + ", or a list of numbers from " + Lister + ".";
+
+            var low = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
+            var high = new[] { double.MinValue, double.MinValue, double.MinValue };
+            if (solidLow != null && solidHigh != null)
+            {
+                low = solidLow;
+                high = solidHigh;
+            }
+            else
+            {
+                foreach (var part in parts)
+                {
+                    if (!part.Known) continue;
+                    for (var axis = 0; axis < 3; axis++)
+                    {
+                        low[axis] = Math.Min(low[axis], Math.Min(part.Min[axis], part.Max[axis]));
+                        high[axis] = Math.Max(high[axis], Math.Max(part.Min[axis], part.Max[axis]));
+                    }
+                }
+                if (low[0] == double.MaxValue) return "No " + noun + " of this solid could be read. Pick them by number from " + Lister + ".";
+            }
+            var tolerance = Tolerance(low, high);
+
+            var chosen = new List<int>();
+            for (var i = 0; i < parts.Count; i++)
+                if (parts[i].Known && Matches(parts[i], word, kind, low, high, tolerance)) chosen.Add(i);
+            if (chosen.Count == 0)
+                return "No " + noun + " of this solid is '" + word + "'. " + Lister + " lists them, with numbers to pick from.";
+            picked = chosen.ToArray();
+            return null;
+        }
+
+        /// <summary>
+        /// The solid's box for the words: the exact box round the parts, unless
+        /// AutoCAD's extents reach clearly further on a side (a cone's tip, a
+        /// dome's crown, where no edge goes). Extents can sit a hair outside the
+        /// true faces, which would lose a box's top face if taken as they are.
+        /// </summary>
+        public static void Box(IList<TopologyPart> parts, double[] extentsLow, double[] extentsHigh, out double[] low, out double[] high)
+        {
+            low = (double[])extentsLow.Clone();
+            high = (double[])extentsHigh.Clone();
+            var partLow = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
+            var partHigh = new[] { double.MinValue, double.MinValue, double.MinValue };
+            foreach (var part in parts)
+            {
+                if (!part.Known) continue;
+                for (var axis = 0; axis < 3; axis++)
+                {
+                    partLow[axis] = Math.Min(partLow[axis], Math.Min(part.Min[axis], part.Max[axis]));
+                    partHigh[axis] = Math.Max(partHigh[axis], Math.Max(part.Min[axis], part.Max[axis]));
+                }
+            }
+            if (partLow[0] == double.MaxValue) return;
+            var near = Tolerance(extentsLow, extentsHigh) * 1000;
+            for (var axis = 0; axis < 3; axis++)
+            {
+                if (Math.Abs(partLow[axis] - extentsLow[axis]) <= near) low[axis] = partLow[axis];
+                if (Math.Abs(partHigh[axis] - extentsHigh[axis]) <= near) high[axis] = partHigh[axis];
+            }
+        }
+
+        /// <summary>A millionth of the solid's size: flat is flat to the modeller, not to the last digit.</summary>
+        public static double Tolerance(double[] low, double[] high)
+        {
+            double dx = high[0] - low[0], dy = high[1] - low[1], dz = high[2] - low[2];
+            return Math.Max(1e-9, Math.Sqrt(dx * dx + dy * dy + dz * dz) * 1e-6);
+        }
+
+        private static bool Matches(TopologyPart part, string word, PartKind kind, double[] low, double[] high, double tolerance)
+        {
+            double Size(int axis) => Math.Abs(part.Max[axis] - part.Min[axis]);
+            bool At(int axis, double[] side) => Math.Abs(part.Min[axis] - side[axis]) <= tolerance && Math.Abs(part.Max[axis] - side[axis]) <= tolerance;
+            bool Flat(int axis) => Size(axis) <= tolerance;
+
+            if (kind == PartKind.Edge)
+            {
+                switch (word)
+                {
+                    case "all": return true;
+                    case "vertical": return Flat(0) && Flat(1) && !Flat(2);
+                    case "horizontal": return Flat(2);
+                    case "top": return Flat(2) && At(2, high);
+                    case "bottom": return Flat(2) && At(2, low);
+                    default: return false;
+                }
+            }
+            if (part.Kind != "plane") return false;
+            switch (word)
+            {
+                case "top": return Flat(2) && At(2, high);
+                case "bottom": return Flat(2) && At(2, low);
+                case "front": return Flat(1) && At(1, low);
+                case "back": return Flat(1) && At(1, high);
+                case "left": return Flat(0) && At(0, low);
+                case "right": return Flat(0) && At(0, high);
+                default: return false;
+            }
+        }
+    }
+}

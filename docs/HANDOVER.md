@@ -27,6 +27,16 @@
 
 ## Next, in order
 
+0. **2026-10-29: the plug-in does its own operations** (plug-in **1.2.0**, D-40; 8 new tools, 123
+   in all): `autocad_list_solid_faces_and_edges`, `autocad_loft`, `autocad_fillet_solid_edges`,
+   `autocad_chamfer_solid_edges`, `autocad_shell_solid`, `autocad_press_pull_faces`,
+   `autocad_thicken_surface`, `autocad_super_hatch`. The server asks with the new bridge request
+   `run`; the plug-in does the work through the .NET API in one transaction. Bridge rules and the
+   Python side are tested offline; the add-in **compiles** for all three AutoCAD builds with 0
+   warnings, but **nothing of it has run in AutoCAD**: group H of NEEDS-CHECKING is NOT RUN. To
+   prove: merge, stop every `autocad-mcp` server, rebuild and reinstall the plug-in with AutoCAD
+   closed, start AutoCAD and a fresh server, then do H1-H13 by hand. H3 (one Ctrl+Z undoes a
+   plug-in operation) and H10 (the super hatch clip shows) first: the rest rests on them.
 0. **2026-10-28/29: acoustic ceiling set drawn in AutoCAD 2027** (5 A1 sheets, 12 viewports;
    drawing on this PC only, `drawings/ACOUSTIC`). Live results recorded: D12 and D16 PASS; D20
    export of a layout FAIL, fixed in `_plot_pdf` (no `CenterPlot` on a layout plot, keep the

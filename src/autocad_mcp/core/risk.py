@@ -46,6 +46,7 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "convert_points",
         "list_views",
         "solid_properties",
+        "list_solid_faces_and_edges",
         "list_materials",
     ),
     Risk.VIEW: (
@@ -111,6 +112,14 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "solid_boolean",
         "check_interference",
         "slice_solid",
+        # Done by the plug-in, which COM has no call for (D-40).
+        "loft",
+        "fillet_solid_edges",
+        "chamfer_solid_edges",
+        "shell_solid",
+        "press_pull_faces",
+        "thicken_surface",
+        "super_hatch",
         "transform_3d",
         "apply_material",
         "draw_3d_path",

@@ -34,8 +34,10 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 | `tools/patterns.py` | write custom hatch pattern (.pat) and linetype (.lin) files; the text is `acad/patterns.py` |
 | `tools/annotate.py` | multileaders, tables, revision clouds |
 | `tools/solids.py` | 3D solids, extrude and revolve, booleans, mass properties, 3D views |
+| `tools/solid_edits.py` | loft, fillet and chamfer solid edges, shell, press-pull, thicken, and the face and edge list: done by the plug-in (`run`, D-40) |
+| `tools/superhatch.py` | super hatch with a block, done by the plug-in |
 | `tools/resources.py` | MCP resources and prompts |
-| `tools/_shared.py` | option types and helpers shared by the tool files, including the UCS funnel |
+| `tools/_shared.py` | option types and helpers shared by the tool files, including the UCS funnel and `in_plugin` (the way to the plug-in's own operations) |
 
 After changing anything here: run the gates ([CONTRIBUTING](../../CONTRIBUTING.md)), then **restart the
 server** - a running one keeps the old code. Never reinstall while it runs

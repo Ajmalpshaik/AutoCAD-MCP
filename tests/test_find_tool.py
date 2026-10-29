@@ -3,8 +3,8 @@
 Ajmal's doubt, in his words: *"still, I have doubt that it will find
 everything fast."* He was right to doubt it - the first version put the right
 tool first on 36 of 55 phrases and missed six altogether. This file is how
-that stopped being an opinion. It now stands at 66 of 80 first and 80 of 80
-in the top three, over all 115 tools.
+that stopped being an opinion. It now stands at 76 of 91 first and 91 of 91
+in the top three, over all 123 tools.
 
 **These phrases are our own**, so the score is a floor on a sample, not a
 promise about every phrase anyone will ever type. What it does catch is
@@ -30,13 +30,13 @@ from autocad_mcp.tools import register_all, resources
 
 register_all()
 
-# The floors. Current, over 115 tools: 66 of these put the right tool first
-# and all 80 find it in the top three. Set a little under, so ordinary
+# The floors. Current, over 123 tools: 76 of these put the right tool first
+# and all 91 find it in the top three. Set a little under, so ordinary
 # rewording does not fail the build but a real loss does. The top-three floor
 # is deliberately the full count minus one: a phrase that stops finding its
 # tool at all is the failure that costs someone time at the machine.
-FIRST_PLACE_FLOOR = 61
-TOP_THREE_FLOOR = 79
+FIRST_PLACE_FLOOR = 71
+TOP_THREE_FLOOR = 90
 
 
 CASES = [
@@ -123,6 +123,18 @@ CASES = [
     ("make a custom hatch pattern pat file for insulation", "autocad_create_hatch_pattern"),
     ("create a CHWS linetype with the text in the line", "autocad_create_linetype"),
     ("make a dash dot linetype lin file", "autocad_create_linetype"),
+    # The 3D edits and super hatch the plug-in does itself (2026-10-29).
+    ("number the edges of this solid so I can pick them", "autocad_list_solid_faces_and_edges"),
+    ("make a transition from the rectangular duct to the round one", "autocad_loft"),
+    ("loft these sections into a solid", "autocad_loft"),
+    ("round the upright edges of the plinth", "autocad_fillet_solid_edges"),
+    ("fillet the edges of this 3D block 5 mm", "autocad_fillet_solid_edges"),
+    ("chamfer the top edges of the base plate", "autocad_chamfer_solid_edges"),
+    ("make this box an open top tank with 10 mm walls", "autocad_shell_solid"),
+    ("pull the top face of the plinth up 150", "autocad_press_pull_faces"),
+    ("thicken this roof surface", "autocad_thicken_surface"),
+    ("fill the terrace with the paver block like a hatch", "autocad_super_hatch"),
+    ("superhatch this area with a block", "autocad_super_hatch"),
 ]
 
 def entries() -> list[Entry]:

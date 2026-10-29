@@ -266,6 +266,28 @@ Arcs come out as polyline bulges, so a slot or an elbow stays **one object**.
 `SectionSolid` is deliberately **not** here: no documented ActiveX signature for it could be
 found, and guessing one would risk the model ([D-33](DECISIONS.md)).
 
+## 3D edits and super hatch, done by the plug-in (Change; the listing is Read)
+
+COM has no call for these, so the Heron plug-in (1.2.0 or newer) does them through AutoCAD's .NET
+API, each in one transaction: all of it or none ([D-40](DECISIONS.md), [06](06-heron-plugin.md)).
+Not proven in AutoCAD yet: [NEEDS-CHECKING group H](NEEDS-CHECKING.md).
+
+Edges and faces are picked by a **word** - edges `all`, `vertical`, `horizontal`, `top`, `bottom`;
+faces `top`, `bottom`, `front` (towards -Y, what the Front view looks at), `back`, `left`, `right`,
+going by the solid's box, and flat faces only - or by **numbers** from the listing, which hold only
+until the solid changes.
+
+| Tool | Level | Purpose |
+|---|---|---|
+| `autocad_list_solid_faces_and_edges` | Read | Numbers each face (kind, area, centre, normal, its edges) and edge (kind, ends, length) |
+| `autocad_loft` | Change | LOFT: a solid through closed outlines in order - a rectangle-to-round duct transition, a tapered column. Optional guides or a path, `ruled`, `closed`. The outlines are kept |
+| `autocad_fillet_solid_edges` | Change | FILLETEDGE: round edges by a radius |
+| `autocad_chamfer_solid_edges` | Change | CHAMFEREDGE: bevel the edges of one face (all of them, or those named), by one or two distances |
+| `autocad_shell_solid` | Change | SOLIDEDIT Shell: hollow to a wall thickness, leaving faces open (`remove_faces="top"` for a tank); inside unless `outward` |
+| `autocad_press_pull_faces` | Change | Push or pull flat faces by a distance, with an optional taper |
+| `autocad_thicken_surface` | Change | THICKEN: a solid from a surface; the surface is kept |
+| `autocad_super_hatch` | Change | Express Tools' SUPERHATCH with a block: tiles in a grid (spacing, origin, angle, scale) inside a closed outline drawn flat in plan, clipped as XCLIP clips. One object; at most 10,000 tiles |
+
 ## Materials and rendering (Change; listing is Read, rendering is Admin)
 
 | Tool | Level | Purpose |

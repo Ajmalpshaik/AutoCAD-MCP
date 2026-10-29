@@ -45,10 +45,29 @@ CLIENT = os.environ.get("HERON_CLIENT_ID") or socket.gethostname()
 
 CALL_TIMEOUT = 5.0
 KEEP_TIMEOUT = 600.0
+# A fillet or a super hatch on a big model can take a while; the plug-in itself
+# gives up only on work AutoCAD never started (30 s).
+RUN_TIMEOUT = 300.0
+
+# The first plug-in that does its own operations (D-40).
+RUN_SINCE = "1.2.0"
+OLD_PLUGIN = (
+    f"This needs Heron's plug-in {RUN_SINCE} or newer in AutoCAD, and the one running is older. "
+    "Rebuild and reinstall it (tools/build_plugin.py, then tools/install_plugin.py) and restart "
+    "AutoCAD. " + NOTHING_SENT
+)
+RUN_UNKNOWN = (
+    "Outcome unknown: Heron in AutoCAD did not answer within {seconds:.0f} s, so the operation may "
+    "still have run (one Ctrl+Z reverses it). Look at the drawing before trying again. (details: {details})"
+)
 
 
 class BridgeRefused(AutocadError):
     """The plug-in said no, or could not be asked. Nothing reached AutoCAD."""
+
+
+class PipeUnavailable(OSError):
+    """The plug-in's pipe could not be opened, so no request went out."""
 
 
 def bridge_enabled() -> bool:
@@ -114,7 +133,7 @@ class Bridge:
             return None
         return address if address.get("pipeName") and address.get("token") else None
 
-    def call(self, op: str, timeout: float = CALL_TIMEOUT, **fields: Any) -> dict:
+    def _request(self, op: str, fields: dict[str, Any]) -> tuple[str, dict]:
         address = self.find()
         if address is None:
             raise BridgeRefused(NOT_CONNECTED)
@@ -126,8 +145,12 @@ class Bridge:
             "protocolVersion": PROTOCOL_VERSION,
             **fields,
         }
+        return address["pipeName"], request
+
+    def call(self, op: str, timeout: float = CALL_TIMEOUT, **fields: Any) -> dict:
+        pipe, request = self._request(op, fields)
         try:
-            return _exchange(address["pipeName"], request, timeout)
+            return _exchange(pipe, request, timeout)
         except TimeoutError:
             raise BridgeRefused(
                 f"Heron in AutoCAD did not answer within {timeout:.0f} s. AutoCAD may "
@@ -177,6 +200,40 @@ class Bridge:
             return False
         return reply.get("ok") is True
 
+    def run(self, job: str, operation: str, args: dict[str, Any], timeout: float = RUN_TIMEOUT) -> dict:
+        """Have the plug-in do one of its own operations (D-40); what it did.
+
+        Three ways it can go wrong, each said differently:
+
+        - Not tried (no job, an older plug-in, not connected, the pipe would not
+          open): BridgeRefused, ending "Nothing was sent to AutoCAD."
+        - Tried and refused by AutoCAD: AutocadError in the plug-in's words,
+          which end "Nothing was changed." (it keeps nothing of a failed one).
+        - No answer in time, or the pipe broke: the work may still have run, so
+          it is "Outcome unknown", never "nothing was sent".
+        """
+        pipe, request = self._request("run", {"job": job, "operation": operation, "args": args})
+        try:
+            reply = _exchange(pipe, request, timeout)
+        except TimeoutError:
+            raise AutocadError(RUN_UNKNOWN.format(seconds=timeout, details="no answer")) from None
+        except PipeUnavailable as exc:
+            raise BridgeRefused(
+                f"Could not reach Heron in AutoCAD. Press the Heron button to connect again. (details: {exc}) "
+                + NOTHING_SENT
+            ) from exc
+        except (pywintypes.error, OSError, ValueError) as exc:
+            raise AutocadError(RUN_UNKNOWN.format(seconds=timeout, details=exc)) from exc
+        if reply.get("ok") is True:
+            result = reply.get("result")
+            return result if isinstance(result, dict) else {}
+        message = str(reply.get("message", ""))
+        if reply.get("refusedBy") == "Operation":
+            raise AutocadError(message or "AutoCAD refused the operation. Nothing was changed.")
+        if reply.get("refusedBy") == "BadRequest" and "does not know the request 'run'" in message:
+            raise BridgeRefused(OLD_PLUGIN)
+        raise BridgeRefused(_ensure_sentence(message))
+
     def ask_keep(self, job: str, summary: str, handles: list[str]) -> str:
         """keep | discard | keep_rest, or "unknown" when the plug-in could not answer.
 
@@ -198,28 +255,10 @@ def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:
     path = rf"\\.\pipe\{pipe_name}"
     ms = max(1, int(timeout * 1000))
     try:
-        handle = win32file.CreateFile(
-            path,
-            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-            0,
-            None,
-            win32file.OPEN_EXISTING,
-            win32file.FILE_FLAG_OVERLAPPED,
-            None,
-        )
+        handle = _open(path, ms)
     except pywintypes.error as exc:
-        if exc.winerror != 231:  # ERROR_PIPE_BUSY
-            raise
-        win32pipe.WaitNamedPipe(path, ms)
-        handle = win32file.CreateFile(
-            path,
-            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
-            0,
-            None,
-            win32file.OPEN_EXISTING,
-            win32file.FILE_FLAG_OVERLAPPED,
-            None,
-        )
+        # Nothing has gone out yet: the caller may say "nothing was sent".
+        raise PipeUnavailable(str(exc)) from exc
     event = win32event.CreateEvent(None, True, False, None)
     try:
         _overlapped_write(handle, event, (json.dumps(request) + "\n").encode("utf-8"), ms)
@@ -230,6 +269,27 @@ def _exchange(pipe_name: str, request: dict, timeout: float) -> dict:
     finally:
         win32api.CloseHandle(event)
         win32file.CloseHandle(handle)
+
+
+def _open(path: str, ms: int) -> Any:
+    def create() -> Any:
+        return win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0,
+            None,
+            win32file.OPEN_EXISTING,
+            win32file.FILE_FLAG_OVERLAPPED,
+            None,
+        )
+
+    try:
+        return create()
+    except pywintypes.error as exc:
+        if exc.winerror != 231:  # ERROR_PIPE_BUSY
+            raise
+        win32pipe.WaitNamedPipe(path, ms)
+        return create()
 
 
 def _wait(handle: Any, overlapped: Any, ms: int) -> int:
