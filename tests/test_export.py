@@ -81,10 +81,11 @@ class FakePlotConfigurations:
 class FakeLayout:
     """Records every page-setup write and method call, in order."""
 
-    def __init__(self, events, missing_plotter=False):
+    def __init__(self, events, missing_plotter=False, autocad_2027=False):
         self.__dict__.update(
             events=events,
             missing_plotter=missing_plotter,
+            autocad_2027=autocad_2027,
             state={
                 "Name": "Model",
                 "ModelType": True,
@@ -114,8 +115,14 @@ class FakeLayout:
                 (0, "AutoCAD.Application", "Invalid input", None, 0, -2147024809),
                 None,
             )
+        if self.autocad_2027 and name == "CenterPlot" and value and self.state["PlotType"] == 5:
+            # Seen live 2026-10-28: centring a layout plot is refused.
+            raise pythoncom.com_error(-2147352567, "Exception occurred.", None, None)
         self.events.append(("set", name, value))
         self.state[name] = value
+        if self.autocad_2027 and name == "ConfigName":
+            # Seen live 2026-10-28: choosing the plotter drops the sheet to its default.
+            self.state["CanonicalMediaName"] = MEDIA[0]
 
     def RefreshPlotDeviceInfo(self):
         self.events.append(("call", "RefreshPlotDeviceInfo"))
@@ -161,10 +168,10 @@ class FakePlot:
 
 
 class FakeDoc:
-    def __init__(self, write=True, fail=False, missing_plotter=False):
+    def __init__(self, write=True, fail=False, missing_plotter=False, autocad_2027=False):
         self.events = []
         self.vars = {"BACKGROUNDPLOT": 2}
-        self.ActiveLayout = FakeLayout(self.events, missing_plotter)
+        self.ActiveLayout = FakeLayout(self.events, missing_plotter, autocad_2027)
         self.PlotConfigurations = FakePlotConfigurations()
         self.Plot = FakePlot(self, write=write, fail=fail)
 
@@ -321,6 +328,20 @@ class TestPlotArea:
         assert at_plot["UseStandardScale"] is False
         assert at_plot["CustomScale"] == 1.0
         assert result["scale"] == "1:1"
+
+    def test_a_layout_plot_is_not_centred(self, target):
+        doc = FakeDoc(autocad_2027=True)
+        _plot_pdf(doc, target, None, "layout", None, None, "1:1")
+        assert doc.Plot.calls[0]["layout"]["CenterPlot"] is False
+        assert ("set", "CenterPlot", True) not in doc.events
+
+    def test_choosing_the_plotter_keeps_the_layouts_own_sheet(self, target):
+        doc = FakeDoc(autocad_2027=True)
+        doc.ActiveLayout.state["ConfigName"] = PDF_PLOTTER
+        doc.ActiveLayout.state["CanonicalMediaName"] = "ISO_A1_(841.00_x_594.00_MM)"
+        result = _plot_pdf(doc, target, None, "layout", None, None, "1:1")
+        assert doc.Plot.calls[0]["layout"]["CanonicalMediaName"] == "ISO_A1_(841.00_x_594.00_MM)"
+        assert result["paper"] == "ISO A1 (841.00 x 594.00 MM)"
 
     def test_without_a_scale_it_still_fits_the_sheet(self, doc, target):
         result = _plot_pdf(doc, target, None, "layout")

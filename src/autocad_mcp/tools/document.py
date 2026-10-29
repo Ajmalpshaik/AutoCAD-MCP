@@ -166,6 +166,7 @@ def _plot_pdf(
     background = doc.GetVariable("BACKGROUNDPLOT")
     quiet = plot.QuietErrorMode
     snapshot = _snapshot_page_setup(doc, layout)
+    original_media = str(layout.CanonicalMediaName)
     try:
         try:
             layout.ConfigName = PDF_PLOTTER
@@ -178,9 +179,13 @@ def _plot_pdf(
                 f"(details: {com_message(exc)})"
             ) from exc
         layout.RefreshPlotDeviceInfo()
+        names = tuple(layout.GetCanonicalMediaNames())
         if paper_size:
-            names = tuple(layout.GetCanonicalMediaNames())
             layout.CanonicalMediaName = _match_media(names, paper_size)
+        elif original_media in names and str(layout.CanonicalMediaName) != original_media:
+            # Choosing the plotter drops the sheet to the device default (ANSI A
+            # on AutoCAD 2027), even on a layout already set to DWG To PDF A1.
+            layout.CanonicalMediaName = original_media
         if area == "window":
             layout.SetWindowToPlot(window[0], window[1])
         if area == "view":
@@ -192,7 +197,9 @@ def _plot_pdf(
         else:
             layout.UseStandardScale = False
             layout.CustomScale = sheet_plan.parse_typed_scale(scale)
-        layout.CenterPlot = True
+        if area != "layout":
+            # A layout plot is the sheet itself: AutoCAD refuses to centre it.
+            layout.CenterPlot = True
         paper = str(layout.GetLocaleMediaName(layout.CanonicalMediaName))
 
         # Foreground, so the file is complete when PlotToFile returns; quiet,
