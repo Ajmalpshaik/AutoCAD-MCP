@@ -39,6 +39,19 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   pytest 9 refuses ("does not support nested data structures"); CI turned red on 2026-10-28 when
   it picked up pytest 9. Now compared as flat coordinate lists, same values and tolerance.
 
+## Found on 2026-10-28 (automation room power and control SLDs, AutoCAD 2027)
+
+- [ ] **Change the shape of something already drawn.** `autocad_modify_entity` changes layer,
+  colour, text and radius, but not a polyline's vertices or a line's end points. A box drawn too
+  tall had to be deleted and drawn again, and a delete needs the modeller's yes each time. Add
+  vertex / end-point editing (or a stretch tool) with offline tests, then a live row.
+- [ ] `autocad_preview` with `area='extents'` on an A1 schematic drawn at 1:1 showed only the two
+  frame rectangles; `area='window'` over the same parts showed everything. Find out why before
+  trusting an extents preview of a full sheet.
+- [ ] A chat's server keeps the code it started with: `autocad_drawing_setup(scale='1:1')` failed
+  with the fault already fixed in a2acf6a, because that server was older than the merge. Have
+  `autocad_status` report the server's version or commit so a stale server shows up at once.
+
 ## Asked for on 2026-10-28, not buildable over COM
 
 - [ ] **Super hatch** (Express Tools SUPERHATCH: a block, image or xref repeated as a hatch). Express
