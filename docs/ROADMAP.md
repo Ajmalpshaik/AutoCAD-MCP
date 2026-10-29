@@ -52,6 +52,16 @@ to [CHANGELOG](../CHANGELOG.md) when it lands. Proving what is built comes first
   with the fault already fixed in a2acf6a, because that server was older than the merge. Have
   `autocad_status` report the server's version or commit so a stale server shows up at once.
 
+## Asked for on 2026-10-28, not buildable over COM
+
+- [ ] **Super hatch** (Express Tools SUPERHATCH: a block, image or xref repeated as a hatch). Express
+  Tools are LISP/ARX with no Automation; it would be the plug-in's job, through the .NET API.
+- [ ] **3D modelling commands** with no ActiveX call: loft, fillet / chamfer edges, shell, press-pull,
+  thicken, surfaces and meshes. Through the plug-in (`Solid3d.CreateLoftedSolid`,
+  `FilletEdges`, `ChamferEdges`, `ShellBody`...), each proven live before it is offered.
+- [ ] `autocad_draw_multiline` close with a mitred corner (MLINE's own Close) - needs the plug-in.
+- [ ] `autocad_draw_spline` by control points, and editing a spline's fit points.
+
 ## Server
 
 - [x] Dynamic blocks: read and set properties (`autocad_get/set_dynamic_properties`). Authoring

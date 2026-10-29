@@ -57,6 +57,11 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
         "set_3d_view",
     ),
     Risk.CHANGE: (
+        "draw_spline",
+        "draw_multiline",
+        "add_wipeout",
+        "attach_xref",
+        "manage_xref",
         "draw_line",
         "draw_polyline",
         "draw_rectangle",
@@ -128,6 +133,8 @@ _LEVELS: dict[Risk, tuple[str, ...]] = {
     Risk.PUBLISH: (
         "save_drawing",
         "export",
+        "create_hatch_pattern",
+        "create_linetype",
     ),
     Risk.ADMIN: (
         "render",

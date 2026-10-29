@@ -98,3 +98,19 @@ for an enlargement. A plain ratio of 1 or less (0.02 for 1:50) still works.
 `autocad_dimension_run(mode="ordinate")` needs the datum at the UCS origin, because that is where
 AutoCAD measures ordinates from ([D-37](DECISIONS.md)). A datum elsewhere is refused with the
 `autocad_set_ucs(mode="origin", ...)` call that moves it.
+
+## 18. The 2026-10-28 drafting tools have their own limits
+
+- `autocad_add_wipeout` draws where the work is: model space on the Model tab or inside an active
+  layout viewport, otherwise the layout, because it types WIPEOUT; its edges are straight only, as
+  WIPEOUT's are. A boundary polyline from the other space, or drawn on a flipped or tilted plane, is
+  refused - give the corners as points.
+- `autocad_draw_multiline` with `closed=true` repeats the first point: Automation has no close for an
+  MLINE, so that last corner overlaps rather than being mitred.
+- `autocad_create_linetype` sizes the gap for its text from an estimate (0.9 x height per letter for
+  STANDARD); a wide font can crowd the dashes - give `text_width`. On a text style with a fixed height
+  the text is scaled from that height when the linetype is loaded; written with `load=false` it
+  assumes a style of height 0.
+- `autocad_create_hatch_pattern` adds its folder to AutoCAD's support path, which stays in the
+  profile ([D-39](DECISIONS.md)).
+- None of the seven is proven in AutoCAD yet ([NEEDS-CHECKING group G](NEEDS-CHECKING.md)).

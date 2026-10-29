@@ -34,6 +34,7 @@ OBJECT_NAME_MAP = {
     "AcDbSolid": "solid",
     "AcDbRegion": "region",
     "AcDb3dSolid": "3dsolid",
+    "AcDbMline": "multiline",
     "AcDbRay": "ray",
     "AcDbXline": "xline",
     "AcDbLeader": "leader",

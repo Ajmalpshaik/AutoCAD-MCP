@@ -29,6 +29,9 @@ The MCP server. Installed as the `autocad-mcp` command (`pyproject.toml` -> `ser
 | `tools/sequence.py` | `autocad_sequence`: several tools in one call |
 | `tools/shapes.py` | `autocad_make_shape`: 24 named shapes from their dimensions |
 | `tools/dimensions.py` | dimension runs (chain, baseline, ordinate), centre marks |
+| `tools/drafting.py` | splines, multilines (MLINE), wipeouts |
+| `tools/xrefs.py` | attach an xref; reload, unload, detach, bind |
+| `tools/patterns.py` | write custom hatch pattern (.pat) and linetype (.lin) files; the text is `acad/patterns.py` |
 | `tools/annotate.py` | multileaders, tables, revision clouds |
 | `tools/solids.py` | 3D solids, extrude and revolve, booleans, mass properties, 3D views |
 | `tools/resources.py` | MCP resources and prompts |

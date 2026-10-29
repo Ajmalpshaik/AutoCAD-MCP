@@ -19,6 +19,7 @@ def register_all() -> None:
         coordinates,
         dimensions,
         document,
+        drafting,
         draw,
         drawing_tools,
         geometry_tools,
@@ -26,6 +27,7 @@ def register_all() -> None:
         layers,
         materials,
         modify,
+        patterns,
         query,
         resources,
         sequence,
@@ -37,6 +39,7 @@ def register_all() -> None:
         takeoff,
         text_tools,
         views,
+        xrefs,
     )
 
 

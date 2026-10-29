@@ -682,6 +682,8 @@ async def autocad_place_title_block(
         - Use when: a sheet came in without a title block.
         - Don't use when: only the text needs changing — autocad_set_attributes
           fills title blocks already on the sheets.
+        - Don't use when: the title block should only be brought in from the
+          template, not placed yet — autocad_import_from_drawing.
 
     Error Handling:
         - A block that is neither in the drawing nor a .dwg on disk is reported
