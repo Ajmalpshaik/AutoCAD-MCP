@@ -27,6 +27,12 @@
 
 ## Next, in order
 
+0. **2026-10-28: seven drafting tools built** (spline, multiline, wipeout, attach / manage xref,
+   hatch pattern and linetype files; 115 tools). Offline gates green; group G of NEEDS-CHECKING is
+   NOT RUN. Do G5 (wipeout lands in world coordinates, unsnapped, under a UCS) and G10 / G11 (the
+   custom pattern hatches; the CHWS text sits clear of the dashes) first: those rest on typed
+   input and on file formats, not on a documented Automation call. Super hatch and loft / fillet /
+   shell / press-pull need the plug-in (ROADMAP).
 0. **2026-10-28: five tools that failed live are fixed** (branch `claude/wonderful-fermi-w5otnd`).
    Hit while drawing a chilled water roof pipe support in AutoCAD 2027, and worked round with
    `autocad_run_lisp`: `drawing_setup(scale='1:10')`, a dim style with `text_style`, table text

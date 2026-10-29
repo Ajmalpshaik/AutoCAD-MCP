@@ -17,7 +17,7 @@ from ..acad.entities import describe, resolve_handle
 from ..acad.tables import apply_properties
 from ..acad.units import rad
 from ..core.connection import get_doc, get_space, require_idle, run
-from ..core.errors import AutocadError
+from ..core.errors import AutocadError, com_message, is_dispatch_failure, is_retryable
 from ..core.registry import dumps, mcp, to_aci, tool_errors, tool_meta, undo_mark
 from ..core.variants import apoint, double_array, object_array
 from ._shared import (
@@ -902,7 +902,8 @@ def dwg_path(raw: str) -> str:
     InsertBlock answers "Key not found" to forward slashes (measured on
     AutoCAD 2027), so the path is normalised to backslashes.
     """
-    resolved = os.path.normpath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
+    # Whole, because AutoCAD would read a relative path from its own folder, not ours.
+    resolved = os.path.abspath(os.path.expandvars(os.path.expanduser(raw.strip().strip('"'))))
     if not os.path.isfile(resolved):
         raise AutocadError(f"No .dwg file exists at '{resolved}'.")
     return resolved
@@ -1038,6 +1039,7 @@ async def autocad_insert_block(
 
 
 AC_HATCH_PREDEFINED = 1
+AC_HATCH_CUSTOM = 2
 
 
 @mcp.tool(
@@ -1062,9 +1064,10 @@ async def autocad_add_hatch(
         Field(
             default="SOLID",
             description=(
-                "Pattern name: 'SOLID' for a filled region, or a predefined "
+                "Pattern name: 'SOLID' for a filled region, a predefined "
                 "pattern such as 'ANSI31' (diagonal), 'AR-CONC' (concrete), "
-                "'EARTH', 'BRICK', 'STEEL', 'NET'."
+                "'EARTH', 'BRICK', 'STEEL', 'NET', or a custom one made with "
+                "autocad_create_hatch_pattern."
             ),
         ),
     ] = "SOLID",
@@ -1148,8 +1151,23 @@ async def autocad_add_hatch(
 
         with undo_mark(doc):
             # AcPatternType: 0 user-defined, 1 predefined (a name from acad.pat,
-            # SOLID included). Type 0 with 'ANSI31' is refused as a bad name.
-            entity = get_space(doc, space).AddHatch(AC_HATCH_PREDEFINED, pattern_name, associative)
+            # SOLID included), 2 custom (its own NAME.pat on the support path,
+            # as autocad_create_hatch_pattern writes). Type 0 with 'ANSI31' is
+            # refused as a bad name, so it is never sent.
+            target = get_space(doc, space)
+            try:
+                entity = target.AddHatch(AC_HATCH_PREDEFINED, pattern_name, associative)
+            except BaseException as first:  # noqa: BLE001 - not in acad.pat: try its own file
+                if is_retryable(first) or is_dispatch_failure(first):
+                    raise  # busy or disconnected, not a missing pattern
+                try:
+                    entity = target.AddHatch(AC_HATCH_CUSTOM, pattern_name, associative)
+                except BaseException:  # noqa: BLE001
+                    raise AutocadError(
+                        f"There is no hatch pattern called '{pattern_name}' in acad.pat, nor a "
+                        f"{pattern_name}.pat on the support path ({com_message(first)}). Check the "
+                        "name, or make it with autocad_create_hatch_pattern."
+                    ) from first
             entity.AppendOuterLoop(object_array(boundaries))
             if pattern_name != "SOLID":
                 entity.PatternScale = float(scale)

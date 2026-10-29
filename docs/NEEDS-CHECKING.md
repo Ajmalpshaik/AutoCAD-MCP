@@ -190,6 +190,27 @@ from a run. `SectionSolid` is deliberately **not** built: no documented signatur
 | F22 | `autocad_render` to a PNG, preset "Low", with Admin on | Either the file appears, or the result says the command line is waiting. **Rendering from a script is reported to drop objects - compare the image with a render done by hand before trusting it** | NOT RUN |
 | F23 | `autocad_sequence` with a step naming `autocad_render` | Refused: Admin is above the sequence ceiling | NOT RUN |
 
+## Group G - Splines, multilines, wipeouts, xrefs, pattern and linetype files (AutoCAD 2027, this PC)
+
+The 7 tools added on 2026-10-28. Their arithmetic and the text they send are tested offline
+(`tests/test_drafting.py`, `test_xrefs.py`, `test_patterns.py`); **every COM call and typed command
+below is NOT RUN**. By hand: Changes on, and Publish for G10-G12.
+
+| Row | Do | Pass looks like | Result |
+|---|---|---|---|
+| G1 | `autocad_draw_spline(points=[[0,0],[1000,500],[2000,0],[3000,800]])`, then LIST | One SPLINE through all four points (fit points, not control points); its ends leave along the first and last segments | NOT RUN |
+| G2 | The same with `closed=true`, and one with `coords="ucs"` on a 23 degree UCS | The closed one is closed smoothly (Closed2 accepted, nothing in `not_set`); the UCS one follows the UCS grid | NOT RUN |
+| G3 | `autocad_draw_multiline(points=[[0,0],[5000,0],[5000,3000]], scale=200)` | One MLINE, 200 wide, centred on the points; the drawing's CMLSTYLE unchanged afterwards | NOT RUN |
+| G4 | The same with `justification="top"`, then `"bottom"`, and `style=` a style the drawing lacks | The lines run to one side, then the other; the missing style is refused naming MLSTYLE, nothing drawn | NOT RUN |
+| G5 | `autocad_add_wipeout(points=[[0,0],[1200,0],[1200,450],[0,450]])` over a hatch, with a UCS set and running snaps on; then once from inside an active layout viewport | A WIPEOUT exactly there in world coordinates (not snapped, not shifted by the UCS); the hatch hidden behind it; AutoCAD back at `Command:`. From the viewport it is found in model space, not reported as failed | NOT RUN |
+| G6 | `autocad_add_wipeout(boundary_handle=<closed rectangle>, erase_boundary=true, frames="show_no_plot")` | The wipeout takes the rectangle's place; WIPEOUTFRAME reads 2; frames on screen, not on a plot | NOT RUN |
+| G7 | `autocad_attach_xref(path=<a .dwg>, insertion=[0,0])`, then `overlay=true` with another name | Both appear in XREF palette as Attach and Overlay, at the origin, named after the file | NOT RUN |
+| G8 | Change the referenced file, then `autocad_manage_xref(action="reload")`; then `unload` | The change shows after reload; unload hides it and the palette says Unloaded | NOT RUN |
+| G9 | `autocad_manage_xref(action="bind")` without, then with `confirm=true`; another with `action="detach"` | Without confirm nothing changes; bind turns it into a block with NAME$0$ layers; detach removes it and every instance | NOT RUN |
+| G10 | `autocad_create_hatch_pattern(name="HX-45", spacing=3)`, then `autocad_add_hatch(pattern="HX-45")` | HX-45.pat in Heron's support folder, the folder once in OPTIONS > Files > Support File Search Path, and the hatch drawn with it (it falls back to the custom pattern type). Note whether AutoCAD refuses the unknown name at AddHatch itself (then the fallback works) or only later at Evaluate (then it does not, and the fallback needs moving) | NOT RUN |
+| G11 | `autocad_create_linetype(name="CHWS", text="CHWS")` with `autocad_drawing_setup(scale="1:50")` set, on a long line | ---- CHWS ---- along the line, text upright on it and clear of the dashes, the right size on a 1:50 plot. If the text crowds the dashes, re-run with `text_width` and note the value | NOT RUN |
+| G12 | `autocad_create_linetype(name="DD-12", dashes=[12, -3, 0, -3])` | A dash-dot line, 12 dash, 3 gap, dot | NOT RUN |
+
 ## Group B - AutoCAD 2025 / 2026 (.NET 8 build)
 
 Rows B1-B19 = A1-A19 on AutoCAD 2025 and on 2026. **NO MACHINE.**
